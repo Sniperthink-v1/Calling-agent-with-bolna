@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Phone, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import { apiService } from '@/services/apiService';
 import { API_ENDPOINTS } from '@/config/api';
 import { useToast } from '@/components/ui/use-toast';
 import type { Contact } from '@/types/api';
@@ -35,17 +35,6 @@ interface CallAgentModalProps {
   onClose: () => void;
   onCallInitiated?: (callId: string) => void;
 }
-
-// Helper function to create authenticated axios instance
-const createAuthenticatedRequest = () => {
-  const token = localStorage.getItem('auth_token');
-  return axios.create({
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
-    },
-  });
-};
 
 export function CallAgentModal({
   open,
@@ -72,17 +61,14 @@ export function CallAgentModal({
   const fetchAgents = async () => {
     setIsFetchingAgents(true);
     try {
-      const api = createAuthenticatedRequest();
-      const response = await api.get(API_ENDPOINTS.AGENTS.LIST);
+      const response = await apiService.getAgents();
       
-      // Handle different response formats
+      // Handle response format
       let agentsList: Agent[] = [];
-      if (response.data.success && Array.isArray(response.data.data)) {
-        agentsList = response.data.data;
-      } else if (Array.isArray(response.data.agents)) {
-        agentsList = response.data.agents;
-      } else if (Array.isArray(response.data)) {
+      if (response.success && Array.isArray(response.data)) {
         agentsList = response.data;
+      } else if (Array.isArray(response)) {
+        agentsList = response as any;
       }
       
       // Filter only active agents
@@ -128,14 +114,28 @@ export function CallAgentModal({
 
     setIsLoading(true);
     try {
-      const api = createAuthenticatedRequest();
-      const response = await api.post(API_ENDPOINTS.CALLS.INITIATE, {
-        contactId: contact.id,
-        agentId: selectedAgentId,
-        phoneNumber: phoneNumber,
+      // Make raw POST request using fetch with authentication
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(API_ENDPOINTS.CALLS.INITIATE, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          contactId: contact.id,
+          agentId: selectedAgentId,
+          phoneNumber: phoneNumber,
+        }),
       });
 
-      const callData = response.data.call;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const callData = data.call;
       
       toast({
         title: 'Call initiated',
@@ -152,12 +152,10 @@ export function CallAgentModal({
       
       let errorMessage = 'Failed to initiate call. Please try again.';
       
-      if (error.response?.status === 402) {
+      if (error.message.includes('402') || error.message.includes('credit')) {
         errorMessage = 'Insufficient credits. Please purchase more credits to make calls.';
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
       }
 
       toast({
