@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Mail, Bell, TrendingUp, Shield, Megaphone } from 'lucide-react';
-import axios from 'axios';
+import { apiService } from '@/services/apiService';
 
 interface NotificationPreference {
   id: string;
@@ -82,30 +82,24 @@ export const NotificationPreferences: React.FC = () => {
   const fetchPreferences = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/user-notifications/preferences`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await apiService.get('/user-notifications/preferences');
 
-      if (response.data.preferences) {
-        setPreferences(response.data.preferences);
+      if (response.preferences) {
+        setPreferences(response.preferences);
         setLocalPrefs({
-          low_credit_alerts: response.data.preferences.low_credit_alerts,
-          credits_added_emails: response.data.preferences.credits_added_emails,
-          campaign_summary_emails: response.data.preferences.campaign_summary_emails,
-          email_verification_reminders: response.data.preferences.email_verification_reminders,
-          marketing_emails: response.data.preferences.marketing_emails,
+          low_credit_alerts: response.preferences.low_credit_alerts,
+          credits_added_emails: response.preferences.credits_added_emails,
+          campaign_summary_emails: response.preferences.campaign_summary_emails,
+          email_verification_reminders: response.preferences.email_verification_reminders,
+          marketing_emails: response.preferences.marketing_emails,
         });
       }
     } catch (error: any) {
       console.error('Error fetching notification preferences:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.error || 'Failed to load notification preferences',
+        description: error.message || 'Failed to load notification preferences',
         variant: 'destructive',
       });
     } finally {
@@ -121,18 +115,11 @@ export const NotificationPreferences: React.FC = () => {
   const handleSave = async () => {
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
 
-      const response = await axios.put(
-        `${import.meta.env.VITE_API_URL}/api/user-notifications/preferences`,
-        localPrefs,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await apiService.put('/user-notifications/preferences', localPrefs);
 
-      if (response.data.preferences) {
-        setPreferences(response.data.preferences);
+      if (response.preferences) {
+        setPreferences(response.preferences);
         setHasChanges(false);
         toast({
           title: 'Success',
@@ -143,7 +130,7 @@ export const NotificationPreferences: React.FC = () => {
       console.error('Error updating notification preferences:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.error || 'Failed to update notification preferences',
+        description: error.message || 'Failed to update notification preferences',
         variant: 'destructive',
       });
     } finally {
