@@ -436,6 +436,7 @@ class WebhookService {
    */
   private async handleCompleted(payload: BolnaWebhookPayload): Promise<void> {
     const executionId = payload.id;
+    const agentId = payload.agent_id;
     
     logger.info('5️⃣ Handling completed event', { 
       execution_id: executionId,
@@ -443,10 +444,76 @@ class WebhookService {
     });
 
     // Get call record
-    const call = await Call.findByExecutionId(executionId);
+    let call = await Call.findByExecutionId(executionId);
+    
+    // If call doesn't exist (missed initiated event), create it now
     if (!call) {
-      logger.warn('Call not found for completion', { execution_id: executionId });
-      return;
+      logger.warn('Call not found for completion, creating now', { 
+        execution_id: executionId,
+        agent_id: agentId
+      });
+
+      // Find agent
+      const agent = await Agent.findByBolnaId(agentId);
+      if (!agent) {
+        logger.error('Agent not found, cannot create call', { 
+          execution_id: executionId, 
+          bolna_agent_id: agentId 
+        });
+        return;
+      }
+
+      // Get phone number from context_details or telephony_data
+      const phoneNumber = payload.context_details?.recipient_phone_number || 
+                         payload.telephony_data?.to_number ||
+                         payload.telephony_data?.from_number;
+      
+      if (!phoneNumber) {
+        logger.error('Phone number not found in completed payload', { execution_id: executionId });
+        return;
+      }
+
+      // Create call record with completed data
+      const durationSeconds = Math.floor(payload.conversation_duration || 0);
+      const durationMinutes = Math.ceil(durationSeconds / 60);
+      const creditsUsed = durationMinutes;
+
+      await Call.create({
+        agent_id: agent.id,
+        user_id: agent.user_id,
+        bolna_conversation_id: executionId,
+        bolna_execution_id: executionId,
+        phone_number: normalizePhoneNumber(phoneNumber),
+        call_source: 'phone',
+        status: 'completed',
+        call_lifecycle_status: 'completed',
+        lead_type: payload.telephony_data?.call_type || 'inbound',
+        duration_seconds: durationSeconds,
+        duration_minutes: durationMinutes,
+        credits_used: creditsUsed,
+        recording_url: payload.telephony_data?.recording_url || undefined,
+        completed_at: new Date(),
+        hangup_by: payload.telephony_data?.hangup_by || undefined,
+        hangup_reason: payload.telephony_data?.hangup_reason || undefined,
+        hangup_provider_code: payload.telephony_data?.hangup_provider_code || undefined,
+        metadata: {
+          created_from: 'completed_event',
+          provider: payload.telephony_data?.provider || payload.provider
+        }
+      });
+
+      logger.info('✅ Call record created from completed event', { 
+        execution_id: executionId,
+        duration_seconds: durationSeconds,
+        recording_url: payload.telephony_data?.recording_url
+      });
+
+      // Re-fetch the newly created call
+      call = await Call.findByExecutionId(executionId);
+      if (!call) {
+        logger.error('Failed to fetch newly created call', { execution_id: executionId });
+        return;
+      }
     }
 
     // Get agent for billing
@@ -568,8 +635,40 @@ class WebhookService {
       // Don't fail webhook - log for manual review
     }
 
-    // TODO: Auto-create contact (need to check method)
-    // this.contactService.autoCreateFromCall(call.id, call.user_id, call.phone_number)
+    // Auto-create contact if it doesn't exist
+    try {
+      // Create minimal lead data for contact auto-creation
+      const leadData = {
+        companyName: null,
+        extractedName: null,
+        extractedEmail: null,
+        ctaPricingClicked: false,
+        ctaDemoClicked: false,
+        ctaFollowupClicked: false,
+        ctaSampleClicked: false,
+        ctaEscalatedToHuman: false,
+        smartNotification: null,
+        demoBookDatetime: null
+      };
+      
+      await ContactAutoCreationService.createOrUpdateContact(
+        call.user_id,
+        leadData,
+        call.id,
+        call.phone_number
+      );
+      logger.info('✅ Contact auto-created or found', { 
+        execution_id: executionId,
+        phone_number: call.phone_number 
+      });
+    } catch (error) {
+      logger.error('Failed to auto-create contact', {
+        executionId,
+        phoneNumber: call.phone_number,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Don't fail webhook - contact creation is not critical
+    }
 
     // Run OpenAI analysis if transcript exists (async, don't block)
     // Use updatedCall to ensure we have the latest transcript_id

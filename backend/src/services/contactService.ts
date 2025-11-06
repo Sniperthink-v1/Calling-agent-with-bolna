@@ -456,6 +456,32 @@ export class ContactService {
     notes?: string;
   }> {
     try {
+      // Validate buffer
+      if (!fileBuffer || !Buffer.isBuffer(fileBuffer)) {
+        throw new Error('Invalid file buffer received');
+      }
+
+      if (fileBuffer.length === 0) {
+        throw new Error('Empty file received');
+      }
+
+      // Log buffer info for debugging
+      logger.info('Parsing Excel file', {
+        filename,
+        bufferSize: fileBuffer.length,
+        bufferStart: fileBuffer.slice(0, 10).toString('hex')
+      });
+
+      // Check if buffer starts with valid Excel signatures
+      const signature = fileBuffer.slice(0, 4).toString('hex');
+      const isValidExcel = signature === '504b0304' || // ZIP signature (XLSX)
+                           signature.startsWith('d0cf11e0'); // OLE signature (XLS)
+
+      if (!isValidExcel) {
+        logger.error('Invalid Excel file signature', { signature, filename });
+        throw new Error('Invalid Excel file format. Please ensure you are uploading a valid .xlsx or .xls file.');
+      }
+
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       
@@ -522,7 +548,22 @@ export class ContactService {
 
     } catch (error) {
       logger.error('Error parsing Excel file:', error);
-      throw new Error(`Failed to parse Excel file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid HTML') || error.message.includes('could not find')) {
+          throw new Error('Invalid Excel file format. The file appears to be corrupted or in an unsupported format. Please ensure you are uploading a valid .xlsx or .xls file.');
+        }
+        if (error.message.includes('Invalid file buffer') || error.message.includes('Empty file')) {
+          throw new Error(error.message);
+        }
+        if (error.message.includes('Invalid Excel file signature')) {
+          throw new Error(error.message);
+        }
+        throw new Error(`Failed to parse Excel file: ${error.message}`);
+      }
+      
+      throw new Error('Failed to parse Excel file: Unknown error');
     }
   }
 

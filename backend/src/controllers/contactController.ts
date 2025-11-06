@@ -529,6 +529,15 @@ export class ContactController {
 
       const file = req.file;
       
+      console.log('📄 FILE DETAILS:', {
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        bufferExists: !!file.buffer,
+        bufferLength: file.buffer?.length || 0,
+        bufferStart: file.buffer ? file.buffer.slice(0, 10).toString('hex') : 'N/A'
+      });
+      
       // Validate file type
       const allowedMimeTypes = [
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
@@ -538,6 +547,14 @@ export class ContactController {
       if (!allowedMimeTypes.includes(file.mimetype)) {
         return res.status(400).json({ 
           error: 'Invalid file type. Please upload an Excel file (.xlsx or .xls).' 
+        });
+      }
+
+      // Additional validation for file buffer
+      if (!file.buffer || file.buffer.length === 0) {
+        console.error('❌ Empty or missing file buffer');
+        return res.status(400).json({ 
+          error: 'File upload failed. The file buffer is empty. Please try uploading the file again.' 
         });
       }
 

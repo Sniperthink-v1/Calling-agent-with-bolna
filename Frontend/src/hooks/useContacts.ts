@@ -253,11 +253,23 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
       const response = await apiService.uploadContacts(file);
       return response.data || response as unknown as ContactUploadResult;
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       // Refresh contacts and stats after successful upload
       if (result.success && result.summary.successful > 0) {
+        // Invalidate and refetch contacts immediately
+        await Promise.all([
+          queryClient.invalidateQueries({ 
+            queryKey: queryKeys.contacts(user?.id),
+            refetchType: 'active' 
+          }),
+          queryClient.invalidateQueries({ 
+            queryKey: queryKeys.contactStats(user?.id),
+            refetchType: 'active' 
+          })
+        ]);
+        
+        // Also invalidate cache
         cacheUtils.invalidateContacts(user?.id);
-        queryClient.invalidateQueries({ queryKey: queryKeys.contactStats(user?.id) });
       }
     },
   });
