@@ -283,7 +283,7 @@ export class AgentAnalyticsController {
             AVG(la.engagement_score) AS avg_engagement_score,
             AVG(la.intent_score) AS avg_intent_score
           FROM calls c
-          LEFT JOIN lead_analytics la ON la.call_id = c.id
+          LEFT JOIN lead_analytics la ON la.call_id = c.id AND la.analysis_type = 'individual'
           WHERE c.agent_id = $1 AND c.user_id = $2 AND DATE(c.created_at) = CURRENT_DATE
           GROUP BY DATE_TRUNC('hour', c.created_at)
           ORDER BY hour
@@ -895,7 +895,7 @@ export class AgentAnalyticsController {
           COUNT(la.id) AS leads_generated,
           AVG(la.engagement_score) AS avg_engagement_score
         FROM calls c
-        LEFT JOIN lead_analytics la ON la.call_id = c.id
+        LEFT JOIN lead_analytics la ON la.call_id = c.id AND la.analysis_type = 'individual'
         WHERE c.agent_id = $1 AND c.user_id = $2 AND DATE(c.created_at) = CURRENT_DATE
         GROUP BY DATE_TRUNC('hour', c.created_at)
         ORDER BY hour

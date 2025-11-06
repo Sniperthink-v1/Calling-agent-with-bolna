@@ -1130,7 +1130,7 @@ class ApiService {
       await this.validateAgentOwnership(targetAgentId);
     }
 
-    return this.request<Call[] | { calls: Call[]; pagination: any }>(url, { 
+    return this.request<CallListResponse>(url, { 
       agentId: targetAgentId,
       includeAgentId: !!targetAgentId 
     });
@@ -2202,6 +2202,8 @@ class ApiService {
   // Method to get the call audio as a Blob for authenticated playback
   async getCallAudioBlob(callId: string): Promise<Blob> {
     const token = localStorage.getItem('auth_token');
+    
+    // First, get the recording URL from the API
     const response = await fetch(API_ENDPOINTS.CALLS.AUDIO(callId), {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -2221,7 +2223,22 @@ class ApiService {
       throw new Error(errorMessage);
     }
     
-    return response.blob();
+    // Parse the JSON response to get the recording URL
+    const data = await response.json();
+    const recordingUrl = data.recording_url;
+    
+    if (!recordingUrl) {
+      throw new Error('No recording URL found for this call');
+    }
+    
+    // Now fetch the actual audio file from the recording URL
+    const audioResponse = await fetch(recordingUrl);
+    
+    if (!audioResponse.ok) {
+      throw new Error(`Failed to fetch audio from recording URL: ${audioResponse.status}`);
+    }
+    
+    return audioResponse.blob();
   }
 
   // Email API methods

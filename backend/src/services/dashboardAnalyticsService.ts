@@ -203,7 +203,7 @@ export class DashboardAnalyticsService {
           ON c.user_id = $1
          AND DATE(c.created_at AT TIME ZONE 'Asia/Kolkata') = s.day
         LEFT JOIN lead_analytics la
-          ON la.call_id = c.id
+          ON la.call_id = c.id AND la.analysis_type = 'individual'
         GROUP BY s.day
         ORDER BY s.day ASC
       `;
@@ -405,7 +405,7 @@ export class DashboardAnalyticsService {
           COUNT(DISTINCT CASE WHEN la.total_score >= 70 THEN la.id END) as qualified_leads,
           COUNT(DISTINCT CASE WHEN c.status = 'completed' THEN c.id END) as completed_calls
         FROM calls c
-        LEFT JOIN lead_analytics la ON c.id = la.call_id
+        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.analysis_type = 'individual'
         WHERE c.user_id = $1
           AND c.created_at >= (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '30 days')
       `;

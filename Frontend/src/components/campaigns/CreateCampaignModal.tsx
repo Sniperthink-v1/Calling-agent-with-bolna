@@ -135,6 +135,10 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         title: 'Campaign Created',
         description: 'Campaign has been created successfully',
       });
+      setShowEstimator(false);
+      setPendingCampaignData(null);
+      setEstimatedContactCount(0);
+      setIsUploading(false);
       handleClose();
     },
     onError: (error: Error) => {
@@ -143,6 +147,8 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         description: error.message,
         variant: 'destructive',
       });
+      setShowEstimator(false);
+      setIsUploading(false);
     },
   });
 
@@ -168,6 +174,10 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         title: 'Campaign Created from CSV',
         description: `Created campaign with ${data.totalRows} contacts`,
       });
+      setShowEstimator(false);
+      setPendingCampaignData(null);
+      setEstimatedContactCount(0);
+      setIsUploading(false);
     },
     onError: (error: Error) => {
       toast({
@@ -175,6 +185,7 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         description: error.message,
         variant: 'destructive',
       });
+      setShowEstimator(false);
       setIsUploading(false);
     },
   });
@@ -353,6 +364,7 @@ OPTIONAL FIELDS:
     setShowEstimator(false);
     setPendingCampaignData(null);
     setEstimatedContactCount(0);
+    setIsUploading(false);
   };
 
   const handleClose = () => {
@@ -367,6 +379,9 @@ OPTIONAL FIELDS:
     setCsvFile(null);
     setUploadResult(null);
     setIsUploading(false);
+    setShowEstimator(false);
+    setPendingCampaignData(null);
+    setEstimatedContactCount(0);
     onClose();
   };
 
@@ -381,7 +396,7 @@ OPTIONAL FIELDS:
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 thin-scrollbar">
           {/* Campaign Name */}
           <div>
             <Label htmlFor="name">Campaign Name *</Label>
@@ -642,10 +657,24 @@ OPTIONAL FIELDS:
         
         <CampaignCreditEstimator
           contactCount={estimatedContactCount}
-          onConfirm={handleEstimatorConfirm}
-          onCancel={handleEstimatorCancel}
-          compactMode={false}
+          showDetailedBreakdown={true}
+          estimateOnly={false}
         />
+        
+        <DialogFooter className="mt-4">
+          <Button type="button" variant="outline" onClick={handleEstimatorCancel}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleEstimatorConfirm}
+            disabled={createMutation.isPending || isUploading}
+            style={{ backgroundColor: '#1A6262' }}
+            className="text-white"
+          >
+            {isUploading || createMutation.isPending ? 'Creating...' : 'Confirm & Create'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   </>

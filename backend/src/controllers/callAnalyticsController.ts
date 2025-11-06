@@ -48,7 +48,7 @@ export class CallAnalyticsController {
           COUNT(DISTINCT c.id) FILTER (WHERE COALESCE(la.lead_status_tag,'') ILIKE 'follow%later%') as pending_followups
         FROM calls c
         LEFT JOIN contacts ct ON c.contact_id = ct.id
-        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id
+        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id AND la.analysis_type = 'individual'
         WHERE c.user_id = $1 
           AND c.created_at >= $2 
           AND c.created_at <= $3`;
@@ -325,7 +325,7 @@ export class CallAnalyticsController {
           COUNT(DISTINCT c.phone_number) FILTER (WHERE la.cta_demo_clicked = true) as unique_demo_booked,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont.is_customer = true) as customers
         FROM calls c
-        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id
+        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id AND la.analysis_type = 'individual'
         LEFT JOIN contacts cont ON cont.phone_number = c.phone_number AND cont.user_id = c.user_id
         WHERE c.user_id = $1 
           AND c.created_at >= $2 
@@ -487,7 +487,7 @@ export class CallAnalyticsController {
             ELSE 0 
           END as conversion_rate
         FROM calls c
-        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id
+        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id AND la.analysis_type = 'individual'
         WHERE c.user_id = $1 
           AND c.created_at >= $2 
           AND c.created_at <= $3`;
@@ -600,7 +600,7 @@ export class CallAnalyticsController {
             ELSE 0 
           END as cost_per_lead
         FROM calls c
-        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id
+        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id AND la.analysis_type = 'individual'
         WHERE c.user_id = $1 
           AND c.created_at >= $2 
           AND c.created_at <= $3`;

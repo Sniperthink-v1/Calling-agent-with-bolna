@@ -602,11 +602,13 @@ export class CallModel extends BaseModel<CallInterface> {
   ): Promise<{ calls: any[]; total: number; hasMore: boolean }> {
     try {
       // Build the base query with joins
+      // IMPORTANT: Only join individual analysis to prevent duplicate entries
+      // Complete analysis should only be used in Lead Intelligence section
       let baseQuery = `
         FROM calls c
         LEFT JOIN agents a ON c.agent_id = a.id
         LEFT JOIN contacts ct ON c.contact_id = ct.id
-        LEFT JOIN lead_analytics la ON c.id = la.call_id
+        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.analysis_type = 'individual'
         WHERE c.user_id = $1
       `;
 

@@ -451,19 +451,52 @@ const CallLogs: React.FC<CallLogsProps> = ({
     )}`;
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+  const getStatusColor = (call: Call) => {
+    // Use callLifecycleStatus if available, otherwise fall back to status
+    const lifecycleStatus = call.callLifecycleStatus || call.status;
+    
+    switch (lifecycleStatus?.toLowerCase()) {
       case "completed":
         return "bg-green-500";
-      case "in_progress":
+      case "in-progress":
+      case "ringing":
         return "bg-blue-500";
       case "failed":
+      case "call-disconnected":
+      case "busy":
+      case "no-answer":
         return "bg-red-500";
       case "cancelled":
+      case "initiated":
         return "bg-gray-500";
       default:
         return "bg-gray-500";
     }
+  };
+
+  const getDisplayStatus = (call: Call) => {
+    // Use callLifecycleStatus if available, otherwise fall back to status
+    const lifecycleStatus = call.callLifecycleStatus || call.status;
+    
+    // Map lifecycle status to user-friendly text
+    switch (lifecycleStatus?.toLowerCase()) {
+      case "call-disconnected":
+        return "Disconnected";
+      case "in-progress":
+        return "In Progress";
+      case "no-answer":
+        return "No Answer";
+      case "busy":
+        return "Busy";
+      default:
+        return lifecycleStatus?.charAt(0).toUpperCase() + lifecycleStatus?.slice(1) || "Unknown";
+    }
+  };
+
+  const isCallFailed = (call: Call) => {
+    const lifecycleStatus = call.callLifecycleStatus || call.status;
+    const failedStatuses = ['failed', 'busy', 'no-answer', 'cancelled'];
+    return failedStatuses.includes(lifecycleStatus?.toLowerCase() || '');
   };
 
 
@@ -626,24 +659,32 @@ const CallLogs: React.FC<CallLogsProps> = ({
 
                   {/* Right side - Action buttons */}
                   <div className="flex items-center space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleShowTranscript(call)}
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      Transcript
-                    </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handlePlayAudio(call.id)}
-                      className="text-white"
-                      style={{ backgroundColor: '#1A6262' }}
-                    >
-                      <Play className="w-4 h-4 mr-2" />
-                      Play Audio
-                    </Button>
+                    {!isCallFailed(call) ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleShowTranscript(call)}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Transcript
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handlePlayAudio(call.id)}
+                          className="text-white"
+                          style={{ backgroundColor: '#1A6262' }}
+                        >
+                          <Play className="w-4 h-4 mr-2" />
+                          Play Audio
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="text-sm text-gray-500 italic">
+                        No recording available
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -654,8 +695,8 @@ const CallLogs: React.FC<CallLogsProps> = ({
                       <div className="space-y-1">
                         <p className="text-slate-400">Status</p>
                         <div className="flex items-center">
-                          <span className={`w-2 h-2 rounded-full mr-2 ${getStatusColor(call.status)}`}></span>
-                          <span className="font-medium">{call.status.charAt(0).toUpperCase() + call.status.slice(1)}</span>
+                          <span className={`w-2 h-2 rounded-full mr-2 ${getStatusColor(call)}`}></span>
+                          <span className="font-medium">{getDisplayStatus(call)}</span>
                         </div>
                       </div>
                        <div className="space-y-1">

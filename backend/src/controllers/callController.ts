@@ -496,7 +496,7 @@ export class CallController {
   }
 
   /**
-   * Get call audio from Bolna.ai
+   * Get call audio recording URL
    * GET /api/calls/:id/audio
    */
   static async getCallAudio(req: Request, res: Response): Promise<void> {
@@ -520,17 +520,21 @@ export class CallController {
         return;
       }
 
-      const executionId = call.bolna_execution_id;
-      if (!executionId) {
-        res.status(404).json({ error: 'Bolna.ai execution ID not found for this call. Audio fetch requires proper Bolna.ai integration.' });
+      // Check if recording URL exists
+      if (!call.recording_url) {
+        res.status(404).json({ 
+          error: 'Recording not available', 
+          message: 'No recording URL found for this call. Recording may still be processing or the call did not complete successfully.' 
+        });
         return;
       }
 
-      // TODO: Implement getCallAudio method in bolnaService
-      // For now, return not implemented
-      res.status(501).json({ 
-        error: 'Audio retrieval not yet implemented', 
-        message: 'The getCallAudio method needs to be added to bolnaService' 
+      // Return the recording URL
+      res.json({
+        success: true,
+        recording_url: call.recording_url,
+        call_id: call.id,
+        duration_seconds: call.duration_seconds
       });
       return;
 

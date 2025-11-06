@@ -342,6 +342,7 @@ export interface Call {
   displayDuration?: string;
   creditsUsed: number;
   status: CallStatus;
+  callLifecycleStatus?: string; // Add lifecycle status (initiated, ringing, in-progress, call-disconnected, completed)
   recordingUrl?: string;
   metadata: Record<string, unknown>;
   createdAt: string;
