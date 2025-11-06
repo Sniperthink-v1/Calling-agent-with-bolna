@@ -718,41 +718,6 @@ class WebhookService {
       // Don't fail webhook - log for manual review
     }
 
-    // Auto-create contact if it doesn't exist
-    try {
-      // Create minimal lead data for contact auto-creation
-      const leadData = {
-        companyName: null,
-        extractedName: null,
-        extractedEmail: null,
-        ctaPricingClicked: false,
-        ctaDemoClicked: false,
-        ctaFollowupClicked: false,
-        ctaSampleClicked: false,
-        ctaEscalatedToHuman: false,
-        smartNotification: null,
-        demoBookDatetime: null
-      };
-      
-      await ContactAutoCreationService.createOrUpdateContact(
-        call.user_id,
-        leadData,
-        call.id,
-        call.phone_number
-      );
-      logger.info('✅ Contact auto-created or found', { 
-        execution_id: executionId,
-        phone_number: call.phone_number 
-      });
-    } catch (error) {
-      logger.error('Failed to auto-create contact', {
-        executionId,
-        phoneNumber: call.phone_number,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      // Don't fail webhook - contact creation is not critical
-    }
-
     // Run OpenAI analysis if transcript exists (async, don't block)
     // Use updatedCall to ensure we have the latest transcript_id
     if (updatedCall.transcript_id) {
@@ -822,6 +787,55 @@ class WebhookService {
             );
 
             logger.info('✅ OpenAI analysis completed', { execution_id: executionId });
+
+            // Wait 5 seconds before checking contact updates
+            // This ensures AI analysis has fully completed and data is available
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Now update contact with extracted data from AI analysis
+            try {
+              logger.info('🔄 Updating contact with extracted AI data', {
+                execution_id: executionId,
+                phone_number: updatedCall.phone_number,
+                has_individual_data: !!individualData,
+                extracted_name: individualData?.extraction?.name,
+                extracted_email: individualData?.extraction?.email_address,
+                extracted_company: individualData?.extraction?.company_name
+              });
+
+              // Prepare lead data from AI extraction
+              const leadData = {
+                companyName: individualData?.extraction?.company_name || null,
+                extractedName: individualData?.extraction?.name || null,
+                extractedEmail: individualData?.extraction?.email_address || null,
+                ctaPricingClicked: individualData?.cta_pricing_clicked === 'Yes',
+                ctaDemoClicked: individualData?.cta_demo_clicked === 'Yes',
+                ctaFollowupClicked: individualData?.cta_followup_clicked === 'Yes',
+                ctaSampleClicked: individualData?.cta_sample_clicked === 'Yes',
+                ctaEscalatedToHuman: individualData?.cta_escalated_to_human === 'Yes',
+                smartNotification: individualData?.extraction?.smartnotification || null,
+                demoBookDatetime: individualData?.demo_book_datetime || null
+              };
+
+              await ContactAutoCreationService.createOrUpdateContact(
+                updatedCall.user_id,
+                leadData,
+                updatedCall.id,
+                updatedCall.phone_number
+              );
+
+              logger.info('✅ Contact updated with AI extracted data', {
+                execution_id: executionId,
+                phone_number: updatedCall.phone_number
+              });
+            } catch (contactError) {
+              logger.error('❌ Failed to update contact with AI data', {
+                execution_id: executionId,
+                phone_number: updatedCall.phone_number,
+                error: contactError instanceof Error ? contactError.message : 'Unknown error'
+              });
+              // Don't fail - contact update is not critical
+            }
           } catch (error) {
             logger.error('❌ OpenAI analysis failed', {
               execution_id: executionId,
