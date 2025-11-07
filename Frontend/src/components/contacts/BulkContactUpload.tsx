@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { useContacts } from '@/hooks/useContacts';
+import { authenticatedFetch } from '@/utils/auth';
 import { useToast } from '@/components/ui/use-toast';
 import { useSuccessFeedback } from '@/contexts/SuccessFeedbackContext';
 import type { ContactUploadResult } from '@/types';
@@ -325,13 +326,9 @@ export const BulkContactUpload: React.FC<BulkContactUploadProps> = ({
         console.error('Backend connectivity test failed:', testError);
       }
 
-      // Try to download template from backend first
+      // Try to download template from backend first (use authenticatedFetch so base URL is applied)
       try {
-        const response = await fetch('/api/contacts/template', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-          },
-        });
+        const response = await authenticatedFetch('/api/contacts/template');
         
         if (response.ok) {
           const blob = await response.blob();

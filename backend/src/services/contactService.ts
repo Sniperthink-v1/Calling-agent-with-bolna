@@ -323,7 +323,7 @@ export class ContactService {
   }
 
   /**
-   * Process Excel bulk upload
+   * Process Excel bulk upload with async batching for large datasets
    */
   static async processContactUpload(
     userId: string, 
@@ -342,12 +342,13 @@ export class ContactService {
       // Parse Excel file
       const contacts = this.parseExcelFile(fileBuffer, filename);
       
-      // Validate contact limit
-      if (contacts.length > 1000) {
-        throw new Error('Maximum 1000 contacts allowed per upload');
+      // Validate contact limit - increased to 10,000
+      if (contacts.length > 10000) {
+        throw new Error('Maximum 10,000 contacts allowed per upload');
       }
 
-      // Process contacts in batches
+      // Process contacts in batches for efficiency
+      const BATCH_SIZE = 100; // Process 100 contacts at a time
       const results = {
         success: 0,
         failed: 0,
@@ -360,80 +361,127 @@ export class ContactService {
       const existingPhones = await this.getExistingPhoneNumbers(userId);
       const processedPhones = new Set<string>();
 
-      for (let i = 0; i < contacts.length; i++) {
-        const contact = contacts[i];
-        const rowNumber = i + 2; // Excel row number (accounting for header)
+      // Process in batches for better performance
+      for (let batchStart = 0; batchStart < contacts.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, contacts.length);
+        const batch = contacts.slice(batchStart, batchEnd);
+        
+        // Process batch concurrently with Promise.allSettled for error isolation
+        const batchPromises = batch.map(async (contact, batchIndex) => {
+          const i = batchStart + batchIndex;
+          const rowNumber = i + 2; // Excel row number (accounting for header)
 
-        try {
-          // Validate required fields
-          if (!contact.name || !contact.phone_number) {
-            results.errors.push({
-              row: rowNumber,
-              error: 'Name and phone number are required',
-              data: contact
-            });
-            results.failed++;
-            continue;
-          }
-
-          // Normalize and validate phone number
-          let normalizedPhone: string;
           try {
-            normalizedPhone = this.normalizePhoneNumber(contact.phone_number);
+            // Only phone_number is required - name is optional
+            if (!contact.phone_number || !contact.phone_number.trim()) {
+              return {
+                success: false,
+                type: 'failed',
+                row: rowNumber,
+                error: 'Phone number is required',
+                data: contact
+              };
+            }
+
+            // Normalize and validate phone number
+            let normalizedPhone: string;
+            try {
+              normalizedPhone = this.normalizePhoneNumber(contact.phone_number);
+            } catch (error) {
+              return {
+                success: false,
+                type: 'failed',
+                row: rowNumber,
+                error: 'Invalid phone number format',
+                data: contact
+              };
+            }
+
+            // Check for duplicates in existing data
+            if (existingPhones.has(normalizedPhone)) {
+              return {
+                success: false,
+                type: 'duplicate',
+                row: rowNumber,
+                error: 'Phone number already exists in your contacts',
+                data: contact
+              };
+            }
+
+            // Check for duplicates within the upload file
+            if (processedPhones.has(normalizedPhone)) {
+              return {
+                success: false,
+                type: 'duplicate',
+                row: rowNumber,
+                error: 'Duplicate phone number in upload file',
+                data: contact
+              };
+            }
+
+            // Auto-generate name if not provided
+            const contactName = contact.name?.trim() || `Anonymous ${normalizedPhone}`;
+
+            // Create contact
+            await ContactModel.createContact({
+              user_id: userId,
+              name: contactName,
+              phone_number: normalizedPhone,
+              email: contact.email?.trim() || undefined,
+              company: contact.company?.trim() || undefined,
+              notes: contact.notes?.trim() || undefined
+            });
+
+            processedPhones.add(normalizedPhone);
+            return {
+              success: true,
+              type: 'success'
+            };
+
           } catch (error) {
-            results.errors.push({
+            logger.error(`Error processing contact at row ${rowNumber}:`, error);
+            return {
+              success: false,
+              type: 'failed',
               row: rowNumber,
-              error: 'Invalid phone number format',
+              error: error instanceof Error ? error.message : 'Unknown error',
               data: contact
-            });
+            };
+          }
+        });
+
+        // Wait for batch to complete
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // Aggregate results
+        batchResults.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            const value = result.value;
+            if (value.success) {
+              results.success++;
+            } else if (value.type === 'duplicate') {
+              results.duplicates++;
+              results.errors.push({
+                row: value.row!,
+                error: value.error!,
+                data: value.data
+              });
+            } else {
+              results.failed++;
+              results.errors.push({
+                row: value.row!,
+                error: value.error!,
+                data: value.data
+              });
+            }
+          } else {
             results.failed++;
-            continue;
-          }
-
-          // Check for duplicates in existing data
-          if (existingPhones.has(normalizedPhone)) {
             results.errors.push({
-              row: rowNumber,
-              error: 'Phone number already exists in your contacts',
-              data: contact
+              row: 0,
+              error: result.reason?.message || 'Batch processing failed'
             });
-            results.duplicates++;
-            continue;
           }
-
-          // Check for duplicates within the upload file
-          if (processedPhones.has(normalizedPhone)) {
-            results.errors.push({
-              row: rowNumber,
-              error: 'Duplicate phone number in upload file',
-              data: contact
-            });
-            results.duplicates++;
-            continue;
-          }
-
-          // Create contact
-          await ContactModel.createContact({
-            user_id: userId,
-            name: contact.name.trim(),
-            phone_number: normalizedPhone,
-            email: contact.email?.trim() || undefined,
-            company: contact.company?.trim() || undefined,
-            notes: contact.notes?.trim() || undefined
-          });
-
-          processedPhones.add(normalizedPhone);
-          results.success++;
-
-        } catch (error) {
-          logger.error(`Error processing contact at row ${rowNumber}:`, error);
-          results.errors.push({
-            row: rowNumber,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            data: contact
-          });
-          results.failed++;
-        }
+        });
       }
 
       logger.info(`Contact upload completed for user ${userId}:`, results);
@@ -472,16 +520,23 @@ export class ContactService {
         bufferStart: fileBuffer.slice(0, 10).toString('hex')
       });
 
-      // Check if buffer starts with valid Excel signatures
-      const signature = fileBuffer.slice(0, 4).toString('hex');
-      const isValidExcel = signature === '504b0304' || // ZIP signature (XLSX)
-                           signature.startsWith('d0cf11e0'); // OLE signature (XLS)
+      // Determine file type by extension; CSV won't match Excel signatures
+      const lowerName = (filename || '').toLowerCase();
+      const isCsv = lowerName.endsWith('.csv');
 
-      if (!isValidExcel) {
-        logger.error('Invalid Excel file signature', { signature, filename });
-        throw new Error('Invalid Excel file format. Please ensure you are uploading a valid .xlsx or .xls file.');
+      if (!isCsv) {
+        // Check if buffer starts with valid Excel signatures for xlsx/xls
+        const signature = fileBuffer.slice(0, 4).toString('hex');
+        const isValidExcel = signature === '504b0304' || // ZIP signature (XLSX)
+                             signature.startsWith('d0cf11e0'); // OLE signature (XLS)
+
+        if (!isValidExcel) {
+          logger.error('Invalid Excel file signature', { signature, filename });
+          throw new Error('Invalid Excel file format. Please ensure you are uploading a valid .xlsx or .xls file.');
+        }
       }
 
+      // Let XLSX detect file format (works for CSV/XLSX/XLS) and prefer text values
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       
@@ -489,8 +544,9 @@ export class ContactService {
         throw new Error('No sheets found in the Excel file');
       }
 
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+  const worksheet = workbook.Sheets[sheetName];
+  // raw:false returns formatted text (avoids scientific notation like 9.19E+11)
+  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false }) as any[][];
 
       if (jsonData.length < 2) {
         throw new Error('Excel file must contain at least a header row and one data row');
@@ -503,7 +559,7 @@ export class ContactService {
 
       // Find required column indices
       const nameIndex = this.findColumnIndex(headers, ['name', 'full_name', 'contact_name']);
-      const phoneIndex = this.findColumnIndex(headers, ['phone', 'phone_number', 'mobile', 'cell']);
+  const phoneIndex = this.findColumnIndex(headers, ['phone', 'phone_number', 'mobile', 'cell', 'phonenumber']);
 
       if (nameIndex === -1) {
         throw new Error('Name column not found. Expected columns: name, full_name, or contact_name');
@@ -528,9 +584,34 @@ export class ContactService {
           continue;
         }
 
+        // Coerce values to strings safely and strip formatting
+        const rawName = row[nameIndex];
+        const rawPhone = row[phoneIndex];
+        const toCleanString = (v: any) => (v === undefined || v === null) ? '' : v.toString().trim();
+
+        // Avoid scientific notation by relying on raw:false above,
+        // but add a fallback normalization just in case
+        const cleanPhone = toCleanString(rawPhone)
+          .replace(/\s+/g, '') // remove internal spaces
+          .replace(/[\u200B-\u200D\uFEFF]/g, ''); // zero-width chars
+
+        // Skip rows where phone number is empty or doesn't contain any digits
+        // This filters out instruction text like "MANDATORY FIELDS:", "OPTIONAL FIELDS:", etc.
+        if (!cleanPhone || !/\d/.test(cleanPhone)) {
+          logger.debug(`Skipping row ${i + 1}: No valid phone number found`, { rawPhone });
+          continue;
+        }
+
+        // Skip rows where phone number is clearly not a phone number (e.g., contains only text)
+        const digitCount = (cleanPhone.match(/\d/g) || []).length;
+        if (digitCount < 10) {
+          logger.debug(`Skipping row ${i + 1}: Phone number has less than 10 digits`, { cleanPhone, digitCount });
+          continue;
+        }
+
         const contact = {
-          name: row[nameIndex]?.toString().trim() || '',
-          phone_number: row[phoneIndex]?.toString().trim() || '',
+          name: toCleanString(rawName),
+          phone_number: cleanPhone,
           email: emailIndex !== -1 ? row[emailIndex]?.toString().trim() : undefined,
           company: companyIndex !== -1 ? row[companyIndex]?.toString().trim() : undefined,
           notes: notesIndex !== -1 ? row[notesIndex]?.toString().trim() : undefined
@@ -602,26 +683,50 @@ export class ContactService {
    */
   static generateExcelTemplate(): Buffer {
     try {
-      const templateData = [
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+
+      // Create data array with headers and sample data
+      const data = [
         ['name', 'phone_number', 'email', 'company', 'notes'],
-        ['John Doe', '+91 9876543210', 'john@example.com', 'Example Corp', 'Sample contact'],
-        ['Jane Smith', '+91 8765432109', 'jane@company.com', 'Tech Solutions', 'Important client']
+        ['John Doe', '\'+91 9876543210', 'john@example.com', 'Example Corp', 'Sample contact'],
+        ['Jane Smith', '\'+91 8765432109', 'jane@company.com', 'Tech Solutions', 'Important client']
       ];
 
-      const worksheet = XLSX.utils.aoa_to_sheet(templateData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Contacts');
+      // Create worksheet from array
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
 
       // Set column widths
       worksheet['!cols'] = [
         { width: 20 }, // name
-        { width: 15 }, // phone_number
+        { width: 18 }, // phone_number (wider for +91 prefix)
         { width: 25 }, // email
         { width: 20 }, // company
         { width: 30 }  // notes
       ];
 
-      return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      // CRITICAL: Pre-format phone_number column (B) as text for rows 4-10003
+      // This ensures when users add new phone numbers, they're treated as text
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+      
+      // Extend range to row 10003 (to format 10,000 data rows after header + 2 sample rows)
+      range.e.r = 10002;
+      worksheet['!ref'] = XLSX.utils.encode_range(range);
+      
+      // Format all cells in phone_number column (column B, index 1) as text
+      for (let row = 3; row <= 10002; row++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: 1 });
+        worksheet[cellAddress] = { t: 's', v: '', z: '@' };
+      }
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Contacts');
+
+      // Write workbook
+      return XLSX.write(workbook, { 
+        type: 'buffer', 
+        bookType: 'xlsx',
+        cellStyles: true 
+      });
     } catch (error) {
       logger.error('Error generating Excel template:', error);
       throw new Error('Failed to generate Excel template');

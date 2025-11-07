@@ -23,7 +23,7 @@ export const uploadExcel = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 20 * 1024 * 1024, // 20MB limit - supports up to 10,000 rows with additional data
     files: 1 // Only one file at a time
   }
 });

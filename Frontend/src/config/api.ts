@@ -103,6 +103,13 @@ export const API_ENDPOINTS = {
     BATCH_LOOKUP: `${API_URL}/contacts/lookup/batch`,
   },
 
+  // Campaigns
+  CAMPAIGNS: {
+    BASE: `${API_URL}/campaigns`,
+    UPLOAD_CSV: `${API_URL}/campaigns/upload-csv`,
+    TEMPLATE: `${API_URL}/campaigns/template`,
+  },
+
   // Leads
   LEADS: {
     LIST: `${API_URL}/leads`,

@@ -77,7 +77,8 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   const [estimatedContactCount, setEstimatedContactCount] = useState(0);
   const [pendingCampaignData, setPendingCampaignData] = useState<any>(null);
   
-  const { showCreditInsufficient } = useCreditToasts();
+  // Updated credits toast hook signature (remove non-existent showCreditInsufficient)
+  const { showInsufficientCreditsToast } = useCreditToasts();
 
   // Fetch agents for selection
   const { data: agentsData } = useQuery({
@@ -155,15 +156,21 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   // CSV upload mutation
   const uploadCsvMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/campaigns/upload-csv', {
+      const response = await authenticatedFetch('/api/campaigns/upload-csv', {
         method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         body: formData,
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to upload CSV');
+        // Try to parse error JSON; fallback to text
+        let errMsg = 'Failed to upload file';
+        try {
+          const error = await response.json();
+          errMsg = error.message || error.error || errMsg;
+        } catch {
+          const text = await response.text();
+          if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
       }
       return response.json();
     },
@@ -193,10 +200,10 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.name.endsWith('.csv')) {
+      if (!(/\.(csv|xlsx|xls)$/i).test(file.name)) {
         toast({
           title: 'Invalid File',
-          description: 'Please select a CSV file',
+          description: 'Please select an Excel (.xlsx/.xls) or CSV (.csv) file',
           variant: 'destructive',
         });
         return;
@@ -211,33 +218,37 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
     setUploadResult(null);
   };
 
-  const handleDownloadTemplate = () => {
-    // Create CSV template with clear mandatory/optional labels
-    const csvContent = `phone_number,name,email
-+1234567890,John Doe,john@example.com
-+0987654321,Jane Smith,jane@example.com
+  const handleDownloadTemplate = async () => {
+    try {
+      // Use backend template endpoint (same as contacts)
+      const response = await authenticatedFetch('/api/campaigns/template');
+      
+      if (!response.ok) {
+        throw new Error('Failed to download template');
+      }
 
-MANDATORY FIELDS:
-- phone_number (Required - Must include country code with + prefix)
-
-OPTIONAL FIELDS:
-- name (Optional - Contact's full name)
-- email (Optional - Contact's email address)`;
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'campaign_contacts_template.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    
-    toast({
-      title: 'Template Downloaded',
-      description: 'CSV template has been downloaded with field descriptions',
-    });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'campaign_contacts_template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: 'Template Downloaded',
+        description: 'Excel template downloaded successfully. Phone numbers are pre-formatted to prevent Excel errors.',
+      });
+    } catch (error) {
+      console.error('Failed to download campaign template:', error);
+      toast({
+        title: 'Download Failed',
+        description: 'Failed to download template. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -330,7 +341,8 @@ OPTIONAL FIELDS:
         // Handle CSV upload
         setIsUploading(true);
         const formData = new FormData();
-        formData.append('csv', pendingCampaignData.csvFile);
+        // Use field name 'file' to match backend upload middleware
+        formData.append('file', pendingCampaignData.csvFile);
         formData.append('name', pendingCampaignData.name);
         formData.append('agent_id', pendingCampaignData.agent_id);
         formData.append('max_concurrent_calls', pendingCampaignData.max_concurrent_calls);
@@ -351,10 +363,7 @@ OPTIONAL FIELDS:
       setShowEstimator(false);
     } catch (error: any) {
       if (error.message.includes('insufficient credits')) {
-        showCreditInsufficient(
-          'Cannot create campaign: insufficient credits',
-          { autoClose: false, showPurchaseButton: true }
-        );
+        showInsufficientCreditsToast(0, 0);
       }
       setShowEstimator(false);
     }
