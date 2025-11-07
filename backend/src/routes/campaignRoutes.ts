@@ -3,6 +3,8 @@ import { CallCampaignService } from '../services/CallCampaignService';
 import Contact from '../models/Contact';
 import { authenticateToken } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { uploadExcel } from '../middleware/upload';
+import * as XLSX from 'xlsx';
 
 const router = Router();
 
@@ -50,14 +52,16 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
  * @desc    Create campaign from CSV upload
  * @access  Private
  */
-router.post('/upload-csv', async (req: Request, res: Response): Promise<any> => {
+router.post('/upload-csv', uploadExcel.single('csv'), async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = (req as any).userId;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    // Get form data from req.body (sent as FormData fields)
     const {
+      name,
       campaign_name,
       description,
       agent_id,
@@ -66,21 +70,37 @@ router.post('/upload-csv', async (req: Request, res: Response): Promise<any> => 
       last_call_time,
       start_date,
       end_date,
-      csv_data
+      max_concurrent_calls
     } = req.body;
 
+    const campaignName = name || campaign_name;
+
     // Validation
-    if (!campaign_name || !agent_id || !next_action || !first_call_time || !last_call_time || !start_date) {
+    if (!campaignName || !agent_id || !next_action || !first_call_time || !last_call_time || !start_date) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: campaign_name, agent_id, next_action, first_call_time, last_call_time, start_date'
+        error: 'Missing required fields: name/campaign_name, agent_id, next_action, first_call_time, last_call_time, start_date'
       });
     }
 
-    if (!csv_data || !Array.isArray(csv_data) || csv_data.length === 0) {
+    // Check if file was uploaded
+    if (!req.file) {
       return res.status(400).json({
         success: false,
-        error: 'csv_data must be a non-empty array'
+        error: 'No CSV file uploaded'
+      });
+    }
+
+    // Parse CSV file
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const csv_data = XLSX.utils.sheet_to_json(worksheet);
+
+    if (!csv_data || csv_data.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'CSV file is empty'
       });
     }
 
@@ -163,7 +183,7 @@ router.post('/upload-csv', async (req: Request, res: Response): Promise<any> => 
 
     // Step 2: Create campaign with contact IDs
     const campaignData = {
-      name: campaign_name,
+      name: campaignName,
       description,
       agent_id,
       next_action,
@@ -171,6 +191,7 @@ router.post('/upload-csv', async (req: Request, res: Response): Promise<any> => 
       last_call_time,
       start_date,
       end_date,
+      max_concurrent_calls: max_concurrent_calls ? parseInt(max_concurrent_calls) : undefined,
       contact_ids: contactIds
     };
 
