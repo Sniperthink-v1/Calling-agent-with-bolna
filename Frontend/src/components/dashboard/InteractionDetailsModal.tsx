@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,9 +8,10 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, FileText, Play } from 'lucide-react';
 import type { LeadAnalyticsData } from '@/types';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface InteractionDetailsModalProps {
   isOpen: boolean;
@@ -38,6 +39,15 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
   isLoading,
   error,
 }) => {
+  const [showTranscript, setShowTranscript] = useState(false);
+  const callData = (analytics as any)?.callData;
+
+  const handlePlayRecording = () => {
+    if (callData?.recording_url) {
+      window.open(callData.recording_url, '_blank');
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[600px]">
@@ -104,16 +114,43 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
                 </div>
               </div>
               
+              {/* Call Actions - Transcript and Recording */}
               <div>
-                <h3 className="font-semibold text-lg mb-2">Recommendations</h3>
-                {analytics.recommendations && analytics.recommendations.length > 0 ? (
-                  <ul className="list-disc list-inside text-sm text-muted-foreground bg-muted p-3 rounded-md">
-                    {analytics.recommendations.map((topic, index) => (
-                      <li key={index}>{topic}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground bg-muted p-3 rounded-md">No recommendations available.</p>
+                <h3 className="font-semibold text-lg mb-3">Call Actions</h3>
+                <div className="flex gap-3">
+                  {callData?.transcript && (
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2"
+                      onClick={() => setShowTranscript(!showTranscript)}
+                    >
+                      <FileText className="h-4 w-4" />
+                      {showTranscript ? 'Hide' : 'Show'} Transcript
+                    </Button>
+                  )}
+                  {callData?.recording_url && (
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2"
+                      onClick={handlePlayRecording}
+                    >
+                      <Play className="h-4 w-4" />
+                      Play Recording
+                    </Button>
+                  )}
+                  {!callData?.transcript && !callData?.recording_url && (
+                    <p className="text-sm text-muted-foreground">No transcript or recording available</p>
+                  )}
+                </div>
+
+                {/* Transcript Display */}
+                {showTranscript && callData?.transcript && (
+                  <div className="mt-3 bg-muted p-4 rounded-md">
+                    <h4 className="font-semibold text-sm mb-2">Transcript</h4>
+                    <ScrollArea className="h-[200px] w-full">
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{callData.transcript}</p>
+                    </ScrollArea>
+                  </div>
                 )}
               </div>
             </div>

@@ -28,22 +28,22 @@ export interface LeadGroup {
 
 export interface LeadTimelineEntry {
   id: string;
+  leadName?: string;
   interactionAgent: string;
   interactionDate: string;
-  platform: string;
-  phoneNumber?: string;
-  callStatus: string;
-  callLifecycleStatus?: string;
+  platform?: string;
+  callDirection?: string;
+  hangupBy?: string;
+  hangupReason?: string;
   companyName?: string;
   status: string;
-  useCase: string;
+  smartNotification?: string;
   duration?: string;
   engagementLevel?: string;
   intentLevel?: string;
   budgetConstraint?: string;
   timelineUrgency?: string;
   fitAlignment?: string;
-  extractedName?: string;
   extractedEmail?: string;
   totalScore?: number;
   intentScore?: number;
@@ -51,13 +51,13 @@ export interface LeadTimelineEntry {
   budgetScore?: number;
   fitScore?: number;
   engagementScore?: number;
+  overallScore?: number;
   ctaPricingClicked?: boolean;
   ctaDemoClicked?: boolean;
   ctaFollowupClicked?: boolean;
   ctaSampleClicked?: boolean;
   ctaEscalatedToHuman?: boolean;
   demoBookDatetime?: string;
-  smartNotification?: string;
   followUpDate?: string;
   followUpRemark?: string;
   followUpStatus?: string;
@@ -106,7 +106,7 @@ export class LeadIntelligenceController {
             FIRST_VALUE(COALESCE(la.cta_escalated_to_human, false)) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as escalated_to_human,
             FIRST_VALUE(c.created_at) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as last_contact,
             FIRST_VALUE(COALESCE(la.demo_book_datetime, la.demo_scheduled_at)) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as demo_book_datetime,
-            COUNT(*) OVER (PARTITION BY c.phone_number)::bigint as interactions,
+            COUNT(*) FILTER (WHERE la.analysis_type = 'individual' OR la.analysis_type IS NULL) OVER (PARTITION BY c.phone_number)::bigint as interactions,
             ROW_NUMBER() OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::bigint as rn
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id
@@ -150,7 +150,7 @@ export class LeadIntelligenceController {
             FIRST_VALUE(COALESCE(la.cta_escalated_to_human, false)) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as escalated_to_human,
             FIRST_VALUE(c.created_at) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as last_contact,
             FIRST_VALUE(COALESCE(la.demo_book_datetime, la.demo_scheduled_at)) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as demo_book_datetime,
-            COUNT(*) OVER (PARTITION BY la.extracted_email)::bigint as interactions,
+            COUNT(*) FILTER (WHERE la.analysis_type = 'individual' OR la.analysis_type IS NULL) OVER (PARTITION BY la.extracted_email)::bigint as interactions,
             ROW_NUMBER() OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::bigint as rn
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id
@@ -308,22 +308,27 @@ export class LeadIntelligenceController {
         query = `
           SELECT 
             c.id,
+            la.extracted_name as lead_name,
             a.name as interaction_agent,
             c.created_at as interaction_date,
             CASE 
               WHEN c.metadata->>'call_source' = 'internet' THEN 'Internet'
               ELSE 'Phone'
             END as platform,
-            c.phone_number,
-            c.status as call_status,
-            c.call_lifecycle_status,
+            CASE 
+              WHEN c.lead_type = 'inbound' THEN 'Inbound'
+              WHEN c.lead_type = 'outbound' THEN 'Outbound'
+              ELSE 'Outbound'
+            END as call_direction,
+            c.hangup_by,
+            c.hangup_reason,
             la.company_name,
             CASE 
               WHEN la.lead_status_tag IS NOT NULL THEN la.lead_status_tag
               WHEN c.status = 'failed' AND c.call_lifecycle_status IS NOT NULL THEN c.call_lifecycle_status
               ELSE 'Cold'
             END as status,
-            la.call_summary_title as use_case,
+            la.smart_notification,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -336,7 +341,6 @@ export class LeadIntelligenceController {
             la.budget_constraint,
             la.urgency_level as timeline_urgency,
             la.fit_alignment,
-            la.extracted_name,
             la.extracted_email,
             la.total_score,
             la.intent_score,
@@ -350,7 +354,6 @@ export class LeadIntelligenceController {
             la.cta_sample_clicked,
             la.cta_escalated_to_human,
             la.demo_book_datetime,
-            la.smart_notification,
             fu.follow_up_date,
             fu.remark as follow_up_remark,
             fu.follow_up_status,
@@ -359,7 +362,10 @@ export class LeadIntelligenceController {
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.analysis_type = 'individual'
           LEFT JOIN agents a ON c.agent_id = a.id
-          LEFT JOIN follow_ups fu ON fu.lead_phone = c.phone_number AND fu.user_id = $1
+          LEFT JOIN follow_ups fu ON (
+            (fu.call_id = c.id) OR 
+            (fu.call_id IS NULL AND fu.lead_phone = c.phone_number AND fu.user_id = $1)
+          )
           WHERE c.user_id = $1 
             AND c.phone_number = $2
           ORDER BY c.created_at DESC;
@@ -369,19 +375,27 @@ export class LeadIntelligenceController {
         query = `
           SELECT 
             c.id,
+            la.extracted_name as lead_name,
             a.name as interaction_agent,
             c.created_at as interaction_date,
-            'Internet' as platform,
-            c.phone_number,
-            c.status as call_status,
-            c.call_lifecycle_status,
+            CASE 
+              WHEN c.metadata->>'call_source' = 'internet' THEN 'Internet'
+              ELSE 'Phone'
+            END as platform,
+            CASE 
+              WHEN c.lead_type = 'inbound' THEN 'Inbound'
+              WHEN c.lead_type = 'outbound' THEN 'Outbound'
+              ELSE 'Outbound'
+            END as call_direction,
+            c.hangup_by,
+            c.hangup_reason,
             la.company_name,
             CASE 
               WHEN la.lead_status_tag IS NOT NULL THEN la.lead_status_tag
               WHEN c.status = 'failed' AND c.call_lifecycle_status IS NOT NULL THEN c.call_lifecycle_status
               ELSE 'Cold'
             END as status,
-            la.call_summary_title as use_case,
+            la.smart_notification,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -394,7 +408,6 @@ export class LeadIntelligenceController {
             la.budget_constraint,
             la.urgency_level as timeline_urgency,
             la.fit_alignment,
-            la.extracted_name,
             la.extracted_email,
             la.total_score,
             la.intent_score,
@@ -408,7 +421,6 @@ export class LeadIntelligenceController {
             la.cta_sample_clicked,
             la.cta_escalated_to_human,
             la.demo_book_datetime,
-            la.smart_notification,
             fu.follow_up_date,
             fu.remark as follow_up_remark,
             fu.follow_up_status,
@@ -417,7 +429,10 @@ export class LeadIntelligenceController {
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.analysis_type = 'individual'
           LEFT JOIN agents a ON c.agent_id = a.id
-          LEFT JOIN follow_ups fu ON fu.lead_email = la.extracted_email AND fu.user_id = $1
+          LEFT JOIN follow_ups fu ON (
+            (fu.call_id = c.id) OR 
+            (fu.call_id IS NULL AND fu.lead_email = la.extracted_email AND fu.user_id = $1)
+          )
           WHERE c.user_id = $1 
             AND la.extracted_email = $2
           ORDER BY c.created_at DESC;
@@ -427,19 +442,27 @@ export class LeadIntelligenceController {
         query = `
           SELECT 
             c.id,
+            la.extracted_name as lead_name,
             a.name as interaction_agent,
             c.created_at as interaction_date,
-            'Internet' as platform,
-            c.phone_number,
-            c.status as call_status,
-            c.call_lifecycle_status,
+            CASE 
+              WHEN c.metadata->>'call_source' = 'internet' THEN 'Internet'
+              ELSE 'Phone'
+            END as platform,
+            CASE 
+              WHEN c.lead_type = 'inbound' THEN 'Inbound'
+              WHEN c.lead_type = 'outbound' THEN 'Outbound'
+              ELSE 'Outbound'
+            END as call_direction,
+            c.hangup_by,
+            c.hangup_reason,
             la.company_name,
             CASE 
               WHEN la.lead_status_tag IS NOT NULL THEN la.lead_status_tag
               WHEN c.status = 'failed' AND c.call_lifecycle_status IS NOT NULL THEN c.call_lifecycle_status
               ELSE 'Cold'
             END as status,
-            la.call_summary_title as use_case,
+            la.smart_notification,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -452,7 +475,6 @@ export class LeadIntelligenceController {
             la.budget_constraint,
             la.urgency_level as timeline_urgency,
             la.fit_alignment,
-            la.extracted_name,
             la.extracted_email,
             la.total_score,
             la.intent_score,
@@ -466,7 +488,6 @@ export class LeadIntelligenceController {
             la.cta_sample_clicked,
             la.cta_escalated_to_human,
             la.demo_book_datetime,
-            la.smart_notification,
             NULL as follow_up_date,
             NULL as follow_up_remark,
             NULL as follow_up_status,
@@ -486,15 +507,16 @@ export class LeadIntelligenceController {
       
       const timeline: LeadTimelineEntry[] = result.rows.map(row => ({
         id: row.id,
+        leadName: row.lead_name,
         interactionAgent: row.interaction_agent || 'Unknown Agent',
         interactionDate: row.interaction_date,
         platform: row.platform,
-        phoneNumber: row.phone_number,
-        callStatus: row.call_status,
-        callLifecycleStatus: row.call_lifecycle_status,
+        callDirection: row.call_direction,
+        hangupBy: row.hangup_by,
+        hangupReason: row.hangup_reason,
         companyName: row.company_name,
         status: row.status || 'Cold',
-        useCase: row.use_case || 'No summary available',
+        smartNotification: row.smart_notification,
         duration: row.duration,
         engagementLevel: row.engagement_level,
         intentLevel: row.intent_level,
@@ -510,9 +532,10 @@ export class LeadIntelligenceController {
         overallScore: row.overall_score,
         // CTA interactions
         ctaPricingClicked: row.cta_pricing_clicked,
-        ctaDemoRequested: row.cta_demo_requested,
-        ctaCalendlyOpened: row.cta_calendly_opened,
-        ctaLinkShared: row.cta_link_shared,
+        ctaDemoClicked: row.cta_demo_clicked,
+        ctaFollowupClicked: row.cta_followup_clicked,
+        ctaSampleClicked: row.cta_sample_clicked,
+        ctaEscalatedToHuman: row.cta_escalated_to_human,
         // Follow-up information
         followUpDate: row.follow_up_date,
         followUpRemark: row.follow_up_remark,
@@ -520,17 +543,9 @@ export class LeadIntelligenceController {
         followUpCompleted: row.follow_up_completed,
         followUpCallId: row.follow_up_call_id,
         // Extracted data
-        extractedName: row.extracted_name,
         extractedEmail: row.extracted_email,
-        extractedCompany: row.extracted_company,
         // Additional fields
-        smartNotificationsSent: row.smart_notifications_sent,
-        demoBookingConfirmed: row.demo_booking_confirmed,
-        customActionTaken: row.custom_action_taken,
-        // Lead analytics metadata
-        leadStatusTag: row.lead_status_tag,
-        leadPriority: row.lead_priority,
-        conversionProbability: row.conversion_probability
+        demoBookDatetime: row.demo_book_datetime
       }));
 
       res.json(timeline);

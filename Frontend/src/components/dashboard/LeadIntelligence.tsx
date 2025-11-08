@@ -73,22 +73,22 @@ interface LeadGroup {
 
 interface LeadTimelineEntry {
   id: string;
+  leadName?: string;
   interactionAgent: string;
   interactionDate: string;
-  platform: string;
-  phoneNumber?: string;
-  callStatus?: string;
-  callLifecycleStatus?: string;
+  platform?: string;
+  callDirection?: string;
+  hangupBy?: string;
+  hangupReason?: string;
   companyName?: string;
   status: string;
-  useCase: string;
+  smartNotification?: string;
   duration?: string;
   engagementLevel?: string;
   intentLevel?: string;
   budgetConstraint?: string;
   timelineUrgency?: string;
   fitAlignment?: string;
-  extractedName?: string;
   extractedEmail?: string;
   totalScore?: number;
   intentScore?: number;
@@ -96,13 +96,13 @@ interface LeadTimelineEntry {
   budgetScore?: number;
   fitScore?: number;
   engagementScore?: number;
+  overallScore?: number;
   ctaPricingClicked?: boolean;
   ctaDemoClicked?: boolean;
   ctaFollowupClicked?: boolean;
   ctaSampleClicked?: boolean;
   ctaEscalatedToHuman?: boolean;
   demoBookDatetime?: string;
-  smartNotification?: string;
   followUpDate?: string;
   followUpRemark?: string;
   followUpStatus?: string;
@@ -147,6 +147,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const [followUpDate, setFollowUpDate] = useState<Date | undefined>(undefined);
   const [followUpRemark, setFollowUpRemark] = useState("");
   const [currentFollowUpContact, setCurrentFollowUpContact] = useState<LeadGroup | null>(null);
+  const [currentFollowUpCallId, setCurrentFollowUpCallId] = useState<string | undefined>(undefined);
   const [followUpLoading, setFollowUpLoading] = useState(false);
 
   // Customer conversion modal state
@@ -252,8 +253,9 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   };
 
   // Follow-up scheduling functions
-  const handleScheduleFollowUp = (contact: LeadGroup) => {
+  const handleScheduleFollowUp = (contact: LeadGroup, callId?: string) => {
     setCurrentFollowUpContact(contact);
+    setCurrentFollowUpCallId(callId);
     setFollowUpDate(undefined);
     setFollowUpRemark("");
     setShowFollowUpDialog(true);
@@ -262,25 +264,31 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const handleSaveFollowUp = async () => {
     if (followUpDate && currentFollowUpContact) {
       try {
-        // Get the most recent call ID from timeline
-        const mostRecentCall = timeline.length > 0 ? timeline[0] : null;
-        
         const followUpData: CreateFollowUpRequest = {
           leadPhone: currentFollowUpContact.phone,
           leadEmail: currentFollowUpContact.email,
           leadName: currentFollowUpContact.name,
           followUpDate: format(followUpDate, 'yyyy-MM-dd'),
           remark: followUpRemark || undefined,
-          callId: mostRecentCall?.id // Link to the most recent call
+          callId: currentFollowUpCallId // Link to specific call if provided
         };
 
         await createFollowUp(followUpData);
+        
+        // Refetch timeline if we're viewing a contact's timeline
+        if (selectedContact) {
+          await fetchLeadTimeline(selectedContact.id);
+        }
+        
+        // Refetch main lead intelligence data as well
+        await fetchLeadIntelligence();
         
         // Close dialog and reset state
         setShowFollowUpDialog(false);
         setFollowUpDate(undefined);
         setFollowUpRemark("");
         setCurrentFollowUpContact(null);
+        setCurrentFollowUpCallId(undefined);
       } catch (error) {
         console.error('Failed to schedule follow-up:', error);
         // You might want to show a toast notification here
@@ -540,17 +548,18 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Date & Time</TableHead>
                     <TableHead>Agent</TableHead>
-                    <TableHead>Date</TableHead>
                     <TableHead>Platform</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Call Status</TableHead>
+                    <TableHead>Call Type</TableHead>
+                    <TableHead>Hangup By</TableHead>
                     <TableHead>Lead Status</TableHead>
-                    <TableHead>Use Case</TableHead>
+                    <TableHead>Smart Summary</TableHead>
                     <TableHead>Duration</TableHead>
-                    <TableHead>Scores</TableHead>
+                    <TableHead>Analytics</TableHead>
                     <TableHead>CTAs</TableHead>
-                    <TableHead>Contact Info</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Follow-up</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -577,36 +586,65 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         className="cursor-pointer hover:bg-muted-foreground/10"
                         onClick={() => handleInteractionClick(interaction.id)}
                       >
+                        {/* Name Column */}
+                        <TableCell className="text-foreground font-medium">
+                          {interaction.leadName || "Anonymous"}
+                        </TableCell>
+                        
+                        {/* Date & Time Column - IST */}
+                        <TableCell className="text-foreground">
+                          <div className="text-xs space-y-0.5">
+                            <div>{new Date(interaction.interactionDate).toLocaleDateString('en-IN', { 
+                              timeZone: 'Asia/Kolkata',
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}</div>
+                            <div className="text-muted-foreground">
+                              {new Date(interaction.interactionDate).toLocaleTimeString('en-IN', {
+                                timeZone: 'Asia/Kolkata',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false
+                              })}
+                            </div>
+                          </div>
+                        </TableCell>
+                        
+                        {/* Agent Column */}
                         <TableCell className="text-foreground">
                           {interaction.interactionAgent}
                         </TableCell>
+                        
+                        {/* Platform Column */}
                         <TableCell className="text-foreground">
-                          {new Date(interaction.interactionDate).toLocaleDateString('en-US', { 
-                            timeZone: 'UTC',
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
+                          {interaction.platform || "—"}
                         </TableCell>
+                        
+                        {/* Call Type (Inbound/Outbound) - Simple text */}
                         <TableCell className="text-foreground">
-                          {interaction.platform}
+                          {interaction.callDirection || "—"}
                         </TableCell>
-                        <TableCell className="text-foreground text-sm">
-                          {interaction.phoneNumber || "—"}
-                        </TableCell>
+                        
+                        {/* Hangup By with Reason - Compact */}
                         <TableCell>
-                          {interaction.callStatus === 'failed' && interaction.callLifecycleStatus ? (
-                            <Badge variant="outline" className="border-orange-500 text-orange-700 bg-orange-50 dark:bg-orange-950 dark:text-orange-300">
-                              {interaction.callLifecycleStatus}
-                            </Badge>
-                          ) : interaction.callStatus ? (
-                            <Badge variant="outline" className="border-green-500 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-300">
-                              {interaction.callStatus}
-                            </Badge>
+                          {interaction.hangupBy ? (
+                            <div className="text-xs space-y-0.5">
+                              <div className="capitalize">
+                                {interaction.hangupBy}
+                              </div>
+                              {interaction.hangupReason && (
+                                <div className="text-muted-foreground">
+                                  {interaction.hangupReason}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             "—"
                           )}
                         </TableCell>
+                        
+                        {/* Lead Status - ONLY place with badges/colors */}
                         <TableCell>
                           <Badge
                             variant="outline"
@@ -615,92 +653,85 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                             {interaction.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-foreground max-w-xs truncate">
-                          {interaction.useCase}
+                        
+                        {/* Smart Summary */}
+                        <TableCell className="text-foreground max-w-xs">
+                          <div className="text-xs truncate" title={interaction.smartNotification || ''}>
+                            {interaction.smartNotification || "—"}
+                          </div>
                         </TableCell>
-                        <TableCell className="text-foreground">
+                        
+                        {/* Duration */}
+                        <TableCell className="text-foreground text-xs">
                           {interaction.duration || "—"}
                         </TableCell>
-                        <TableCell>
-                          <div className="space-y-1 text-xs">
-                            {interaction.intentScore !== null && interaction.intentScore !== undefined && (
-                              <div className="flex items-center gap-1">
-                                <span className="text-muted-foreground w-12">Intent:</span>
-                                <span className="font-medium">{interaction.intentScore}/10</span>
-                              </div>
+                        
+                        {/* Analytics - Each on new line */}
+                        <TableCell className="text-xs min-w-[150px]">
+                          <div className="space-y-1">
+                            {interaction.intentLevel && (
+                              <div><span className="text-muted-foreground">Intent:</span> {interaction.intentLevel}</div>
                             )}
-                            {interaction.urgencyScore !== null && interaction.urgencyScore !== undefined && (
-                              <div className="flex items-center gap-1">
-                                <span className="text-muted-foreground w-12">Urgent:</span>
-                                <span className="font-medium">{interaction.urgencyScore}/10</span>
-                              </div>
+                            {interaction.timelineUrgency && (
+                              <div><span className="text-muted-foreground">Urgency:</span> {interaction.timelineUrgency}</div>
                             )}
-                            {interaction.engagementScore !== null && interaction.engagementScore !== undefined && (
-                              <div className="flex items-center gap-1">
-                                <span className="text-muted-foreground w-12">Engage:</span>
-                                <span className="font-medium">{interaction.engagementScore}/10</span>
-                              </div>
+                            {interaction.budgetConstraint && (
+                              <div><span className="text-muted-foreground">Budget:</span> {interaction.budgetConstraint}</div>
                             )}
-                            {(!interaction.intentScore && !interaction.urgencyScore && !interaction.engagementScore) && "—"}
+                            {(!interaction.intentLevel && !interaction.timelineUrgency && !interaction.budgetConstraint) && "—"}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {interaction.ctaPricingClicked && (
-                              <Badge variant="secondary" className="text-xs">💰 Pricing</Badge>
-                            )}
-                            {interaction.ctaDemoClicked && (
-                              <Badge variant="secondary" className="text-xs">🎯 Demo</Badge>
-                            )}
-                            {interaction.ctaFollowupClicked && (
-                              <Badge variant="secondary" className="text-xs">📞 Follow-up</Badge>
-                            )}
-                            {interaction.ctaEscalatedToHuman && (
-                              <Badge variant="secondary" className="text-xs">👤 Escalated</Badge>
-                            )}
-                            {(!interaction.ctaPricingClicked && !interaction.ctaDemoClicked && !interaction.ctaFollowupClicked && !interaction.ctaEscalatedToHuman) && "—"}
+                        {/* CTAs - Compact inline */}
+                        <TableCell className="text-xs">
+                          <div className="space-y-0.5">
+                            {interaction.ctaPricingClicked && <div>Pricing</div>}
+                            {interaction.ctaDemoClicked && <div>Demo</div>}
+                            {interaction.ctaFollowupClicked && <div>Follow-up</div>}
+                            {interaction.ctaSampleClicked && <div>Sample</div>}
+                            {interaction.ctaEscalatedToHuman && <div>Escalated</div>}
+                            {(!interaction.ctaPricingClicked && !interaction.ctaDemoClicked && !interaction.ctaFollowupClicked && !interaction.ctaSampleClicked && !interaction.ctaEscalatedToHuman) && "—"}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="text-xs space-y-1">
-                            {interaction.extractedName && (
-                              <div className="flex items-center gap-1">
-                                <span className="font-medium">{interaction.extractedName}</span>
-                              </div>
-                            )}
-                            {interaction.extractedEmail && (
-                              <div className="text-muted-foreground">{interaction.extractedEmail}</div>
-                            )}
-                            {(!interaction.extractedName && !interaction.extractedEmail) && "—"}
-                          </div>
+                        
+                        {/* Email */}
+                        <TableCell className="text-xs text-foreground">
+                          {interaction.extractedEmail || "—"}
                         </TableCell>
-                        <TableCell>
+                        {/* Follow-up - Simple text */}
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           {interaction.followUpDate ? (
-                            <div className="text-xs space-y-1">
-                              <div className="flex items-center gap-1">
-                                <Badge variant="outline" className={interaction.followUpCompleted ? "border-green-500 text-green-700" : "border-blue-500 text-blue-700"}>
-                                  {interaction.followUpCompleted ? "✓ Completed" : "⏰ Scheduled"}
-                                </Badge>
+                            <div className="text-xs space-y-0.5">
+                              <div className={`font-medium ${interaction.followUpCompleted ? "text-green-700 dark:text-green-400" : "text-blue-700 dark:text-blue-400"}`}>
+                                {interaction.followUpCompleted ? "Completed" : "Scheduled"}
                               </div>
                               <div className="text-muted-foreground">
-                                {new Date(interaction.followUpDate).toLocaleDateString('en-US', { 
+                                {new Date(interaction.followUpDate).toLocaleDateString('en-IN', { 
+                                  timeZone: 'Asia/Kolkata',
                                   month: 'short',
                                   day: 'numeric'
                                 })}
                               </div>
                               {interaction.followUpRemark && (
-                                <div className="text-muted-foreground truncate max-w-[150px]" title={interaction.followUpRemark}>
+                                <div className="text-muted-foreground truncate max-w-[120px]" title={interaction.followUpRemark}>
                                   {interaction.followUpRemark}
-                                </div>
-                              )}
-                              {interaction.followUpCallId && (
-                                <div className="text-xs text-blue-600 dark:text-blue-400">
-                                  📎 Linked to call
                                 </div>
                               )}
                             </div>
                           ) : (
-                            "—"
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs px-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (selectedContact) {
+                                  handleScheduleFollowUp(selectedContact, interaction.id);
+                                }
+                              }}
+                            >
+                              Schedule
+                            </Button>
                           )}
                         </TableCell>
                       </TableRow>
@@ -718,6 +749,88 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
           isLoading={isAnalyticsLoading}
           error={analyticsError}
         />
+
+        {/* Follow-up Scheduling Dialog - Available in timeline view */}
+        <Dialog open={showFollowUpDialog} onOpenChange={setShowFollowUpDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Schedule Follow-up</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {currentFollowUpContact && (
+                <div className="text-sm text-muted-foreground">
+                  Scheduling follow-up for: <strong>{currentFollowUpContact.name}</strong>
+                  {currentFollowUpCallId && (
+                    <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      📎 This follow-up will be linked to a specific call
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="followup-date">Follow-up Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !followUpDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarDays className="mr-2 h-4 w-4" />
+                      {followUpDate ? format(followUpDate, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={followUpDate}
+                      onSelect={setFollowUpDate}
+                      disabled={(date) => date < new Date()}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="followup-remark">Remark (Optional)</Label>
+                <Textarea
+                  id="followup-remark"
+                  placeholder="Add a note about this follow-up..."
+                  value={followUpRemark}
+                  onChange={(e) => setFollowUpRemark(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFollowUpDialog(false)}
+                  disabled={followUpLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveFollowUp}
+                  disabled={!followUpDate || followUpLoading}
+                >
+                  {followUpLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Scheduling...
+                    </>
+                  ) : (
+                    'Schedule Follow-up'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -941,19 +1054,20 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   {contact.followUpScheduled ? (
-                    <div className="flex items-center gap-1 text-sm">
-                      <CalendarDays className="w-4 h-4 text-green-600" />
-                      {new Date(contact.followUpScheduled).toLocaleDateString()}
+                    <div className="text-sm space-y-1">
+                      <div className={`font-medium ${contact.followUpStatus === 'completed' ? "text-green-700 dark:text-green-400" : "text-blue-700 dark:text-blue-400"}`}>
+                        {contact.followUpStatus === 'completed' ? "Completed" : "Scheduled"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(contact.followUpScheduled).toLocaleDateString('en-IN', { 
+                          timeZone: 'Asia/Kolkata',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </div>
                     </div>
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleScheduleFollowUp(contact)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                    </Button>
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -1019,83 +1133,6 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
           </div>
         )}
       </div>
-
-      {/* Follow-up Scheduling Dialog */}
-      <Dialog open={showFollowUpDialog} onOpenChange={setShowFollowUpDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Schedule Follow-up</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {currentFollowUpContact && (
-              <div className="text-sm text-muted-foreground">
-                Scheduling follow-up for: <strong>{currentFollowUpContact.name}</strong>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="followup-date">Follow-up Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !followUpDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {followUpDate ? format(followUpDate, "PPP") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={followUpDate}
-                    onSelect={setFollowUpDate}
-                    disabled={(date) => date < new Date()}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="followup-remark">Remark (Optional)</Label>
-              <Textarea
-                id="followup-remark"
-                placeholder="Add a note about this follow-up..."
-                value={followUpRemark}
-                onChange={(e) => setFollowUpRemark(e.target.value)}
-                rows={3}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowFollowUpDialog(false)}
-                disabled={followUpLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveFollowUp}
-                disabled={!followUpDate || followUpLoading}
-              >
-                {followUpLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Scheduling...
-                  </>
-                ) : (
-                  'Schedule Follow-up'
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Customer Conversion Modal */}
       <CustomerConversionModal

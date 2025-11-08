@@ -57,10 +57,21 @@ export class AnalyticsController {
         return;
       }
 
+      // Fetch transcript if available
+      const Transcript = (await import('../models/Transcript')).default;
+      const transcript = await Transcript.findByCallId(callId);
+
       logger.info(`Successfully fetched analytics for callId: ${callId}`, { analytics });
       res.status(200).json({
         success: true,
-        data: analytics
+        data: {
+          ...analytics,
+          callData: {
+            id: call.id,
+            recording_url: call.recording_url,
+            transcript: transcript?.content || null
+          }
+        }
       });
     } catch (error) {
       logger.error('Error getting call analytics:', { error, callId, userId });
