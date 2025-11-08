@@ -5,7 +5,9 @@ interface NavigationContextType {
   activeSubTab: string;
   setActiveTab: (tab: string) => void;
   setActiveSubTab: (subTab: string) => void;
-  navigateToLeadIntelligence: () => void;
+  navigateToLeadIntelligence: (identifier?: { phone?: string; email?: string } | string) => void;
+  targetLeadIdentifier: { phone?: string; email?: string } | null;
+  clearTargetLeadId: () => void;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
@@ -23,10 +25,24 @@ export const NavigationProvider = ({
 }: NavigationProviderProps) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [activeSubTab, setActiveSubTab] = useState(initialSubTab);
+  const [targetLeadIdentifier, setTargetLeadIdentifier] = useState<{ phone?: string; email?: string } | null>(null);
 
-  const navigateToLeadIntelligence = () => {
+  const navigateToLeadIntelligence = (identifier?: { phone?: string; email?: string } | string) => {
+    console.log('Navigating to Lead Intelligence with identifier:', identifier);
     setActiveTab("lead-intelligence");
     setActiveSubTab("");
+    
+    // Handle both old string format (for backward compatibility) and new object format
+    if (typeof identifier === 'string') {
+      // Legacy support - just clear it since we can't match by UUID
+      setTargetLeadIdentifier(null);
+    } else {
+      setTargetLeadIdentifier(identifier || null);
+    }
+  };
+
+  const clearTargetLeadId = () => {
+    setTargetLeadIdentifier(null);
   };
 
   const value = {
@@ -35,6 +51,8 @@ export const NavigationProvider = ({
     setActiveTab,
     setActiveSubTab,
     navigateToLeadIntelligence,
+    targetLeadIdentifier,
+    clearTargetLeadId,
   };
 
   return (

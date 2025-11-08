@@ -41,6 +41,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useNavigation } from "@/contexts/NavigationContext";
 import { ContactDisplay } from "@/components/contacts/ContactDisplay";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,7 @@ interface LeadIntelligenceProps {
 
 const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const { theme } = useTheme();
+  const { targetLeadIdentifier, clearTargetLeadId } = useNavigation();
   const [searchTerm, setSearchTerm] = useState("");
   const [leadTypeFilter, setLeadTypeFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
@@ -202,6 +204,59 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     fetchLeadIntelligence();
   }, []);
 
+  // Auto-expand lead timeline when targetLeadIdentifier is provided (from notification click)
+  useEffect(() => {
+    console.log('LeadIntelligence effect triggered:', { 
+      targetLeadIdentifier, 
+      contactsCount: contacts.length, 
+      selectedContact: selectedContact?.id,
+      allContacts: contacts.map(c => ({ id: c.id, name: c.name, phone: c.phone, email: c.email }))
+    });
+    
+    if (targetLeadIdentifier && contacts.length > 0 && !selectedContact) {
+      console.log('Attempting to find contact with identifier:', targetLeadIdentifier);
+      
+      // Find contact by matching phone or email
+      const targetContact = contacts.find((contact) => {
+        // Match by phone number (normalize by removing spaces and special chars)
+        if (targetLeadIdentifier.phone && contact.phone) {
+          const normalizePhone = (phone: string) => phone.replace(/[\s\-\(\)]/g, '');
+          if (normalizePhone(contact.phone) === normalizePhone(targetLeadIdentifier.phone)) {
+            return true;
+          }
+        }
+        
+        // Match by email (case-insensitive)
+        if (targetLeadIdentifier.email && contact.email) {
+          if (contact.email.toLowerCase() === targetLeadIdentifier.email.toLowerCase()) {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+      
+      if (targetContact) {
+        console.log('✅ Found target contact! Opening timeline for:', targetContact.name, targetContact.id);
+        // Open the contact and fetch its timeline
+        setSelectedContact(targetContact);
+        fetchLeadTimeline(targetContact.id);
+        // Clear the targetLeadIdentifier after using it
+        clearTargetLeadId();
+      } else {
+        console.error('❌ Target lead not found in contacts list. Searching for:', targetLeadIdentifier);
+        console.log('Available contacts:', contacts.map(c => ({ 
+          id: c.id, 
+          name: c.name, 
+          phone: c.phone, 
+          email: c.email 
+        })));
+        // Clear the targetLeadIdentifier if lead not found
+        clearTargetLeadId();
+      }
+    }
+  }, [targetLeadIdentifier, contacts, selectedContact, clearTargetLeadId]);
+
   const filteredContacts = contacts.filter((contact) => {
     const matchesSearch = contact.name
       .toLowerCase()
@@ -245,7 +300,12 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
       }
     } catch (error: any) {
       console.error('Error fetching call analytics:', error);
-      setAnalyticsError(error.message || 'An unknown error occurred');
+      // Provide more user-friendly error messages for 404 errors
+      if (error.message && (error.message.includes('404') || error.message.toLowerCase().includes('not found'))) {
+        setAnalyticsError('Analytics data not found for this call');
+      } else {
+        setAnalyticsError(error.message || 'An unknown error occurred');
+      }
     } finally {
       setIsAnalyticsLoading(false);
       console.log('Finished loading analytics.');
@@ -940,7 +1000,8 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
             {filteredContacts.map((contact) => (
               <TableRow
                 key={contact.id}
-                className="cursor-pointer hover:bg-muted/50"
+                id={`lead-card-${contact.id}`}
+                className="cursor-pointer hover:bg-muted/50 transition-all"
                 onClick={() => handleContactClick(contact)}
               >
                 <TableCell onClick={(e) => e.stopPropagation()}>

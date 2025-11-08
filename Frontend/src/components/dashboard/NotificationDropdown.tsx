@@ -10,7 +10,7 @@ import type { Notification } from '@/types/api';
 import { formatDistanceToNow } from 'date-fns';
 
 interface NotificationDropdownProps {
-  onNavigateToLeadIntelligence: () => void;
+  onNavigateToLeadIntelligence: (identifier?: { phone?: string; email?: string } | string) => void;
 }
 
 const NotificationDropdown = ({ onNavigateToLeadIntelligence }: NotificationDropdownProps) => {
@@ -53,13 +53,27 @@ const NotificationDropdown = ({ onNavigateToLeadIntelligence }: NotificationDrop
   };
 
   const handleNotificationClick = async (notification: Notification) => {
+    console.log('Notification clicked:', {
+      notificationId: notification.id,
+      contactId: notification.contactId,
+      leadId: notification.leadId,
+      phoneNumber: notification.phoneNumber,
+      email: notification.email,
+      smartNotification: notification.smartNotification
+    });
+    
     // Mark as read if not already read
     if (!notification.isRead) {
       await markAsRead(notification.id);
     }
     
-    // Navigate to lead intelligence tab
-    onNavigateToLeadIntelligence();
+    // Navigate to lead intelligence tab with phone/email to match the grouped contacts
+    const identifier = {
+      phone: notification.phoneNumber || undefined,
+      email: notification.email || undefined
+    };
+    console.log('Navigating to lead intelligence with identifier:', identifier);
+    onNavigateToLeadIntelligence(identifier);
     setIsOpen(false);
   };
 
@@ -248,7 +262,7 @@ const NotificationDropdown = ({ onNavigateToLeadIntelligence }: NotificationDrop
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onNavigateToLeadIntelligence}
+                  onClick={() => onNavigateToLeadIntelligence()}
                   className="w-full"
                 >
                   View All in Lead Intelligence

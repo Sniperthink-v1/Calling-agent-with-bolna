@@ -13,10 +13,35 @@ import type { LeadAnalyticsData } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+// Detailed analytics structure returned from the API
+interface DetailedAnalytics {
+  scores?: {
+    intent?: { level: string; score: number; reasoning: string };
+    urgency?: { level: string; score: number; reasoning: string };
+    budget?: { constraint: string; score: number; reasoning: string };
+    fit?: { alignment: string; score: number; reasoning: string };
+    engagement?: { health: string; score: number; reasoning: string };
+  };
+  overall?: {
+    total_score: number;
+    lead_status_tag: string;
+  };
+  interactions?: {
+    cta_summary?: string[];
+    cta_behavior_reasoning?: string;
+    engagement_indicators?: string[];
+  };
+  callData?: {
+    id: string;
+    recording_url?: string;
+    transcript?: string;
+  };
+}
+
 interface InteractionDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  analytics: LeadAnalyticsData | null;
+  analytics: LeadAnalyticsData | DetailedAnalytics | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -40,7 +65,14 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
   error,
 }) => {
   const [showTranscript, setShowTranscript] = useState(false);
-  const callData = (analytics as any)?.callData;
+  
+  // Type guard to check if analytics has detailed structure
+  const isDetailedAnalytics = (data: any): data is DetailedAnalytics => {
+    return data && ('scores' in data || 'overall' in data || 'interactions' in data);
+  };
+
+  const detailedAnalytics = isDetailedAnalytics(analytics) ? analytics : null;
+  const callData = detailedAnalytics?.callData;
 
   const handlePlayRecording = () => {
     if (callData?.recording_url) {
@@ -64,50 +96,63 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
             </div>
           )}
           {error && !isLoading && (
-            <div className="flex flex-col items-center justify-center h-40 text-destructive">
-              <AlertTriangle className="h-8 w-8 mb-2" />
-              <p className="font-semibold">Failed to load details</p>
-              <p className="text-sm text-center">{error}</p>
+            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+              <FileText className="h-12 w-12 mb-3 opacity-50" />
+              <p className="font-semibold text-lg">No Analytics Data Found</p>
+              <p className="text-sm text-center mt-2 max-w-md">
+                {error.includes('404') || error.toLowerCase().includes('not found') 
+                  ? 'Analytics data is not available for this call. This may happen for calls that are busy, missed, or incomplete.'
+                  : 'Unable to load analytics data at this time.'}
+              </p>
             </div>
           )}
-          {!isLoading && !error && analytics && (
+          {!isLoading && !error && !detailedAnalytics && (
+            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+              <FileText className="h-12 w-12 mb-3 opacity-50" />
+              <p className="font-semibold text-lg">No Analytics Data Found</p>
+              <p className="text-sm text-center mt-2 max-w-md">
+                Analytics data is not available for this call.
+              </p>
+            </div>
+          )}
+          {!isLoading && !error && detailedAnalytics && (
             <div className="space-y-4">
               <div>
                 <h3 className="font-semibold text-lg mb-2">Overall Analysis</h3>
                 <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md grid grid-cols-2 gap-2">
-                  <p><strong>Total Score:</strong> {analytics.overall?.total_score}</p>
-                  <p><strong>Lead Status:</strong> <Badge>{analytics.overall?.lead_status_tag}</Badge></p>
+                  <p><strong>Total Score:</strong> {detailedAnalytics.overall?.total_score}</p>
+                  <p><strong>Lead Status:</strong> <Badge>{detailedAnalytics.overall?.lead_status_tag}</Badge></p>
                 </div>
               </div>
 
               <div>
                 <h3 className="font-semibold text-lg mb-2">Scores Breakdown</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {analytics.scores?.intent && <ScoreCard title="intent" data={analytics.scores.intent} />}
-                  {analytics.scores?.urgency && <ScoreCard title="urgency" data={analytics.scores.urgency} />}
-                  {analytics.scores?.budget && <ScoreCard title="budget" data={analytics.scores.budget} />}
-                  {analytics.scores?.fit && <ScoreCard title="fit" data={analytics.scores.fit} />}
-                  {analytics.scores?.engagement && <ScoreCard title="engagement" data={analytics.scores.engagement} />}
+                  {detailedAnalytics.scores?.intent && <ScoreCard title="intent" data={detailedAnalytics.scores.intent} />}
+                  {detailedAnalytics.scores?.urgency && <ScoreCard title="urgency" data={detailedAnalytics.scores.urgency} />}
+                  {detailedAnalytics.scores?.budget && <ScoreCard title="budget" data={detailedAnalytics.scores.budget} />}
+                  {detailedAnalytics.scores?.fit && <ScoreCard title="fit" data={detailedAnalytics.scores.fit} />}
+                  {detailedAnalytics.scores?.engagement && <ScoreCard title="engagement" data={detailedAnalytics.scores.engagement} />}
                 </div>
               </div>
 
               <div>
                 <h3 className="font-semibold text-lg mb-2">Interaction Highlights</h3>
                 <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-                  <p className="mb-2"><strong>CTA Behavior:</strong> {analytics.interactions?.cta_behavior_reasoning}</p>
-                  {analytics.interactions?.cta_summary && analytics.interactions.cta_summary.length > 0 &&
+                  <p className="mb-2"><strong>CTA Behavior:</strong> {detailedAnalytics.interactions?.cta_behavior_reasoning}</p>
+                  {detailedAnalytics.interactions?.cta_summary && detailedAnalytics.interactions.cta_summary.length > 0 &&
                     <div>
                       <strong>CTA Summary:</strong>
                       <ul className="list-disc list-inside pl-2">
-                        {analytics.interactions.cta_summary.map((item, i) => <li key={i}>{item}</li>)}
+                        {detailedAnalytics.interactions.cta_summary.map((item, i) => <li key={i}>{item}</li>)}
                       </ul>
                     </div>
                   }
-                  {analytics.interactions?.engagement_indicators && analytics.interactions.engagement_indicators.length > 0 &&
+                  {detailedAnalytics.interactions?.engagement_indicators && detailedAnalytics.interactions.engagement_indicators.length > 0 &&
                     <div className="mt-2">
                       <strong>Engagement Indicators:</strong>
                       <ul className="list-disc list-inside pl-2">
-                        {analytics.interactions.engagement_indicators.map((item, i) => <li key={i}>{item}</li>)}
+                        {detailedAnalytics.interactions.engagement_indicators.map((item, i) => <li key={i}>{item}</li>)}
                       </ul>
                     </div>
                   }

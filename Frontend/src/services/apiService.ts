@@ -129,6 +129,7 @@ interface RequestConfig extends RequestInit {
   retries?: number;
   retryDelay?: number;
   skipAuth?: boolean;
+  suppressErrorToast?: boolean; // Don't show error toast for this request
 }
 
 // All interfaces are now imported from ../types
@@ -490,6 +491,7 @@ class ApiService {
       retries = MAX_RETRY_ATTEMPTS,
       retryDelay = RETRY_DELAY,
       skipAuth = false,
+      suppressErrorToast = false,
       agentId,
       includeAgentId = true,
       ...fetchOptions
@@ -595,8 +597,10 @@ class ApiService {
             // Log API error with performance tracking
             dataFlowDebugger.logApiResponse(url, null, processedError.message, performanceId);
 
-            // Use centralized error handler for user feedback
-            errorHandler.handleError(this.convertToErrorHandlerFormat(processedError));
+            // Use centralized error handler for user feedback (unless suppressed)
+            if (!suppressErrorToast) {
+              errorHandler.handleError(this.convertToErrorHandlerFormat(processedError));
+            }
 
             throw processedError;
           }
@@ -629,8 +633,10 @@ class ApiService {
           // Log API error with performance tracking
           dataFlowDebugger.logApiResponse(url, null, apiError.message, performanceId);
 
-          // Use centralized error handler for user feedback
-          errorHandler.handleError(this.convertToErrorHandlerFormat(apiError));
+          // Use centralized error handler for user feedback (unless suppressed)
+          if (!suppressErrorToast) {
+            errorHandler.handleError(this.convertToErrorHandlerFormat(apiError));
+          }
 
           throw apiError;
         }
@@ -1991,7 +1997,9 @@ class ApiService {
 
   // Analytics API methods
   async getCallAnalytics(callId: string): Promise<ApiResponse<LeadAnalyticsData>> {
-    return this.request<LeadAnalyticsData>(API_ENDPOINTS.ANALYTICS.CALLS(callId));
+    return this.request<LeadAnalyticsData>(API_ENDPOINTS.ANALYTICS.CALLS(callId), {
+      suppressErrorToast: true, // We handle 404s gracefully in the UI
+    });
   }
 
   async getAnalyticsLeads(params?: { limit?: number; offset?: number }): Promise<ApiResponse<LeadAnalyticsData>> {
