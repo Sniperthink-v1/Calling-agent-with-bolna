@@ -1,14 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
+import { AuthenticatedRequest } from '../types/auth';
 
 const router = Router();
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-  };
-}
 
 /**
  * GET /api/phone-numbers

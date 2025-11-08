@@ -1,35 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService';
-
-// User type that matches what authService.getUserById returns
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  credits: number;
-  isActive: boolean;
-  emailVerified: boolean;
-  role: string;
-  authProvider: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { AuthUser, AuthenticatedRequest } from '../types/auth';
 
 // Extend Express Request interface to include user
 declare global {
   namespace Express {
     interface Request {
-      user?: User;
+      user?: AuthUser;
       userId?: string;
     }
   }
 }
 
-// Type for authenticated requests
-export interface AuthenticatedRequest extends Request {
-  user: User;
-  userId: string;
-}
+// Re-export for convenience
+export { AuthenticatedRequest };
 
 /**
  * Authentication middleware that validates JWT tokens

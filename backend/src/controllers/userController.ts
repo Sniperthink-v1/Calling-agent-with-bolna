@@ -878,6 +878,10 @@ export class UserController {
    */
   static async getCreditStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
+        return;
+      }
       const userId = req.user.id;
       
       // Get current credits
@@ -984,6 +988,10 @@ export class UserController {
    */
   static async campaignCreditCheck(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
+        return;
+      }
       const userId = req.user.id;
       const { contactCount, estimateOnly = false } = req.body;
 
@@ -1077,6 +1085,10 @@ export class UserController {
    */
   static async getCreditAlerts(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
+        return;
+      }
       const userId = req.user.id;
       
       const { creditMonitoringService } = await import('../services/creditMonitoringService');
@@ -1115,6 +1127,10 @@ export class UserController {
    */
   static async recordCreditEvent(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
+        return;
+      }
       const userId = req.user.id;
       const { type, previousCredits, currentCredits, amount, source, metadata } = req.body;
 
@@ -1165,6 +1181,10 @@ export class UserController {
    */
   static async getLoginStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
+        return;
+      }
       const userId = req.user.id;
       
       // Get current credits and user info
@@ -1241,6 +1261,10 @@ export class UserController {
    */
   static async estimateCredits(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
+        return;
+      }
       const userId = req.user.id;
       const { contactCount } = req.body;
 
