@@ -122,6 +122,7 @@ export class CallQueueModel {
 
   /**
    * Create multiple queue items in bulk
+   * Splits into batches to avoid PostgreSQL parameter limit (65535)
    */
   static async createBulk(items: Array<{
     user_id: string;
@@ -137,41 +138,53 @@ export class CallQueueModel {
   }>): Promise<CallQueueItem[]> {
     if (items.length === 0) return [];
 
-    const values: string[] = [];
-    const params: any[] = [];
-    let paramCount = 0;
+    // PostgreSQL has a parameter limit of ~65535
+    // With 10 params per item, we can safely do 6000 items per batch
+    const BATCH_SIZE = 6000;
+    const allResults: CallQueueItem[] = [];
 
-    items.forEach((item) => {
-      const placeholders = [];
-      for (let i = 0; i < 10; i++) {
-        placeholders.push(`$${++paramCount}`);
-      }
-      values.push(`(${placeholders.join(', ')})`);
-      
-      params.push(
-        item.user_id,
-        item.campaign_id,
-        item.agent_id,
-        item.contact_id,
-        item.phone_number,
-        item.contact_name || null,
-        JSON.stringify(item.user_data),
-        item.priority,
-        item.position,
-        item.scheduled_for
-      );
-    });
+    for (let batchStart = 0; batchStart < items.length; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, items.length);
+      const batch = items.slice(batchStart, batchEnd);
 
-    const query = `
-      INSERT INTO call_queue (
-        user_id, campaign_id, agent_id, contact_id,
-        phone_number, contact_name, user_data, priority, position, scheduled_for
-      ) VALUES ${values.join(', ')}
-      RETURNING *
-    `;
+      const values: string[] = [];
+      const params: any[] = [];
+      let paramCount = 0;
 
-    const result = await pool.query(query, params);
-    return result.rows;
+      batch.forEach((item) => {
+        const placeholders = [];
+        for (let i = 0; i < 10; i++) {
+          placeholders.push(`$${++paramCount}`);
+        }
+        values.push(`(${placeholders.join(', ')})`);
+        
+        params.push(
+          item.user_id,
+          item.campaign_id,
+          item.agent_id,
+          item.contact_id,
+          item.phone_number,
+          item.contact_name || null,
+          JSON.stringify(item.user_data),
+          item.priority,
+          item.position,
+          item.scheduled_for
+        );
+      });
+
+      const query = `
+        INSERT INTO call_queue (
+          user_id, campaign_id, agent_id, contact_id,
+          phone_number, contact_name, user_data, priority, position, scheduled_for
+        ) VALUES ${values.join(', ')}
+        RETURNING *
+      `;
+
+      const result = await pool.query(query, params);
+      allResults.push(...result.rows);
+    }
+
+    return allResults;
   }
 
   /**

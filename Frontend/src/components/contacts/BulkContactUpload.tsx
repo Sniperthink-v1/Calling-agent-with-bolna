@@ -213,7 +213,9 @@ export const BulkContactUpload: React.FC<BulkContactUploadProps> = ({
         }
       }, 200);
 
+      console.log('📤 BulkUpload: Starting upload...');
       const result = await uploadContacts(state.file);
+      console.log('📤 BulkUpload: Upload completed, result:', result);
       
       clearInterval(progressInterval);
       
@@ -247,6 +249,11 @@ export const BulkContactUpload: React.FC<BulkContactUploadProps> = ({
                 },
               },
             });
+            
+            // Call the callback to trigger refresh in parent component
+            console.log('📤 BulkUpload: Calling onUploadComplete callback...');
+            onUploadComplete?.(result);
+            console.log('📤 BulkUpload: Callback completed');
           } else if (duplicateCount > 0 && failedCount === 0) {
             // All were duplicates
             toast({
@@ -262,8 +269,6 @@ export const BulkContactUpload: React.FC<BulkContactUploadProps> = ({
               variant: 'destructive',
             });
           }
-          
-          onUploadComplete?.(result);
         } else {
           toast({
             title: 'Upload failed',

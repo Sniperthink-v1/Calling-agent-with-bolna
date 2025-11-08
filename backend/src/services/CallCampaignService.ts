@@ -1,6 +1,7 @@
 import { CallCampaignModel } from '../models/CallCampaign';
 import { CallQueueModel } from '../models/CallQueue';
 import { userService } from './userService';
+import { logger } from '../utils/logger';
 import { 
   CallCampaign, 
   CreateCampaignRequest,
@@ -15,7 +16,7 @@ export class CallCampaignService {
    */
   static async createCampaign(
     userId: string, 
-    data: CreateCampaignRequest
+    data: CreateCampaignRequest & { contact_details_map?: Map<string, any> }
   ): Promise<CallCampaign> {
     // Check if user has negative or zero credits - block campaign creation
     const user = await userService.getUserProfile(userId);
@@ -44,7 +45,8 @@ export class CallCampaignService {
         data.agent_id,
         data.contact_ids,
         data.next_action,
-        data.start_date
+        data.start_date,
+        data.contact_details_map
       );
     }
 
@@ -232,17 +234,39 @@ export class CallCampaignService {
     agentId: string,
     contactIds: string[],
     nextAction: string,
-    startDate: string
+    startDate: string,
+    contactDetailsMap?: Map<string, any>
   ): Promise<void> {
-    // Import Contact model to get contact details
-    const { ContactModel } = await import('../models/Contact');
-    const contactModel = new ContactModel();
+    if (contactIds.length === 0) return;
+
+    let contactMap: Map<string, any>;
+
+    // If contact details are provided (from CSV upload), use them directly
+    if (contactDetailsMap && contactDetailsMap.size > 0) {
+      contactMap = contactDetailsMap;
+      logger.info(`Using provided contact details for ${contactDetailsMap.size} contacts (no DB fetch needed)`);
+    } else {
+      // Otherwise, fetch from database (for regular campaign creation)
+      const { pool } = await import('../config/database');
+      const contactsResult = await pool.query(
+        `SELECT id, phone_number, name, email, company, notes 
+         FROM contacts 
+         WHERE id = ANY($1) AND user_id = $2`,
+        [contactIds, userId]
+      );
+
+      contactMap = new Map();
+      contactsResult.rows.forEach((contact: any) => {
+        contactMap.set(contact.id, contact);
+      });
+      logger.info(`Fetched ${contactsResult.rows.length} contacts from database`);
+    }
 
     const queueItems = [];
     
     for (let i = 0; i < contactIds.length; i++) {
-      const contact = await contactModel.findById(contactIds[i]);
-      if (!contact || contact.user_id !== userId) continue;
+      const contact = contactMap.get(contactIds[i]);
+      if (!contact) continue;
 
       // Calculate priority (contacts with names get +100)
       const priority = contact.name ? 100 : 0;

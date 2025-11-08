@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -32,6 +32,7 @@ import {
   ChevronLeft,
   ChevronRight,
   PhoneCall,
+  Loader2,
 } from 'lucide-react';
 import Pagination from '@/components/ui/pagination';
 import LazyLoader from '@/components/ui/LazyLoader';
@@ -44,6 +45,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useContacts } from '@/hooks/useContacts';
 import { useToast } from '@/components/ui/use-toast';
+import { useSmartInfiniteScroll } from '@/hooks/useSmartInfiniteScroll';
+import { InfiniteScrollLoader } from '@/components/ui/InfiniteScrollLoader';
 import DeleteContactDialog from './DeleteContactDialog';
 import BulkContactUpload from './BulkContactUpload';
 import { CallAgentModal } from './CallAgentModal';
@@ -56,6 +59,7 @@ interface ContactListProps {
   onContactCreate?: () => void;
   useLazyLoading?: boolean;
   initialPageSize?: number;
+  enableInfiniteScroll?: boolean;
 }
 
 export const ContactList: React.FC<ContactListProps> = ({
@@ -63,7 +67,8 @@ export const ContactList: React.FC<ContactListProps> = ({
   onContactEdit,
   onContactCreate,
   useLazyLoading = false,
-  initialPageSize = 10,
+  initialPageSize = 20, // Changed to 20 for better UX
+  enableInfiniteScroll = true,
 }) => {
   const ITEMS_PER_PAGE = initialPageSize;
   const { toast } = useToast();
@@ -76,7 +81,6 @@ export const ContactList: React.FC<ContactListProps> = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [allLoadedContacts, setAllLoadedContacts] = useState<Contact[]>([]);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'auto_created' | 'linked_to_calls'>('all');
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -91,10 +95,13 @@ export const ContactList: React.FC<ContactListProps> = ({
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
       setCurrentPage(1); // Reset to first page when searching
+      if (enableInfiniteScroll) {
+        setAllLoadedContacts([]); // Clear loaded contacts when searching
+      }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, enableInfiniteScroll]);
 
   // Prepare options for the hook with server-side pagination
   const contactsOptions: ContactsListOptions = {
@@ -116,8 +123,8 @@ export const ContactList: React.FC<ContactListProps> = ({
     clearError,
   } = useContacts(contactsOptions);
 
-  // Handle lazy loading vs traditional pagination and apply filters
-  let baseContacts = useLazyLoading ? allLoadedContacts : contacts;
+  // Handle infinite scroll vs traditional pagination and apply filters
+  let baseContacts = enableInfiniteScroll ? allLoadedContacts : contacts;
   
   // Apply filter based on selected filter type
   const displayContacts = baseContacts.filter(contact => {
@@ -139,9 +146,39 @@ export const ContactList: React.FC<ContactListProps> = ({
   const endIndex = startIndex + contacts.length;
   const hasMore = pagination?.hasMore || false;
 
-  // Update accumulated contacts for lazy loading
+  // Debug logging for infinite scroll
   useEffect(() => {
-    if (useLazyLoading) {
+    if (enableInfiniteScroll) {
+      console.log('📊 Infinite Scroll State:', {
+        currentPage,
+        hasMore,
+        loading,
+        totalLoadedContacts: allLoadedContacts.length,
+        displayContacts: displayContacts.length,
+        paginationTotal: pagination?.total,
+        paginationHasMore: pagination?.hasMore,
+        contactsLength: contacts.length,
+      });
+    }
+  }, [currentPage, hasMore, loading, allLoadedContacts.length, displayContacts.length, enableInfiniteScroll]);
+
+  // Smart infinite scroll hook - use allLoadedContacts.length for accurate trigger
+  const { triggerRef, isLoadingMore, isTriggerItem } = useSmartInfiniteScroll({
+    enabled: enableInfiniteScroll,
+    hasMore,
+    isLoading: loading,
+    onLoadMore: () => {
+      console.log('🔄 IntersectionObserver trigger - loading more from page', currentPage, 'to', currentPage + 1);
+      setCurrentPage(prev => prev + 1);
+    },
+    triggerThreshold: 0.8, // Trigger at 80% - more likely to be in viewport
+    rootMargin: '500px', // Large margin to trigger very early
+    intersectionThreshold: 0,
+  });
+
+  // Update accumulated contacts for infinite scroll
+  useEffect(() => {
+    if (enableInfiniteScroll) {
       if (currentPage === 1) {
         // Reset for new search or first load
         setAllLoadedContacts(contacts);
@@ -153,9 +190,85 @@ export const ContactList: React.FC<ContactListProps> = ({
           return [...prev, ...newContacts];
         });
       }
-      setIsLoadingMore(false);
     }
-  }, [contacts, currentPage, useLazyLoading]);
+  }, [contacts, currentPage, enableInfiniteScroll]);
+
+  // Auto-load if page isn't tall enough to scroll
+  useEffect(() => {
+    if (!enableInfiniteScroll || !hasMore || loading || isLoadingMore) return;
+
+    const checkIfPageTooShort = () => {
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+      const canScroll = scrollHeight > clientHeight;
+
+      if (!canScroll && displayContacts.length > 0) {
+        console.log('📏 Page too short to scroll - auto-loading more content', {
+          scrollHeight,
+          clientHeight,
+          itemsLoaded: displayContacts.length,
+        });
+        setCurrentPage(prev => prev + 1);
+      }
+    };
+
+    // Check after a short delay to ensure DOM is updated
+    const timer = setTimeout(checkIfPageTooShort, 300);
+    return () => clearTimeout(timer);
+  }, [enableInfiniteScroll, hasMore, loading, isLoadingMore, displayContacts.length]);
+
+  // Backup scroll listener for fast scrolling - catches what IntersectionObserver might miss
+  const lastLoadTrigger = useRef<number>(0);
+  const lastScrollTop = useRef<number>(0);
+  const scrollVelocity = useRef<number>(0);
+  
+  useEffect(() => {
+    if (!enableInfiniteScroll) return;
+
+    const handleScroll = () => {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+
+      // Calculate scroll velocity to detect fast scrolling
+      const scrollDelta = scrollTop - lastScrollTop.current;
+      scrollVelocity.current = Math.abs(scrollDelta);
+      lastScrollTop.current = scrollTop;
+
+      const now = Date.now();
+      const timeSinceLastTrigger = now - lastLoadTrigger.current;
+      
+      // Fast scroll: velocity > 100px, trigger at 1200px
+      // Normal scroll: trigger at 600px
+      const triggerDistance = scrollVelocity.current > 100 ? 1200 : 600;
+
+      // Trigger earlier for fast scrolling
+      if (distanceFromBottom < triggerDistance && hasMore && !loading && !isLoadingMore && timeSinceLastTrigger > 300) {
+        const isFastScroll = scrollVelocity.current > 100;
+        console.log(isFastScroll ? '🚀 FAST scroll detected' : '📜 Normal scroll', {
+          velocity: Math.round(scrollVelocity.current),
+          distanceFromBottom: Math.round(distanceFromBottom),
+          triggerDistance,
+        });
+        
+        lastLoadTrigger.current = now;
+        
+        // Load 2 pages ahead if scrolling very fast
+        if (isFastScroll && scrollVelocity.current > 200) {
+          console.log('⚡ SUPER FAST - Loading 2 pages ahead!');
+          setCurrentPage(prev => prev + 2);
+        } else {
+          setCurrentPage(prev => prev + 1);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [enableInfiniteScroll, hasMore, loading, isLoadingMore]);
 
   const handleDeleteContact = (contact: Contact) => {
     setContactToDelete(contact);
@@ -212,20 +325,29 @@ export const ContactList: React.FC<ContactListProps> = ({
   };
 
   const handleLoadMore = () => {
-    if (useLazyLoading && hasMore && !loading && !isLoadingMore) {
-      setIsLoadingMore(true);
+    if (useLazyLoading && hasMore && !loading) {
       setCurrentPage(prev => prev + 1);
     }
   };
 
-  const handleBulkUploadComplete = (result: ContactUploadResult) => {
+  const handleBulkUploadComplete = async (result: ContactUploadResult) => {
+    console.log('📋 ContactList: Upload completed callback triggered', result);
+    
     if (result.success && result.summary.successful > 0) {
       toast({
         title: 'Bulk upload completed',
         description: `Successfully uploaded ${result.summary.successful} contacts.`,
       });
-      // Refresh the contact list to show new contacts
-      refreshContacts();
+      
+      console.log('🔄 ContactList: Resetting state (mutation already triggered refetch)...');
+      
+      // Reset to first page and clear accumulated contacts for fresh data
+      setCurrentPage(1);
+      setAllLoadedContacts([]);
+      
+      // The upload mutation's onSuccess already triggered refetchQueries
+      // So the data should already be refetching, we just need to wait for it
+      console.log('✅ ContactList: State reset complete, fresh data should be loading');
     }
   };
 
@@ -488,7 +610,8 @@ export const ContactList: React.FC<ContactListProps> = ({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {loading ? (
+          {loading && displayContacts.length === 0 ? (
+            // Only show skeleton on initial load when no contacts are loaded yet
             <div className="space-y-0">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="p-4 border-b border-border">
@@ -505,7 +628,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                 </div>
               ))}
             </div>
-          ) : contacts.length === 0 ? (
+          ) : displayContacts.length === 0 ? (
             <div className="p-12 text-center">
               <div className="text-gray-400 mb-4">
                 <Phone className="w-12 h-12 mx-auto mb-4" />
@@ -561,51 +684,58 @@ export const ContactList: React.FC<ContactListProps> = ({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayContacts.map((contact) => (
-                    <TableRow
-                      key={contact.id}
-                      className={`cursor-pointer hover:bg-muted/50 ${
-                        selectedContactIds.has(contact.id) ? 'bg-primary/5' : ''
-                      }`}
-                      onClick={() => onContactSelect?.(contact)}
-                    >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedContactIds.has(contact.id)}
-                          onCheckedChange={(checked) => handleSelectContact(contact.id, !!checked)}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div>
-                          <div>{contact.name}</div>
-                          {contact.isAutoCreated && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Auto created and linked to call
-                            </div>
+                  {displayContacts.map((contact, index) => {
+                    // Calculate trigger based on ALL loaded contacts, not just displayed
+                    // This ensures the trigger is positioned correctly even with filters
+                    const actualIndex = allLoadedContacts.findIndex(c => c.id === contact.id);
+                    const shouldBeTrigger = isTriggerItem(actualIndex, allLoadedContacts.length);
+                    
+                    return (
+                      <TableRow
+                        key={contact.id}
+                        ref={shouldBeTrigger ? (triggerRef as any) : null}
+                        className={`cursor-pointer hover:bg-muted/50 ${
+                          selectedContactIds.has(contact.id) ? 'bg-primary/5' : ''
+                        }`}
+                        onClick={() => onContactSelect?.(contact)}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedContactIds.has(contact.id)}
+                            onCheckedChange={(checked) => handleSelectContact(contact.id, !!checked)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <div>
+                            <div>{contact.name}</div>
+                            {contact.isAutoCreated && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Auto created and linked to call
+                              </div>
+                            )}
+                            {contact.callLinkType === 'manually_linked' && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Manually linked to call
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {formatPhoneNumber((contact as any).phoneNumber || (contact as any).phone_number)}
+                        </TableCell>
+                        <TableCell>
+                          {(contact as any).email || (
+                            <span className="text-gray-400">No email</span>
                           )}
-                          {contact.callLinkType === 'manually_linked' && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Manually linked to call
-                            </div>
+                        </TableCell>
+                        <TableCell>
+                          {(contact as any).company || (
+                            <span className="text-gray-400">No company</span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {formatPhoneNumber((contact as any).phoneNumber || (contact as any).phone_number)}
-                      </TableCell>
-                      <TableCell>
-                        {(contact as any).email || (
-                          <span className="text-gray-400">No email</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {(contact as any).company || (
-                          <span className="text-gray-400">No company</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-gray-500">
-                        {formatDate((contact as any).createdAt || (contact as any).created_at)}
-                      </TableCell>
+                        </TableCell>
+                        <TableCell className="text-gray-500">
+                          {formatDate((contact as any).createdAt || (contact as any).created_at)}
+                        </TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -691,12 +821,21 @@ export const ContactList: React.FC<ContactListProps> = ({
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
 
-              {/* Pagination or Lazy Loading */}
-              {useLazyLoading ? (
+              {/* Smart Infinite Scroll - Bottom Loader Only */}
+              {enableInfiniteScroll ? (
+                <InfiniteScrollLoader
+                  isLoading={isLoadingMore}
+                  hasMore={hasMore}
+                  itemCount={displayContacts.length}
+                  itemType="contacts"
+                  isInitialLoad={loading && currentPage === 1}
+                />
+              ) : useLazyLoading ? (
                 <LazyLoader
                   hasMore={hasMore}
                   loading={isLoadingMore}

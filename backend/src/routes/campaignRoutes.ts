@@ -223,76 +223,97 @@ router.post('/upload-csv', uploadExcel.single('file'), async (req: Request, res:
       });
     }
 
-    // Step 1: Create contacts from CSV data using async batching
-    const BATCH_SIZE = 100; // Process 100 contacts at a time
+    // Step 1: Create contacts from CSV data using BULK INSERT for performance
+    const BATCH_SIZE = 1000; // Bulk insert 1000 contacts at a time
     const contactIds: string[] = [];
     const skippedContacts: string[] = [];
     const createErrors: string[] = [];
 
     // Get existing phone numbers for this user to check duplicates efficiently
     const existingContactsResult = await Contact.query(
-      'SELECT id, phone_number FROM contacts WHERE user_id = $1',
+      'SELECT id, phone_number, name, email, company, notes FROM contacts WHERE user_id = $1',
       [userId]
     );
-    const existingPhoneMap = new Map<string, string>();
+    const existingPhoneMap = new Map<string, any>();
     existingContactsResult.rows.forEach((contact: any) => {
-      existingPhoneMap.set(contact.phone_number, contact.id);
+      existingPhoneMap.set(contact.phone_number, contact);
     });
 
-    // Process contacts in batches for better performance
-    for (let batchStart = 0; batchStart < validContacts.length; batchStart += BATCH_SIZE) {
-      const batchEnd = Math.min(batchStart + BATCH_SIZE, validContacts.length);
-      const batch = validContacts.slice(batchStart, batchEnd);
+    // Separate existing contacts from new ones, and track contact details
+    const newContactsData: any[] = [];
+    const contactDetailsMap = new Map<string, any>(); // phone -> contact details
+    
+    validContacts.forEach((contactData) => {
+      const existingContact = existingPhoneMap.get(contactData.phone_number);
       
-      // Process batch concurrently with Promise.allSettled for error isolation
-      const batchPromises = batch.map(async (contactData) => {
+      if (existingContact) {
+        // Use existing contact
+        contactIds.push(existingContact.id);
+        skippedContacts.push(contactData.phone_number);
+        // Store existing contact details for queue creation
+        contactDetailsMap.set(existingContact.id, existingContact);
+      } else {
+        // Prepare for bulk insert
+        const normalizedData = {
+          user_id: userId,
+          name: contactData.name || `Anonymous ${contactData.phone_number}`,
+          phone_number: contactData.phone_number,
+          email: contactData.email || undefined,
+          company: contactData.company || undefined,
+          notes: contactData.notes || undefined,
+          is_auto_created: false
+        };
+        newContactsData.push(normalizedData);
+        // Store CSV data temporarily (will update with ID after insert)
+        contactDetailsMap.set(contactData.phone_number, normalizedData);
+      }
+    });
+
+    // Bulk insert new contacts in batches
+    if (newContactsData.length > 0) {
+      for (let batchStart = 0; batchStart < newContactsData.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, newContactsData.length);
+        const batch = newContactsData.slice(batchStart, batchEnd);
+        
         try {
-          // Check if contact already exists by phone number using in-memory map
-          const existingContactId = existingPhoneMap.get(contactData.phone_number);
-          
-          if (existingContactId) {
-            // Skip duplicate, use existing contact ID
-            skippedContacts.push(contactData.phone_number);
-            return { success: true, contactId: existingContactId, skipped: true };
-          }
+          // Bulk insert and get the IDs back
+          const insertResult = await Contact.query(`
+            INSERT INTO contacts (
+              user_id, name, phone_number, email, company, notes, is_auto_created
+            ) 
+            SELECT * FROM UNNEST(
+              $1::uuid[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::boolean[]
+            )
+            RETURNING id, phone_number, name, email, company, notes
+          `, [
+            batch.map(c => c.user_id),
+            batch.map(c => c.name),
+            batch.map(c => c.phone_number),
+            batch.map(c => c.email || null),
+            batch.map(c => c.company || null),
+            batch.map(c => c.notes || null),
+            batch.map(c => c.is_auto_created)
+          ]);
 
-          // Create new contact - generate name from phone if not provided
-          const newContact = await Contact.createContact({
-            user_id: userId,
-            name: contactData.name || `Anonymous ${contactData.phone_number}`,
-            phone_number: contactData.phone_number,
-            email: contactData.email || undefined,
-            company: contactData.company || undefined,
-            notes: contactData.notes || undefined,
-            is_auto_created: false
+          // Store the new contact IDs and update details map
+          insertResult.rows.forEach((row: any) => {
+            contactIds.push(row.id);
+            // Update the map with the complete contact (including ID)
+            contactDetailsMap.set(row.id, row);
+            // Also keep phone number mapping for potential lookups
+            existingPhoneMap.set(row.phone_number, row);
           });
-
-          // Add to existing map for subsequent batch checks
-          existingPhoneMap.set(contactData.phone_number, newContact.id);
-          return { success: true, contactId: newContact.id, skipped: false };
-
+          
+          logger.info(`Bulk inserted campaign contacts batch ${batchStart / BATCH_SIZE + 1}: ${insertResult.rows.length} contacts`);
         } catch (error) {
-          logger.error(`Failed to create contact ${contactData.phone_number}:`, error);
-          return { 
-            success: false, 
-            error: `Failed to create contact: ${contactData.name || contactData.phone_number} (${contactData.phone_number})` 
-          };
+          logger.error(`Error bulk inserting campaign contacts batch starting at ${batchStart}:`, error);
+          
+          // If bulk insert fails, mark all in batch as failed
+          batch.forEach(contact => {
+            createErrors.push(`Failed to create contact: ${contact.name} (${contact.phone_number})`);
+          });
         }
-      });
-
-      // Wait for batch to complete
-      const batchResults = await Promise.allSettled(batchPromises);
-      
-      // Aggregate results
-      batchResults.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value.success && result.value.contactId) {
-          contactIds.push(result.value.contactId);
-        } else if (result.status === 'fulfilled' && !result.value.success) {
-          createErrors.push(result.value.error!);
-        } else if (result.status === 'rejected') {
-          createErrors.push(`Batch processing error: ${result.reason?.message || 'Unknown error'}`);
-        }
-      });
+      }
     }
 
     if (contactIds.length === 0) {
@@ -303,7 +324,7 @@ router.post('/upload-csv', uploadExcel.single('file'), async (req: Request, res:
       });
     }
 
-    // Step 2: Create campaign with contact IDs
+    // Step 2: Create campaign with contact IDs and details
     const campaignData = {
       name: campaignName,
       description,
@@ -314,10 +335,11 @@ router.post('/upload-csv', uploadExcel.single('file'), async (req: Request, res:
       start_date,
       end_date,
       max_concurrent_calls: max_concurrent_calls ? parseInt(max_concurrent_calls) : undefined,
-      contact_ids: contactIds
+      contact_ids: contactIds,
+      contact_details_map: contactDetailsMap // Pass the contact details we already have
     };
 
-    const campaign = await CallCampaignService.createCampaign(userId, campaignData);
+    const campaign = await CallCampaignService.createCampaign(userId, campaignData as any);
     
     logger.info(`Campaign created from CSV: ${campaign.id} by user ${userId}, ${contactIds.length} contacts`);
     

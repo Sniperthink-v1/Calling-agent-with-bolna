@@ -10,7 +10,8 @@ import type {
   ContactStats,
   ContactUploadResult,
   ContactsListOptions,
-  ApiError 
+  ApiError,
+  ApiResponse 
 } from '../types';
 
 export interface UseContactsReturn {
@@ -250,26 +251,62 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
   // Upload contacts mutation
   const uploadContactsMutation = useMutation({
     mutationFn: async (file: File) => {
+      console.log('📤 Upload mutation starting...');
       const response = await apiService.uploadContacts(file);
-      return response.data || response as unknown as ContactUploadResult;
+      console.log('📤 Upload API response:', response);
+      // Return the full response, not just response.data
+      // The response structure is: {success: boolean, message: string, data: ContactUploadResult}
+      return response as unknown as ApiResponse<ContactUploadResult>;
     },
-    onSuccess: async (result) => {
+    onSuccess: async (response) => {
+      console.log('📤 Upload mutation onSuccess triggered:', response);
+      console.log('📤 Response structure:', {
+        hasSuccess: 'success' in response,
+        hasData: 'data' in response,
+        successValue: response.success,
+        dataValue: response.data,
+        fullResponse: JSON.stringify(response)
+      });
+      
+      // Extract the actual result from response.data
+      const result = response.data;
+      const successCount = result?.summary?.successful || 0;
+      console.log('📊 Success count from result.summary:', successCount);
+      
       // Refresh contacts and stats after successful upload
-      if (result.success && result.summary.successful > 0) {
-        // Invalidate and refetch contacts immediately
-        await Promise.all([
-          queryClient.invalidateQueries({ 
-            queryKey: queryKeys.contacts(user?.id),
-            refetchType: 'active' 
-          }),
-          queryClient.invalidateQueries({ 
-            queryKey: queryKeys.contactStats(user?.id),
-            refetchType: 'active' 
-          })
-        ]);
+      // Check response.success (API success) AND successCount (actual uploaded contacts)
+      if (response.success && successCount > 0) {
+        console.log('✅ Successful upload detected, invalidating and refetching...');
         
-        // Also invalidate cache
-        cacheUtils.invalidateContacts(user?.id);
+        try {
+          // Step 1: Invalidate ALL contact queries (this marks them as stale)
+          await queryClient.invalidateQueries({ 
+            queryKey: queryKeys.contacts(user?.id),
+            refetchType: 'all'
+          });
+          console.log('🔄 Invalidated all contact queries');
+          
+          // Step 2: Refetch ALL contact queries (this triggers new API calls)
+          const refetchResult = await queryClient.refetchQueries({
+            queryKey: queryKeys.contacts(user?.id),
+            type: 'all' // Refetch all matching queries, not just active ones
+          });
+          console.log('✨ Refetch completed, result:', refetchResult);
+          
+          // Step 3: Also invalidate stats
+          await queryClient.invalidateQueries({ 
+            queryKey: queryKeys.contactStats(user?.id),
+            refetchType: 'all' 
+          });
+          console.log('♻️ Invalidated contact stats');
+        } catch (error) {
+          console.error('❌ Error during refetch:', error);
+        }
+      } else {
+        console.warn('⚠️ Upload onSuccess but no successful contacts:', {
+          hasSuccess: result.success,
+          successCount
+        });
       }
     },
   });
@@ -305,7 +342,9 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
 
   const uploadContacts = async (file: File): Promise<ContactUploadResult | null> => {
     try {
-      return await uploadContactsMutation.mutateAsync(file);
+      const response = await uploadContactsMutation.mutateAsync(file);
+      // Extract the data from the ApiResponse wrapper
+      return response.data || null;
     } catch (error) {
       handleError(error, 'upload contacts');
       return null;
@@ -313,6 +352,7 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
   };
 
   const refreshContacts = async (_options?: ContactsListOptions): Promise<void> => {
+    console.log('🔄 refreshContacts called');
     await refetchContacts();
   };
 

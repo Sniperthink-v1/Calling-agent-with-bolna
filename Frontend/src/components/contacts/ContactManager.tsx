@@ -103,6 +103,8 @@ export const ContactManager: React.FC = () => {
             onContactSelect={handleContactSelect}
             onContactEdit={handleContactEdit}
             onContactCreate={handleContactCreate}
+            enableInfiniteScroll={true}
+            initialPageSize={20}
           />
         );
     }

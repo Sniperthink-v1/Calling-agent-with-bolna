@@ -348,8 +348,8 @@ export class ContactService {
         throw new Error('Maximum 10,000 contacts allowed per upload');
       }
 
-      // Process contacts in batches for efficiency
-      const BATCH_SIZE = 100; // Process 100 contacts at a time
+      // Process contacts efficiently with bulk insert
+      const BATCH_SIZE = 1000; // Bulk insert 1000 contacts at a time
       const results = {
         success: 0,
         failed: 0,
@@ -362,127 +362,117 @@ export class ContactService {
       const existingPhones = await this.getExistingPhoneNumbers(userId);
       const processedPhones = new Set<string>();
 
-      // Process in batches for better performance
-      for (let batchStart = 0; batchStart < contacts.length; batchStart += BATCH_SIZE) {
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, contacts.length);
-        const batch = contacts.slice(batchStart, batchEnd);
-        
-        // Process batch concurrently with Promise.allSettled for error isolation
-        const batchPromises = batch.map(async (contact, batchIndex) => {
-          const i = batchStart + batchIndex;
-          const rowNumber = i + 2; // Excel row number (accounting for header)
+      // Validate and prepare contacts for bulk insert
+      const validContacts: Array<{
+        data: any;
+        rowNumber: number;
+      }> = [];
 
+      contacts.forEach((contact, index) => {
+        const rowNumber = index + 2; // Excel row number (accounting for header)
+
+        try {
+          // Only phone_number is required - name is optional
+          if (!contact.phone_number || !contact.phone_number.trim()) {
+            results.failed++;
+            results.errors.push({
+              row: rowNumber,
+              error: 'Phone number is required',
+              data: contact
+            });
+            return;
+          }
+
+          // Normalize and validate phone number
+          let normalizedPhone: string;
           try {
-            // Only phone_number is required - name is optional
-            if (!contact.phone_number || !contact.phone_number.trim()) {
-              return {
-                success: false,
-                type: 'failed',
-                row: rowNumber,
-                error: 'Phone number is required',
-                data: contact
-              };
-            }
+            normalizedPhone = this.normalizePhoneNumber(contact.phone_number);
+          } catch (error) {
+            results.failed++;
+            results.errors.push({
+              row: rowNumber,
+              error: 'Invalid phone number format',
+              data: contact
+            });
+            return;
+          }
 
-            // Normalize and validate phone number
-            let normalizedPhone: string;
-            try {
-              normalizedPhone = this.normalizePhoneNumber(contact.phone_number);
-            } catch (error) {
-              return {
-                success: false,
-                type: 'failed',
-                row: rowNumber,
-                error: 'Invalid phone number format',
-                data: contact
-              };
-            }
+          // Check for duplicates in existing data
+          if (existingPhones.has(normalizedPhone)) {
+            results.duplicates++;
+            results.errors.push({
+              row: rowNumber,
+              error: 'Phone number already exists in your contacts',
+              data: contact
+            });
+            return;
+          }
 
-            // Check for duplicates in existing data
-            if (existingPhones.has(normalizedPhone)) {
-              return {
-                success: false,
-                type: 'duplicate',
-                row: rowNumber,
-                error: 'Phone number already exists in your contacts',
-                data: contact
-              };
-            }
+          // Check for duplicates within the upload file
+          if (processedPhones.has(normalizedPhone)) {
+            results.duplicates++;
+            results.errors.push({
+              row: rowNumber,
+              error: 'Duplicate phone number in upload file',
+              data: contact
+            });
+            return;
+          }
 
-            // Check for duplicates within the upload file
-            if (processedPhones.has(normalizedPhone)) {
-              return {
-                success: false,
-                type: 'duplicate',
-                row: rowNumber,
-                error: 'Duplicate phone number in upload file',
-                data: contact
-              };
-            }
+          // Auto-generate name if not provided
+          const contactName = contact.name?.trim() || `Anonymous ${normalizedPhone}`;
 
-            // Auto-generate name if not provided
-            const contactName = contact.name?.trim() || `Anonymous ${normalizedPhone}`;
-
-            // Create contact
-            await ContactModel.createContact({
+          // Add to valid contacts for bulk insert
+          validContacts.push({
+            data: {
               user_id: userId,
               name: contactName,
               phone_number: normalizedPhone,
               email: contact.email?.trim() || undefined,
               company: contact.company?.trim() || undefined,
-              notes: contact.notes?.trim() || undefined
-            });
+              notes: contact.notes?.trim() || undefined,
+              is_auto_created: false
+            },
+            rowNumber
+          });
 
-            processedPhones.add(normalizedPhone);
-            return {
-              success: true,
-              type: 'success'
-            };
+          processedPhones.add(normalizedPhone);
 
-          } catch (error) {
-            logger.error(`Error processing contact at row ${rowNumber}:`, error);
-            return {
-              success: false,
-              type: 'failed',
-              row: rowNumber,
-              error: error instanceof Error ? error.message : 'Unknown error',
-              data: contact
-            };
-          }
-        });
+        } catch (error) {
+          logger.error(`Error validating contact at row ${rowNumber}:`, error);
+          results.failed++;
+          results.errors.push({
+            row: rowNumber,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            data: contact
+          });
+        }
+      });
 
-        // Wait for batch to complete
-        const batchResults = await Promise.allSettled(batchPromises);
+      // Bulk insert valid contacts in batches
+      for (let batchStart = 0; batchStart < validContacts.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, validContacts.length);
+        const batch = validContacts.slice(batchStart, batchEnd);
         
-        // Aggregate results
-        batchResults.forEach((result) => {
-          if (result.status === 'fulfilled') {
-            const value = result.value;
-            if (value.success) {
-              results.success++;
-            } else if (value.type === 'duplicate') {
-              results.duplicates++;
-              results.errors.push({
-                row: value.row!,
-                error: value.error!,
-                data: value.data
-              });
-            } else {
-              results.failed++;
-              results.errors.push({
-                row: value.row!,
-                error: value.error!,
-                data: value.data
-              });
-            }
-          } else {
+        try {
+          const contactsData = batch.map(c => c.data);
+          const insertedCount = await ContactModel.bulkCreateContacts(contactsData);
+          results.success += insertedCount;
+          
+          logger.info(`Bulk inserted batch ${batchStart / BATCH_SIZE + 1}: ${insertedCount} contacts`);
+        } catch (error) {
+          logger.error(`Error bulk inserting batch starting at ${batchStart}:`, error);
+          
+          // If bulk insert fails, mark all in batch as failed
+          batch.forEach(contact => {
             results.failed++;
             results.errors.push({
-              row: 0,
-              error: result.reason?.message || 'Batch processing failed'
+              row: contact.rowNumber,
+              error: 'Bulk insert failed',
+              data: contact.data
             });
-          }
-        });
+          });
+        }
       }
 
       logger.info(`Contact upload completed for user ${userId}:`, results);
