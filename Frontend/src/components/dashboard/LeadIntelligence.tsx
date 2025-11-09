@@ -500,7 +500,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
       if (isReschedule && currentMeetingContact.meetingId) {
         // Reschedule existing meeting
         const response = await fetch(
-          `http://localhost:3000/api/integrations/calendar/meetings/${currentMeetingContact.meetingId}/reschedule`,
+          `${import.meta.env.VITE_API_BASE_URL}/api/integrations/calendar/meetings/${currentMeetingContact.meetingId}/reschedule`,
           {
             method: "PUT",
             headers: {
@@ -583,7 +583,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
         
         console.log('📤 Full request body being sent to backend:', requestBody);
         
-        const response = await fetch("http://localhost:3000/api/integrations/calendar/meetings", {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/integrations/calendar/meetings`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
