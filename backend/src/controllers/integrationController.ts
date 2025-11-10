@@ -369,6 +369,55 @@ export class IntegrationController {
         });
       });
 
+      // Send meeting booked notification to dashboard user asynchronously
+      const { notificationService } = await import('../services/notificationService');
+      const { pool } = await import('../config/database');
+      
+      // Fetch user email for notification
+      const userResult = await pool.query(
+        'SELECT email, name FROM users WHERE id = $1',
+        [userId]
+      );
+      
+      if (userResult.rows.length > 0) {
+        const user = userResult.rows[0];
+        
+        notificationService.sendNotification({
+          userId,
+          email: user.email,
+          notificationType: 'meeting_booked',
+          notificationData: {
+            userName: user.name || 'User',
+            meetingDetails: {
+              leadName: leadName || meeting.attendee_name || undefined,
+              leadEmail: meeting.attendee_email,
+              company: companyName || undefined,
+              phone: phoneNumber || undefined,
+              meetingTime: new Date(meeting.meeting_start_time),
+              meetingDuration: meeting.meeting_duration_minutes,
+              meetingTitle: meeting.meeting_title,
+              googleCalendarLink: meeting.google_event_id 
+                ? `https://calendar.google.com/calendar/event?eid=${meeting.google_event_id}`
+                : undefined
+            },
+            callContext: callDetails ? {
+              transcript: callDetails.transcript || undefined,
+              recordingUrl: callDetails.recording_url || undefined,
+              leadStatusTag: callDetails.tags || undefined,
+              aiReasoning: callDetails.reasoning || undefined,
+              smartNotification: callDetails.smart_notification || undefined
+            } : undefined
+          },
+          idempotencyKey: `meeting-booked-${meeting.id}` // Prevent duplicate notifications
+        }).catch(notifError => {
+          logger.error('Background meeting notification failed', {
+            meetingId: meeting.id,
+            userId,
+            error: notifError instanceof Error ? notifError.message : 'Unknown error'
+          });
+        });
+      }
+
       res.status(201).json({
         success: true,
         meeting,

@@ -993,6 +993,55 @@ class WebhookService {
                     });
                   });
 
+                  // Send meeting booked notification to dashboard user asynchronously
+                  const { notificationService } = await import('./notificationService');
+                  
+                  // Fetch user email for notification
+                  const userResult = await database.query(
+                    'SELECT email, name FROM users WHERE id = $1',
+                    [updatedCall.user_id]
+                  );
+                  
+                  if (userResult.rows.length > 0) {
+                    const user = userResult.rows[0];
+                    
+                    notificationService.sendNotification({
+                      userId: updatedCall.user_id,
+                      email: user.email,
+                      notificationType: 'meeting_booked',
+                      notificationData: {
+                        userName: user.name || 'User',
+                        meetingDetails: {
+                          leadName: individualData.extraction?.name || undefined,
+                          leadEmail: meeting.attendee_email,
+                          company: individualData.extraction?.company_name || undefined,
+                          phone: updatedCall.phone_number,
+                          meetingTime: new Date(meeting.meeting_start_time),
+                          meetingDuration: meeting.meeting_duration_minutes,
+                          meetingTitle: meeting.meeting_title,
+                          googleCalendarLink: meeting.google_event_id 
+                            ? `https://calendar.google.com/calendar/event?eid=${meeting.google_event_id}`
+                            : undefined
+                        },
+                        callContext: {
+                          transcript: transcript.content,
+                          recordingUrl: updatedCall.recording_url,
+                          leadStatusTag: individualData.lead_status_tag || undefined,
+                          aiReasoning: individualData.reasoning,
+                          smartNotification: individualData.extraction?.smartnotification || undefined
+                        }
+                      },
+                      idempotencyKey: `meeting-booked-${meeting.id}` // Prevent duplicate notifications
+                    }).catch(notifError => {
+                      logger.error('Background meeting notification failed', {
+                        execution_id: executionId,
+                        meeting_id: meeting.id,
+                        user_id: updatedCall.user_id,
+                        error: notifError instanceof Error ? notifError.message : 'Unknown error'
+                      });
+                    });
+                  }
+
                   logger.info('✅ Meeting scheduled, email sending in background', {
                     execution_id: executionId,
                     meeting_id: meeting.id

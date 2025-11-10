@@ -508,6 +508,210 @@ Campaign Summary: ${campaignName}\n\nContacts: ${stats.totalContacts}\nCompleted
   }
 
   /**
+   * Send meeting booked notification to dashboard user
+   * Full context including transcript, recording, AI analysis
+   */
+  async sendMeetingBookedNotification(params: {
+    userEmail: string;
+    userName: string;
+    meetingDetails: {
+      leadName?: string;
+      leadEmail: string;
+      company?: string;
+      phone?: string;
+      meetingTime: Date;
+      meetingDuration: number; // minutes
+      meetingTitle: string;
+      googleCalendarLink?: string;
+    };
+    callContext?: {
+      transcript?: string;
+      recordingUrl?: string;
+      leadStatusTag?: string;
+      aiReasoning?: string;
+      smartNotification?: string;
+    };
+  }): Promise<boolean> {
+    const { userEmail, userName, meetingDetails, callContext } = params;
+
+    const getFrontendBaseUrl = (): string => {
+      if (!process.env.FRONTEND_URL) {
+        throw new Error('FRONTEND_URL is not configured');
+      }
+      const base = process.env.FRONTEND_URL.split(',')[0].trim();
+      return base.endsWith('/') ? base.slice(0, -1) : base;
+    };
+
+    const appBaseUrl = getFrontendBaseUrl();
+    const meetingTimeFormatted = meetingDetails.meetingTime.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
+    // Truncate transcript for email if too long (keep first 2000 chars)
+    const transcriptPreview = callContext?.transcript 
+      ? (callContext.transcript.length > 2000 
+          ? callContext.transcript.substring(0, 2000) + '...\n\n[Transcript truncated. View full details in dashboard]'
+          : callContext.transcript)
+      : 'No transcript available';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Meeting Booked by AI Agent</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 700px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { padding: 30px; background: #f9f9f9; }
+          .meeting-box { background: white; border-left: 4px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .lead-info { background: #ecfdf5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .call-context { background: #f0f4ff; border: 1px solid #667eea; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .transcript-box { background: white; padding: 15px; border-radius: 5px; margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; }
+          .button { display: inline-block; padding: 12px 30px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
+          .button-secondary { background: #10b981; }
+          .tag { display: inline-block; padding: 6px 12px; background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 14px; font-weight: bold; margin: 5px 0; }
+          .tag-hot { background: #fee2e2; color: #991b1b; }
+          .tag-interested { background: #dbeafe; color: #1e40af; }
+          .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; border-radius: 0 0 10px 10px; background: #f9f9f9; }
+          .metric { display: inline-block; margin: 10px 15px; }
+          .metric-label { font-size: 12px; color: #666; display: block; }
+          .metric-value { font-size: 20px; font-weight: bold; color: #667eea; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🎯 New Meeting Booked!</h1>
+            <p>Your AI Agent successfully scheduled a demo</p>
+          </div>
+          
+          <div class="content">
+            <p>Hi ${userName},</p>
+            <p>Great news! Your AI calling agent just booked a new meeting. Here's everything you need to know:</p>
+            
+            <!-- Meeting Details -->
+            <div class="meeting-box">
+              <h2>📅 ${meetingDetails.meetingTitle}</h2>
+              <p><strong>When:</strong> ${meetingTimeFormatted}</p>
+              <p><strong>Duration:</strong> ${meetingDetails.meetingDuration} minutes</p>
+              ${meetingDetails.googleCalendarLink ? `
+              <a href="${meetingDetails.googleCalendarLink}" class="button">📅 View in Google Calendar</a>
+              ` : ''}
+              <a href="${appBaseUrl}/meetings" class="button button-secondary">📊 View in Dashboard</a>
+            </div>
+            
+            <!-- Lead Information -->
+            <div class="lead-info">
+              <h3>👤 Lead Information</h3>
+              <p><strong>Name:</strong> ${meetingDetails.leadName || 'Not provided'}</p>
+              <p><strong>Email:</strong> ${meetingDetails.leadEmail}</p>
+              ${meetingDetails.company ? `<p><strong>Company:</strong> ${meetingDetails.company}</p>` : ''}
+              ${meetingDetails.phone ? `<p><strong>Phone:</strong> ${meetingDetails.phone}</p>` : ''}
+              ${callContext?.leadStatusTag ? `
+              <p><strong>Status:</strong> 
+                <span class="tag ${callContext.leadStatusTag.toLowerCase().includes('hot') ? 'tag-hot' : (callContext.leadStatusTag.toLowerCase().includes('interested') ? 'tag-interested' : '')}">${callContext.leadStatusTag}</span>
+              </p>
+              ` : ''}
+            </div>
+            
+            <!-- AI Analysis -->
+            ${callContext?.aiReasoning || callContext?.smartNotification ? `
+            <div class="call-context">
+              <h3>🤖 AI Analysis</h3>
+              ${callContext.aiReasoning ? `
+              <p><strong>AI Reasoning:</strong></p>
+              <p>${callContext.aiReasoning}</p>
+              ` : ''}
+              ${callContext.smartNotification ? `
+              <p><strong>Smart Notification:</strong></p>
+              <p>${callContext.smartNotification}</p>
+              ` : ''}
+            </div>
+            ` : ''}
+            
+            <!-- Call Recording & Transcript -->
+            ${callContext ? `
+            <div class="call-context">
+              <h3>📞 Call Details</h3>
+              ${callContext.recordingUrl ? `
+              <p><strong>Call Recording:</strong></p>
+              <p><a href="${callContext.recordingUrl}" class="button">🎙️ Listen to Recording</a></p>
+              ` : ''}
+              
+              ${callContext.transcript ? `
+              <p><strong>Call Transcript:</strong></p>
+              <div class="transcript-box">
+                <pre style="white-space: pre-wrap; font-family: Arial, sans-serif; margin: 0;">${transcriptPreview}</pre>
+              </div>
+              ` : ''}
+            </div>
+            ` : ''}
+            
+            <p style="margin-top: 30px;">
+              <strong>Next Steps:</strong><br>
+              • Review the call recording and transcript<br>
+              • Prepare for the meeting based on the lead's interests<br>
+              • Check your Google Calendar for the meeting invite<br>
+              • View full details in your dashboard
+            </p>
+          </div>
+          
+          <div class="footer">
+            <p>© 2024 AI Calling Agent Platform. All rights reserved.</p>
+            <p>This meeting was automatically scheduled by your AI agent</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+New Meeting Booked by AI Agent!
+
+Hi ${userName},
+
+Your AI agent successfully booked a new meeting:
+
+MEETING DETAILS:
+${meetingDetails.meetingTitle}
+When: ${meetingTimeFormatted}
+Duration: ${meetingDetails.meetingDuration} minutes
+${meetingDetails.googleCalendarLink ? `Google Calendar: ${meetingDetails.googleCalendarLink}` : ''}
+
+LEAD INFORMATION:
+Name: ${meetingDetails.leadName || 'Not provided'}
+Email: ${meetingDetails.leadEmail}
+${meetingDetails.company ? `Company: ${meetingDetails.company}` : ''}
+${meetingDetails.phone ? `Phone: ${meetingDetails.phone}` : ''}
+${callContext?.leadStatusTag ? `Status: ${callContext.leadStatusTag}` : ''}
+
+${callContext?.aiReasoning ? `AI REASONING:\n${callContext.aiReasoning}\n\n` : ''}
+
+${callContext?.recordingUrl ? `CALL RECORDING:\n${callContext.recordingUrl}\n\n` : ''}
+
+${callContext?.transcript ? `TRANSCRIPT:\n${transcriptPreview}\n\n` : ''}
+
+View full details: ${appBaseUrl}/meetings
+    `;
+
+    return await this.sendEmail({
+      to: userEmail,
+      subject: `🎯 New Meeting Booked: ${meetingDetails.leadName || meetingDetails.leadEmail}`,
+      html,
+      text,
+    });
+  }
+
+  /**
    * Test email configuration
    */
   async testEmailConfiguration(): Promise<boolean> {

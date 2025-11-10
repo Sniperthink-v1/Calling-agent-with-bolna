@@ -6,6 +6,7 @@ export interface NotificationPreference {
   low_credit_alerts: boolean;
   credits_added_emails: boolean;
   campaign_summary_emails: boolean;
+  meeting_booked_notifications: boolean;
   email_verification_reminders: boolean;
   marketing_emails: boolean;
   created_at: Date;
@@ -16,6 +17,7 @@ export interface UpdatePreferencesParams {
   low_credit_alerts?: boolean;
   credits_added_emails?: boolean;
   campaign_summary_emails?: boolean;
+  meeting_booked_notifications?: boolean;
   email_verification_reminders?: boolean;
   marketing_emails?: boolean;
 }
@@ -98,6 +100,7 @@ export class NotificationPreferenceModel {
       | 'low_credit_alerts'
       | 'credits_added_emails'
       | 'campaign_summary_emails'
+      | 'meeting_booked_notifications'
       | 'email_verification_reminders'
       | 'marketing_emails'
   ): Promise<boolean> {

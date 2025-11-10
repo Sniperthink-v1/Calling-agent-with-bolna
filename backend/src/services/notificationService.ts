@@ -130,13 +130,14 @@ export class NotificationService {
    */
   private getPreferenceKey(
     notificationType: NotificationType
-  ): 'low_credit_alerts' | 'credits_added_emails' | 'campaign_summary_emails' | 'email_verification_reminders' | 'marketing_emails' | null {
+  ): 'low_credit_alerts' | 'credits_added_emails' | 'campaign_summary_emails' | 'meeting_booked_notifications' | 'email_verification_reminders' | 'marketing_emails' | null {
     const mapping: Record<NotificationType, any> = {
       credit_low_15: 'low_credit_alerts',
       credit_low_5: 'low_credit_alerts',
       credit_exhausted_0: 'low_credit_alerts',
       credits_added: 'credits_added_emails',
       campaign_summary: 'campaign_summary_emails',
+      meeting_booked: 'meeting_booked_notifications',
       email_verification_reminder: 'email_verification_reminders',
       marketing: 'marketing_emails',
       email_verification: null // Always send (no preference)
@@ -194,6 +195,14 @@ export class NotificationService {
             stats: data.stats,
             topLeads: data.hotLeads,
             hotLeadsCsv: data.csvBuffer
+          });
+
+        case 'meeting_booked':
+          return await emailService.sendMeetingBookedNotification({
+            userEmail: email,
+            userName: data.userName,
+            meetingDetails: data.meetingDetails,
+            callContext: data.callContext
           });
 
         case 'marketing':

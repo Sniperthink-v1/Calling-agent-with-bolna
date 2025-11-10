@@ -23,6 +23,7 @@ export type NotificationType =
   | 'credit_exhausted_0'
   | 'credits_added'
   | 'campaign_summary'
+  | 'meeting_booked'
   | 'marketing';
 
 export type NotificationStatus = 'sent' | 'failed' | 'skipped';
