@@ -2,11 +2,11 @@
  * Meeting Email Service
  * 
  * Sends email notifications for calendar meetings.
- * Uses existing ZeptoMail SMTP configuration.
+ * Uses ZeptoMail API for email delivery.
  * Includes full lead context in emails.
  */
 
-import nodemailer from 'nodemailer';
+import zeptomailService from './zeptomailService';
 import { CalendarMeetingInterface } from '../types/googleCalendar';
 import CalendarMeeting from '../models/CalendarMeeting';
 import { logger } from '../utils/logger';
@@ -29,51 +29,6 @@ interface MeetingEmailParams {
 }
 
 class MeetingEmailService {
-  private transporter: nodemailer.Transporter | null = null;
-
-  constructor() {
-    this.initializeTransporter();
-  }
-
-  /**
-   * Initialize SMTP transporter using existing ZeptoMail config
-   */
-  private initializeTransporter(): void {
-    try {
-      const host = process.env.ZEPTOMAIL_HOST;
-      const port = parseInt(process.env.ZEPTOMAIL_PORT || '587', 10);
-      const user = process.env.ZEPTOMAIL_USER;
-      const pass = process.env.ZEPTOMAIL_PASSWORD;
-      const fromEmail = process.env.ZEPTOMAIL_FROM_EMAIL;
-
-      if (!host || !user || !pass || !fromEmail) {
-        logger.warn('⚠️ ZeptoMail configuration incomplete, email notifications will be disabled', {
-          hasHost: !!host,
-          hasUser: !!user,
-          hasPass: !!pass,
-          hasFromEmail: !!fromEmail
-        });
-        return;
-      }
-
-      this.transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: {
-          user,
-          pass
-        }
-      });
-
-      logger.info('✅ Meeting email service initialized with ZeptoMail');
-    } catch (error) {
-      logger.error('Failed to initialize meeting email service', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  }
-
   /**
    * Send meeting invite email
    */
@@ -81,8 +36,8 @@ class MeetingEmailService {
     meeting: CalendarMeetingInterface
   ): Promise<void> {
     try {
-      if (!this.transporter) {
-        logger.warn('Email transporter not initialized, skipping invite email', {
+      if (!zeptomailService.isReady()) {
+        logger.warn('⚠️ Email service not initialized, skipping invite email', {
           meetingId: meeting.id
         });
         return;
@@ -115,12 +70,11 @@ class MeetingEmailService {
         googleCalendarLink: (meeting.google_api_response as any)?.htmlLink
       });
 
-      await this.transporter.sendMail({
-        from: process.env.ZEPTOMAIL_FROM_EMAIL!,
-        to: meeting.attendee_email,
+      await zeptomailService.sendEmail({
+        to: { address: meeting.attendee_email, name: meeting.attendee_name || undefined },
         subject: `📅 Demo Meeting Scheduled: ${meeting.meeting_title}`,
-        text: emailText,
-        html: emailHtml
+        textbody: emailText,
+        htmlbody: emailHtml
       });
 
       // Mark email as sent in database
@@ -148,8 +102,8 @@ class MeetingEmailService {
     newMeeting: CalendarMeetingInterface
   ): Promise<void> {
     try {
-      if (!this.transporter) {
-        logger.warn('Email transporter not initialized, skipping reschedule email');
+      if (!zeptomailService.isReady()) {
+        logger.warn('⚠️ Email service not initialized, skipping reschedule email');
         return;
       }
 
@@ -162,12 +116,11 @@ class MeetingEmailService {
       const emailHtml = this.buildRescheduleEmailHtml(oldMeeting, newMeeting);
       const emailText = this.buildRescheduleEmailText(oldMeeting, newMeeting);
 
-      await this.transporter.sendMail({
-        from: process.env.ZEPTOMAIL_FROM_EMAIL!,
-        to: newMeeting.attendee_email,
+      await zeptomailService.sendEmail({
+        to: { address: newMeeting.attendee_email, name: newMeeting.attendee_name || undefined },
         subject: `🔄 Demo Meeting Rescheduled: ${newMeeting.meeting_title}`,
-        text: emailText,
-        html: emailHtml
+        textbody: emailText,
+        htmlbody: emailHtml
       });
 
       // Mark email as sent
@@ -192,8 +145,8 @@ class MeetingEmailService {
     reason?: string
   ): Promise<void> {
     try {
-      if (!this.transporter) {
-        logger.warn('Email transporter not initialized, skipping cancellation email');
+      if (!zeptomailService.isReady()) {
+        logger.warn('⚠️ Email service not initialized, skipping cancellation email');
         return;
       }
 
@@ -206,12 +159,11 @@ class MeetingEmailService {
       const emailHtml = this.buildCancellationEmailHtml(meeting, reason);
       const emailText = this.buildCancellationEmailText(meeting, reason);
 
-      await this.transporter.sendMail({
-        from: process.env.ZEPTOMAIL_FROM_EMAIL!,
-        to: meeting.attendee_email,
+      await zeptomailService.sendEmail({
+        to: { address: meeting.attendee_email, name: meeting.attendee_name || undefined },
         subject: `❌ Demo Meeting Cancelled: ${meeting.meeting_title}`,
-        text: emailText,
-        html: emailHtml
+        textbody: emailText,
+        htmlbody: emailHtml
       });
 
       logger.info('✅ Meeting cancellation email sent successfully', {

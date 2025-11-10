@@ -983,11 +983,17 @@ class WebhookService {
                     attendee_email: meeting.attendee_email
                   });
 
-                  // Send meeting invite email
+                  // Send meeting invite email asynchronously (don't block webhook response)
                   const { meetingEmailService } = await import('./meetingEmailService');
-                  await meetingEmailService.sendMeetingInviteEmail(meeting);
+                  meetingEmailService.sendMeetingInviteEmail(meeting).catch(emailError => {
+                    logger.error('Background meeting email failed', {
+                      execution_id: executionId,
+                      meeting_id: meeting.id,
+                      error: emailError instanceof Error ? emailError.message : 'Unknown error'
+                    });
+                  });
 
-                  logger.info('✅ Meeting invite email sent', {
+                  logger.info('✅ Meeting scheduled, email sending in background', {
                     execution_id: executionId,
                     meeting_id: meeting.id
                   });

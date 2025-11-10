@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import zeptomailService from './zeptomailService';
 
 interface EmailOptions {
   to: string;
@@ -25,76 +25,25 @@ interface PasswordResetEmailData {
 }
 
 class EmailService {
-  private transporter: nodemailer.Transporter | null = null;
-  private isConfigured = false;
-
-  constructor() {
-    this.initializeTransporter();
-  }
-
   /**
-   * Initialize email transporter with Gmail SMTP
-   */
-  private initializeTransporter(): void {
-    const zeptomailHost = process.env.ZEPTOMAIL_HOST || 'smtp.zeptomail.in';
-    const zeptomailPort = parseInt(process.env.ZEPTOMAIL_PORT || '587');
-    const zeptomailUser = process.env.ZEPTOMAIL_USER || 'emailapikey';
-    const zeptomailPassword = process.env.ZEPTOMAIL_PASSWORD;
-    const emailFrom = process.env.EMAIL_FROM || 'noreply@sniperthink.com';
-
-    if (!zeptomailPassword) {
-      console.warn('ZeptoMail credentials not configured. Email functionality will be disabled.');
-      return;
-    }
-
-    try {
-      this.transporter = nodemailer.createTransport({
-        host: zeptomailHost,
-        port: zeptomailPort,
-        secure: zeptomailPort === 465, // true for 465 (SSL), false for 587 (TLS)
-        auth: {
-          user: zeptomailUser,
-          pass: zeptomailPassword,
-        },
-        tls: {
-          rejectUnauthorized: false // Accept self-signed certificates
-        }
-      });
-
-      this.isConfigured = true;
-      console.log('Email service initialized successfully with ZeptoMail');
-    } catch (error) {
-      console.error('Failed to initialize email service:', error);
-      this.isConfigured = false;
-    }
-  }
-
-  /**
-   * Send email
+   * Send email using ZeptoMail API
    */
   private async sendEmail(options: EmailOptions): Promise<boolean> {
-    if (!this.isConfigured || !this.transporter) {
-      console.error('Email service not configured');
+    if (!zeptomailService.isReady()) {
+      console.error('❌ Email service not configured');
       return false;
     }
 
     try {
-      const emailFrom = process.env.EMAIL_FROM || 'noreply@sniperthink.com';
-      
-      const mailOptions = {
-        from: `"AI Calling Agent Platform" <${emailFrom}>`,
-        to: options.to,
+      return await zeptomailService.sendEmail({
+        to: { address: options.to },
         subject: options.subject,
-        html: options.html,
-        text: options.text,
+        htmlbody: options.html,
+        textbody: options.text,
         attachments: options.attachments
-      };
-
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log('Email sent successfully:', result.messageId);
-      return true;
+      });
     } catch (error) {
-      console.error('Failed to send email:', error);
+      console.error('❌ Failed to send email:', error);
       return false;
     }
   }
@@ -562,25 +511,14 @@ Campaign Summary: ${campaignName}\n\nContacts: ${stats.totalContacts}\nCompleted
    * Test email configuration
    */
   async testEmailConfiguration(): Promise<boolean> {
-    if (!this.isConfigured || !this.transporter) {
-      return false;
-    }
-
-    try {
-      await this.transporter.verify();
-      console.log('Email configuration test successful');
-      return true;
-    } catch (error) {
-      console.error('Email configuration test failed:', error);
-      return false;
-    }
+    return zeptomailService.isReady();
   }
 
   /**
    * Check if email service is configured
    */
   isEmailConfigured(): boolean {
-    return this.isConfigured;
+    return zeptomailService.isReady();
   }
 }
 

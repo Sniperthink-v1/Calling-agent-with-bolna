@@ -360,8 +360,14 @@ export class IntegrationController {
         meetingDescription
       });
 
-      // Send email notification
-      await meetingEmailService.sendMeetingInviteEmail(meeting);
+      // Send email notification asynchronously (don't wait for it)
+      // This allows the API to respond immediately while email sends in background
+      meetingEmailService.sendMeetingInviteEmail(meeting).catch(error => {
+        logger.error('Background email send failed', {
+          meetingId: meeting.id,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      });
 
       res.status(201).json({
         success: true,
