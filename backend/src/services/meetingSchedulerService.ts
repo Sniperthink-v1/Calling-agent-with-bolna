@@ -315,6 +315,55 @@ class MeetingSchedulerService {
               message: 'demo_book_datetime was NOT updated - meeting will NOT show in Lead Intelligence'
             });
           }
+        } else if (phoneNumber) {
+          // Fallback: Try phone-based update if leadAnalyticsId lookup failed
+          logger.info('🔄 Attempting phone-based demo_book_datetime update', {
+            phoneNumber,
+            userId,
+            startTime: startTime.toISOString()
+          });
+
+          // First, find the most recent complete lead_analytics for this phone
+          const phoneLookupForUpdate = await database.query(
+            `SELECT la.id
+             FROM lead_analytics la
+             JOIN calls c ON la.call_id = c.id
+             WHERE c.phone_number = $1 
+               AND la.analysis_type = 'complete'
+               AND c.user_id = $2
+             ORDER BY c.created_at DESC
+             LIMIT 1`,
+            [phoneNumber, userId]
+          );
+
+          if (phoneLookupForUpdate.rows.length > 0) {
+            const foundLeadAnalyticsId = phoneLookupForUpdate.rows[0].id;
+            
+            // Now update that specific record
+            const phoneUpdateResult = await database.query(
+              `UPDATE lead_analytics 
+               SET demo_book_datetime = $1
+               WHERE id = $2
+               RETURNING id, analysis_type, demo_book_datetime`,
+              [startTime, foundLeadAnalyticsId]
+            );
+
+            if (phoneUpdateResult.rows.length > 0) {
+              logger.info('✅ Successfully updated demo_book_datetime via phone lookup', {
+                leadAnalyticsId: phoneUpdateResult.rows[0].id,
+                phoneNumber,
+                startTime: startTime.toISOString(),
+                message: 'Meeting should now appear in Lead Intelligence UI'
+              });
+            }
+          } else {
+            logger.warn('⚠️ No complete lead_analytics found for phone number', {
+              phoneNumber,
+              userId,
+              message: 'Meeting created in calendar but will not show in Lead Intelligence',
+              suggestion: 'User needs to have a completed call with AI analysis for this phone number'
+            });
+          }
         } else {
           logger.warn('⚠️ No leadAnalyticsId or phoneNumber provided, skipping demo_book_datetime update', {
             message: 'Meeting created in calendar but will not show in Lead Intelligence',

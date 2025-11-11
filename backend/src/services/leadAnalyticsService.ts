@@ -84,8 +84,15 @@ class LeadAnalyticsService {
       total_score: analysis.total_score,
       lead_status_tag: analysis.lead_status_tag,
       
-      // Reasoning (already in correct format)
-      reasoning: analysis.reasoning,
+      // Reasoning (provide default empty object if not present)
+      reasoning: analysis.reasoning || {
+        intent: '',
+        urgency: '',
+        budget: '',
+        fit: '',
+        engagement: '',
+        cta_behavior: ''
+      },
       
       // CTA Interactions
       cta_interactions: {
@@ -147,8 +154,15 @@ class LeadAnalyticsService {
       total_score: analysis.total_score,
       lead_status_tag: analysis.lead_status_tag,
       
-      // Reasoning (already in correct format)
-      reasoning: analysis.reasoning,
+      // Reasoning (provide default empty object if not present)
+      reasoning: analysis.reasoning || {
+        intent: '',
+        urgency: '',
+        budget: '',
+        fit: '',
+        engagement: '',
+        cta_behavior: ''
+      },
       
       // CTA Interactions (aggregated)
       cta_interactions: {
