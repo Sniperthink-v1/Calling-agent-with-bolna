@@ -275,12 +275,26 @@ class OpenAIExtractionService {
     // Use user's custom prompt or system default
     const promptId = openaiPromptService.getEffectivePromptId(userPromptId, 'individual');
 
+    // Get current date and time for context
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short'
+    });
+
     logger.info('Extracting individual call data', {
       executionId,
       phoneNumber,
       transcriptLength: transcript.length,
       usingUserPrompt: !!userPromptId,
       promptId: promptId.substring(0, 20) + '...',
+      currentDateTime,
     });
 
     const request: OpenAIResponseAPIRequest = {
@@ -290,7 +304,13 @@ class OpenAIExtractionService {
       input: [
         {
           role: 'user',
-          content: `Analyze the following call transcript and return the results in JSON format:\n\n${transcript}`,
+          content: `Current Date and Time: ${currentDateTime}
+
+Use this date and time information to calculate relative meeting times when analyzing the transcript. For example, if someone says "kal" (tomorrow) or "parso" (day after tomorrow), calculate the actual date based on the current date provided above.
+
+Analyze the following call transcript and return the results in JSON format:
+
+${transcript}`,
         },
       ],
     };
@@ -321,12 +341,26 @@ class OpenAIExtractionService {
     // Use user's custom prompt or system default
     const promptId = openaiPromptService.getEffectivePromptId(userPromptId, 'complete');
 
+    // Get current date and time for context
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short'
+    });
+
     logger.info('Extracting complete analysis', {
       userId,
       phoneNumber,
       previousCallsCount: previousAnalyses.length,
       usingUserPrompt: !!userPromptId,
       promptId: promptId.substring(0, 20) + '...',
+      currentDateTime,
     });
 
     // Build context from previous analyses with call numbers
@@ -340,6 +374,10 @@ Engagement: ${analysis.reasoning?.engagement}
 `).join('\n');
 
     const contextMessage = `
+Current Date and Time: ${currentDateTime}
+
+Use this date and time information to calculate relative meeting times when analyzing the transcript. For example, if someone says "kal" (tomorrow) or "parso" (day after tomorrow), calculate the actual date based on the current date provided above.
+
 Analyze the complete call history and return the results in JSON format.
 
 ${previousAnalyses.length > 0 ? `
