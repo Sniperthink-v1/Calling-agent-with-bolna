@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, LogOut } from "lucide-react";
 import { apiService } from "@/services/apiService";
 import { useAuth } from "@/contexts/AuthContext";
 
 const EmailVerificationPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
+  const { refreshUser, logout } = useAuth();
   const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -66,6 +66,17 @@ const EmailVerificationPage = () => {
           <p className="text-gray-600">
             Please wait while we verify your email address...
           </p>
+          <Button
+            onClick={() => {
+              logout();
+              navigate('/');
+            }}
+            variant="outline"
+            className="w-full"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
         </div>
       </div>
     );
@@ -89,12 +100,25 @@ const EmailVerificationPage = () => {
               Redirecting you to the dashboard...
             </p>
           </div>
-          <Button
-            onClick={() => navigate('/dashboard')}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white"
-          >
-            Go to Dashboard
-          </Button>
+          <div className="space-y-3">
+            <Button
+              onClick={() => navigate('/dashboard')}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              Go to Dashboard
+            </Button>
+            <Button
+              onClick={() => {
+                logout();
+                navigate('/');
+              }}
+              variant="outline"
+              className="w-full"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -119,10 +143,14 @@ const EmailVerificationPage = () => {
         </div>
         <div className="space-y-3">
           <Button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              logout();
+              navigate('/');
+            }}
             className="w-full bg-teal-600 hover:bg-teal-700 text-white"
           >
-            Back to Login
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout & Back to Login
           </Button>
           <Button
             onClick={() => window.location.reload()}

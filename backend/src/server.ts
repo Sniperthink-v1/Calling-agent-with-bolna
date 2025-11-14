@@ -298,6 +298,11 @@ async function startServer() {
       ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(url => url.trim()) : []),
       ...((process.env.NODE_ENV !== 'production' && process.env.DEV_ALLOW_LOCALHOST === 'true') ? ['http://localhost:8080','http://localhost:8081','http://localhost:8082','http://localhost:5173'] : [])
     ];
+    
+    // Start session cleanup service
+    const { authService } = await import('./services/authService');
+    authService.startSessionCleanup();
+    console.log('🔄 Session cleanup service started');
     console.log(`🔒 CORS Origins: ${[...new Set(printedCorsOrigins)].join(', ')}`);
 
     // Start scheduled tasks with per-task flags; if ENABLE_SCHEDULED_TASKS is explicitly false, skip
@@ -389,6 +394,11 @@ const gracefulShutdown = async (signal: string) => {
     // Stop scheduled tasks
     scheduledTaskService.stopScheduledTasks();
     logger.info('Scheduled tasks stopped');
+
+    // Stop session cleanup service
+    const { authService } = await import('./services/authService');
+    authService.stopSessionCleanup();
+    logger.info('Session cleanup service stopped');
 
     // Stop webhook retry processor
     webhookRetryService.stopRetryProcessor();

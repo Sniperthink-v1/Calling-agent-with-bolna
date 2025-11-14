@@ -40,6 +40,8 @@ class AuthService {
   private readonly SALT_ROUNDS = 12;
   private readonly MAX_LOGIN_ATTEMPTS = 5;
   private readonly LOCKOUT_DURATION = 30 * 60 * 1000; // 30 minutes
+  private sessionCleanupInterval: NodeJS.Timeout | null = null;
+  private readonly SESSION_RETENTION_DAYS = 15; // Keep sessions for 15 days
 
   constructor() {
     this.JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
@@ -578,20 +580,115 @@ class AuthService {
   }
 
   /**
-   * Clean up expired sessions
+   * Clean up old sessions (older than 15 days)
    */
   async cleanupExpiredSessions(): Promise<number> {
     try {
       const query = `
         DELETE FROM user_sessions 
-        WHERE expires_at < CURRENT_TIMESTAMP OR is_active = false
+        WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '${this.SESSION_RETENTION_DAYS} days'
       `;
 
       const result = await databaseService.query(query);
-      return result.rowCount || 0;
+      const deletedCount = result.rowCount || 0;
+      
+      if (deletedCount > 0) {
+        console.log(`🧹 Cleaned up ${deletedCount} session(s) older than ${this.SESSION_RETENTION_DAYS} days`);
+      }
+      
+      return deletedCount;
     } catch (error) {
-      console.error('Error cleaning up expired sessions:', error);
+      console.error('Error cleaning up old sessions:', error);
       return 0;
+    }
+  }
+
+  /**
+   * Calculate milliseconds until next 12 AM
+   */
+  private getMillisecondsUntilMidnight(): number {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    return tomorrow.getTime() - now.getTime();
+  }
+
+  /**
+   * Start automatic session cleanup (runs daily at 12 AM)
+   */
+  startSessionCleanup(): void {
+    if (this.sessionCleanupInterval) {
+      console.log('⚠️ Session cleanup already running');
+      return;
+    }
+
+    console.log('🔄 Starting automatic session cleanup (runs daily at 12 AM)');
+    
+    // Run cleanup immediately on startup
+    this.cleanupExpiredSessions().catch(error => {
+      console.error('Initial session cleanup failed:', error);
+    });
+
+    // Schedule daily cleanup at 12 AM
+    const scheduleNextCleanup = () => {
+      const msUntilMidnight = this.getMillisecondsUntilMidnight();
+      console.log(`⏰ Next session cleanup scheduled in ${Math.round(msUntilMidnight / 1000 / 60 / 60)} hours`);
+      
+      this.sessionCleanupInterval = setTimeout(() => {
+        this.cleanupExpiredSessions().catch(error => {
+          console.error('Scheduled session cleanup failed:', error);
+        });
+        // Schedule next cleanup
+        scheduleNextCleanup();
+      }, msUntilMidnight);
+    };
+
+    scheduleNextCleanup();
+  }
+
+  /**
+   * Stop automatic session cleanup
+   */
+  stopSessionCleanup(): void {
+    if (this.sessionCleanupInterval) {
+      clearTimeout(this.sessionCleanupInterval);
+      this.sessionCleanupInterval = null;
+      console.log('🛑 Stopped automatic session cleanup');
+    }
+  }
+
+  /**
+   * Get session statistics
+   */
+  async getSessionStatistics(): Promise<{
+    total: number;
+    active: number;
+    expired: number;
+  }> {
+    try {
+      const statsQuery = `
+        SELECT 
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE is_active = true AND expires_at > CURRENT_TIMESTAMP) as active,
+          COUNT(*) FILTER (WHERE expires_at < CURRENT_TIMESTAMP OR is_active = false) as expired
+        FROM user_sessions
+      `;
+      
+      const result = await databaseService.query(statsQuery);
+      
+      if (result.rows.length > 0) {
+        return {
+          total: parseInt(result.rows[0].total, 10),
+          active: parseInt(result.rows[0].active, 10),
+          expired: parseInt(result.rows[0].expired, 10)
+        };
+      }
+      
+      return { total: 0, active: 0, expired: 0 };
+    } catch (error) {
+      console.error('Error getting session statistics:', error);
+      return { total: 0, active: 0, expired: 0 };
     }
   }
 
