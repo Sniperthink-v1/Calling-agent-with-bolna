@@ -102,41 +102,65 @@ export class ConnectionPoolService {
 
     // Connection error
     this.pool.on('error', (err: Error, client: PoolClient) => {
-      this.metrics.connectionErrors++;
+      // Check if this is an expected idle connection termination (common in serverless/Neon)
+      const isIdleTermination = err.message.includes('terminated unexpectedly') || 
+                                err.message.includes('Connection terminated');
       
-      logger.error('Unexpected error on idle database client', {
-        error: err.message,
-        stack: err.stack,
-        totalErrors: this.metrics.connectionErrors
-      });
-
-      // Send to Sentry for monitoring, but with lower severity
-      // This is often expected behavior in serverless environments (Neon)
-      // where idle connections are terminated
-      Sentry.captureException(err, {
-        level: err.message.includes('terminated unexpectedly') ? 'warning' : 'error',
-        tags: {
-          error_type: 'database_connection_error',
-          connection_terminated: err.message.includes('terminated unexpectedly'),
-          total_errors: this.metrics.connectionErrors
-        },
-        contexts: {
-          database_pool: {
+      // Only increment error count for unexpected errors
+      if (!isIdleTermination) {
+        this.metrics.connectionErrors++;
+      }
+      
+      // Log at appropriate level based on error type
+      if (isIdleTermination) {
+        // This is expected behavior in serverless environments - log as debug only
+        logger.debug('Idle database connection terminated by server (expected in serverless)', {
+          message: err.message,
+          poolStats: {
             totalCount: this.pool.totalCount,
             idleCount: this.pool.idleCount,
-            waitingCount: this.pool.waitingCount,
-            totalErrors: this.metrics.connectionErrors,
-            error_message: err.message
+            waitingCount: this.pool.waitingCount
           }
-        }
-      });
+        });
+      } else {
+        // Actual unexpected error - log as error
+        logger.error('Unexpected error on database client', {
+          error: err.message,
+          stack: err.stack,
+          totalErrors: this.metrics.connectionErrors,
+          poolStats: {
+            totalCount: this.pool.totalCount,
+            idleCount: this.pool.idleCount,
+            waitingCount: this.pool.waitingCount
+          }
+        });
+
+        // Send to Sentry for monitoring
+        Sentry.captureException(err, {
+          level: 'error',
+          tags: {
+            error_type: 'database_connection_error',
+            total_errors: this.metrics.connectionErrors
+          },
+          contexts: {
+            database_pool: {
+              totalCount: this.pool.totalCount,
+              idleCount: this.pool.idleCount,
+              waitingCount: this.pool.waitingCount,
+              totalErrors: this.metrics.connectionErrors,
+              error_message: err.message
+            }
+          }
+        });
+      }
     });
 
     // Client removed from pool
     this.pool.on('remove', (client: PoolClient) => {
-      logger.info('Database client removed from pool', {
+      logger.debug('Database client removed from pool', {
         totalCount: this.pool.totalCount,
-        idleCount: this.pool.idleCount
+        idleCount: this.pool.idleCount,
+        reason: 'Connection cleanup or termination'
       });
     });
 

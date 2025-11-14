@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Button } from '../ui/button';
 import { AlertCircle, AlertTriangle, X, CreditCard } from 'lucide-react';
@@ -110,6 +110,7 @@ export const CreditBanner: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Purchase Credits Button */}
             <Button
               asChild
               size="sm"
@@ -127,6 +128,7 @@ export const CreditBanner: React.FC = () => {
               </Link>
             </Button>
 
+            {/* Dismiss Button (only if dismissible) */}
             {bannerData.isDismissible && (
               <Button
                 variant="ghost"
