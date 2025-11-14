@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Button } from '../ui/button';
 import { AlertCircle, AlertTriangle, X, CreditCard } from 'lucide-react';
@@ -24,27 +24,34 @@ export const CreditBanner: React.FC = () => {
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchCreditStatus = async () => {
-    try {
-      const response = await authenticatedFetch('/api/user/credit-status');
-      if (!response.ok) {
-        throw new Error('Failed to fetch credit status');
-      }
-      const data: CreditStatusResponse = await response.json();
-      setBannerData(data.warnings);
-    } catch (err) {
-      console.error('Failed to fetch credit banner status:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let mounted = true;
+
+    const fetchCreditStatus = async () => {
+      try {
+        const response = await authenticatedFetch('/api/user/credit-status');
+        if (!response.ok) {
+          throw new Error('Failed to fetch credit status');
+        }
+        const data: CreditStatusResponse = await response.json();
+        if (mounted) {
+          setBannerData(data.warnings);
+        }
+      } catch (err) {
+        console.error('Failed to fetch credit banner status:', err);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Initial fetch only - NO POLLING
     fetchCreditStatus();
     
-    // Check for updates every 60 seconds
-    const interval = setInterval(fetchCreditStatus, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Don't show banner if loading, dismissed (and dismissible), or not configured to show
@@ -103,7 +110,6 @@ export const CreditBanner: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Purchase Credits Button */}
             <Button
               asChild
               size="sm"
@@ -121,7 +127,6 @@ export const CreditBanner: React.FC = () => {
               </Link>
             </Button>
 
-            {/* Dismiss Button (only if dismissible) */}
             {bannerData.isDismissible && (
               <Button
                 variant="ghost"
@@ -146,25 +151,34 @@ export const CreditBannerMobile: React.FC = () => {
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchCreditStatus = async () => {
-    try {
-      const response = await authenticatedFetch('/api/user/credit-status');
-      if (!response.ok) {
-        throw new Error('Failed to fetch credit status');
-      }
-      const data: CreditStatusResponse = await response.json();
-      setBannerData(data.warnings);
-    } catch (err) {
-      console.error('Failed to fetch credit banner status:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let mounted = true;
+
+    const fetchCreditStatus = async () => {
+      try {
+        const response = await authenticatedFetch('/api/user/credit-status');
+        if (!response.ok) {
+          throw new Error('Failed to fetch credit status');
+        }
+        const data: CreditStatusResponse = await response.json();
+        if (mounted) {
+          setBannerData(data.warnings);
+        }
+      } catch (err) {
+        console.error('Failed to fetch credit banner status:', err);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Initial fetch only - NO POLLING
     fetchCreditStatus();
-    const interval = setInterval(fetchCreditStatus, 60000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (loading || !bannerData || !bannerData.showBanner) {
