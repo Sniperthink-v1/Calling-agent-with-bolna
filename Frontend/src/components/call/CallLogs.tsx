@@ -302,11 +302,40 @@ const CallLogs: React.FC<CallLogsProps> = ({
       try {
         setIsAudioLoading(callId);
         setPlayingAudio(callId); // Set playing state immediately for better UX
-        const audioBlob = await apiService.getCallAudioBlob(callId);
-        const audioUrl = URL.createObjectURL(audioBlob);
-        objectUrlRef.current = audioUrl; // Store the URL for cleanup
+        
+        // Get the recording URL directly from the API
+        const audioUrl = await apiService.getCallAudioBlob(callId);
+        
+        // Validate the URL
+        if (!audioUrl || typeof audioUrl !== 'string') {
+          throw new Error('Invalid recording URL received');
+        }
 
+        // Check if it's a Twilio API URL (requires authentication, not playable)
+        if (audioUrl.includes('api.twilio.com') || audioUrl.includes('twilio.com/')) {
+          console.log('Twilio URL detected, showing message:', audioUrl);
+          setIsAudioLoading(null);
+          setPlayingAudio(null);
+          
+          // Show toast notification
+          toast({
+            title: 'Audio not available',
+            description: 'Call recording is not available for international numbers.',
+            variant: 'destructive',
+          });
+          
+          // Also show alert for better visibility
+          alert('Audio not available: Call recording is not available for international numbers.');
+          return;
+        }
+
+        console.log('Playing audio from URL:', audioUrl); // Debug log
+        objectUrlRef.current = audioUrl; // Store the URL for reference
+
+        // Create audio element WITHOUT crossOrigin to avoid CORS preflight
+        // The S3 bucket is publicly accessible, so we don't need CORS
         audioRef.current = new Audio(audioUrl);
+        // DO NOT set crossOrigin - this triggers CORS checks
         setIsAudioLoading(null); // Clear loading state
 
         // Initialize progress for the new audio
@@ -400,10 +429,8 @@ const CallLogs: React.FC<CallLogsProps> = ({
     }
     setPlayingAudio(null);
     setIsAudioLoading(null);
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
+    // No need to revoke URL since we're using the S3 URL directly
+    objectUrlRef.current = null;
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement, MouseEvent>, callId: string) => {
@@ -819,7 +846,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
                           </div>
                           
                           <div
-                            className="flex items-center space-x-1"
+                            className="flex items-center space-x-2"
                             onMouseEnter={() => setShowVolumeControl(true)}
                             onMouseLeave={() => setShowVolumeControl(false)}
                           >
@@ -833,13 +860,20 @@ const CallLogs: React.FC<CallLogsProps> = ({
                               )}
                             </button>
 
-                            <div className={`w-24 transition-all duration-300 ${showVolumeControl ? 'opacity-100' : 'opacity-0'}`}>
-                              <Input
+                            <div className={`transition-all duration-300 overflow-hidden ${
+                              showVolumeControl ? 'w-24 opacity-100' : 'w-0 opacity-0'
+                            }`}>
+                              <input
                                 type="range"
-                                min="0" max="1" step="0.05"
+                                min="0" 
+                                max="1" 
+                                step="0.05"
                                 value={isMuted ? 0 : volume}
                                 onChange={handleVolumeChange}
-                                className="w-full h-1 p-0 bg-transparent appearance-none cursor-pointer volume-slider"
+                                className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer"
+                                style={{
+                                  accentColor: '#1A6262',
+                                }}
                               />
                             </div>
                           </div>

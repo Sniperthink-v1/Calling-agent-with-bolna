@@ -529,7 +529,7 @@ export class CallController {
         return;
       }
 
-      // Return the recording URL
+      // Return the recording URL for direct playback
       res.json({
         success: true,
         recording_url: call.recording_url,

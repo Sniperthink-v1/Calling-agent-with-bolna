@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,10 +8,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertTriangle, FileText, Play } from 'lucide-react';
+import { Loader2, AlertTriangle, FileText, Play, Pause, Volume2, VolumeX, X } from 'lucide-react';
 import type { LeadAnalyticsData } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { apiService } from '@/services/apiService';
+import { useToast } from '@/components/ui/use-toast';
 
 // Detailed analytics structure returned from the API
 interface DetailedAnalytics {
@@ -65,6 +67,17 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
   error,
 }) => {
   const [showTranscript, setShowTranscript] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [audioProgress, setAudioProgress] = useState({ current: 0, total: 0 });
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showVolumeControl, setShowVolumeControl] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const { toast } = useToast();
   
   // Type guard to check if analytics has detailed structure
   const isDetailedAnalytics = (data: any): data is DetailedAnalytics => {
@@ -74,10 +87,165 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
   const detailedAnalytics = isDetailedAnalytics(analytics) ? analytics : null;
   const callData = detailedAnalytics?.callData;
 
-  const handlePlayRecording = () => {
-    if (callData?.recording_url) {
-      window.open(callData.recording_url, '_blank');
+  // Cleanup audio on unmount or modal close
+  useEffect(() => {
+    return () => {
+      handleCloseAudio();
+    };
+  }, []);
+
+  // Stop audio when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      handleCloseAudio();
     }
+  }, [isOpen]);
+
+  const handleCloseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlayingAudio(false);
+    setIsAudioLoading(false);
+    setAudioProgress({ current: 0, total: 0 });
+    objectUrlRef.current = null;
+  };
+
+  const handlePlayRecording = async () => {
+    if (!callData?.id) return;
+
+    // If audio is already playing, pause it
+    if (isPlayingAudio && audioRef.current) {
+      if (audioRef.current.paused) {
+        await audioRef.current.play();
+      } else {
+        audioRef.current.pause();
+      }
+      setForceUpdate(prev => prev + 1);
+      return;
+    }
+
+    // Load and play new audio
+    try {
+      setIsAudioLoading(true);
+      setIsPlayingAudio(true);
+      
+      // Get the recording URL directly from the API
+      const audioUrl = await apiService.getCallAudioBlob(callData.id);
+      
+      // Check if it's a Twilio API URL (requires authentication, not playable)
+      if (audioUrl.includes('api.twilio.com') || audioUrl.includes('twilio.com/')) {
+        console.log('Twilio URL detected in modal, showing message:', audioUrl);
+        setIsAudioLoading(false);
+        setIsPlayingAudio(false);
+        
+        // Show toast notification
+        toast({
+          title: 'Audio not available',
+          description: 'Call recording is not available for international numbers.',
+          variant: 'destructive',
+        });
+        
+        // Also show alert for better visibility
+        alert('Audio not available: Call recording is not available for international numbers.');
+        return;
+      }
+      
+      objectUrlRef.current = audioUrl;
+
+      // Create audio element WITHOUT crossOrigin to avoid CORS preflight
+      audioRef.current = new Audio(audioUrl);
+      audioRef.current.volume = volume;
+      audioRef.current.muted = isMuted;
+      setIsAudioLoading(false);
+
+      // Initialize progress
+      setAudioProgress({ current: 0, total: 0 });
+
+      // Update total duration when metadata is loaded
+      audioRef.current.onloadedmetadata = () => {
+        if (audioRef.current) {
+          setAudioProgress(prev => ({
+            ...prev,
+            total: audioRef.current!.duration,
+          }));
+          setForceUpdate(prev => prev + 1);
+        }
+      };
+
+      // Update current time as audio plays
+      audioRef.current.ontimeupdate = () => {
+        if (audioRef.current) {
+          setAudioProgress(prev => ({
+            ...prev,
+            current: audioRef.current!.currentTime,
+          }));
+          setForceUpdate(prev => prev + 1);
+        }
+      };
+      
+      // Event listener to clear the playing state when audio finishes
+      audioRef.current.onended = () => {
+        setIsPlayingAudio(false);
+        setAudioProgress(prev => ({ ...prev, current: 0 }));
+        setForceUpdate(prev => prev + 1);
+      };
+
+      await audioRef.current.play();
+
+    } catch (err) {
+      console.error("Error playing audio:", err);
+      setIsAudioLoading(false);
+      setIsPlayingAudio(false);
+      toast({
+        title: 'Error playing audio',
+        description: err instanceof Error ? err.message : 'Could not play the audio for this call.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    if (audioRef.current && audioProgress.total > 0) {
+      const progressBar = e.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const width = progressBar.offsetWidth;
+      const newTime = (x / width) * audioProgress.total;
+      audioRef.current.currentTime = newTime;
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    setIsMuted(newVolume === 0);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+      audioRef.current.muted = newVolume === 0;
+    }
+  };
+
+  const toggleMute = () => {
+    if (audioRef.current) {
+      const newMuted = !audioRef.current.muted;
+      setIsMuted(newMuted);
+      audioRef.current.muted = newMuted;
+      if (!newMuted && volume === 0) {
+        setVolume(0.5);
+        audioRef.current.volume = 0.5;
+      }
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds < 0) {
+      return "00:00";
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
   return (
@@ -162,6 +330,104 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
               {/* Call Actions - Transcript and Recording */}
               <div>
                 <h3 className="font-semibold text-lg mb-3">Call Actions</h3>
+                
+                {/* Audio Player */}
+                {callData?.recording_url && (
+                  <div className="mb-4 p-4 bg-muted rounded-lg">
+                    {isAudioLoading ? (
+                      <div className="flex items-center justify-center h-12">
+                        <Loader2 className="w-5 h-5 animate-spin text-slate-400 mr-2" />
+                        <span className="text-sm text-slate-400">Loading audio...</span>
+                      </div>
+                    ) : isPlayingAudio ? (
+                      <div className="flex items-center space-x-3">
+                        {/* Play/Pause button */}
+                        <button
+                          onClick={handlePlayRecording}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white transition-all duration-200 hover:scale-105 shadow-md"
+                          style={{ backgroundColor: audioRef.current?.paused ? '#1A6262' : '#64748b' }}
+                        >
+                          {audioRef.current?.paused ? <Play className="w-5 h-5 ml-0.5" /> : <Pause className="w-5 h-5" />}
+                        </button>
+
+                        {/* Progress bar and time */}
+                        <div className="flex items-center space-x-3 flex-1">
+                          <div
+                            className="flex-1 bg-slate-300 dark:bg-slate-700 rounded-full h-2 cursor-pointer relative overflow-hidden"
+                            onClick={handleSeek}
+                          >
+                            <div
+                              className="bg-[#1A6262] h-full rounded-full transition-all duration-150"
+                              style={{
+                                width: `${audioProgress.total > 0 ? (audioProgress.current / audioProgress.total) * 100 : 0}%`
+                              }}
+                            ></div>
+                          </div>
+                          <span className="text-xs text-slate-600 dark:text-slate-400 min-w-[80px] text-right">
+                            {formatTime(audioProgress.current)} / {formatTime(audioProgress.total)}
+                          </span>
+                        </div>
+
+                        {/* Volume control */}
+                        <div 
+                          className="flex items-center space-x-2"
+                          onMouseEnter={() => setShowVolumeControl(true)}
+                          onMouseLeave={() => setShowVolumeControl(false)}
+                        >
+                          <button
+                            onClick={toggleMute}
+                            className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                          >
+                            {isMuted || volume === 0 ? (
+                              <VolumeX className="w-4 h-4" />
+                            ) : volume < 0.5 ? (
+                              <Volume2 className="w-4 h-4 opacity-60" />
+                            ) : (
+                              <Volume2 className="w-4 h-4" />
+                            )}
+                          </button>
+                          
+                          <div className={`transition-all duration-300 overflow-hidden ${
+                            showVolumeControl ? 'w-24 opacity-100' : 'w-0 opacity-0'
+                          }`}>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={isMuted ? 0 : volume}
+                              onChange={handleVolumeChange}
+                              className="w-full h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer"
+                              style={{
+                                accentColor: '#1A6262',
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Close audio button */}
+                        <button
+                          onClick={handleCloseAudio}
+                          className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                          title="Close audio player"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="flex items-center gap-2 w-full justify-center"
+                        onClick={handlePlayRecording}
+                      >
+                        <Play className="h-4 w-4" />
+                        Play Recording
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* Transcript Button */}
                 <div className="flex gap-3">
                   {callData?.transcript && (
                     <Button
@@ -171,16 +437,6 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
                     >
                       <FileText className="h-4 w-4" />
                       {showTranscript ? 'Hide' : 'Show'} Transcript
-                    </Button>
-                  )}
-                  {callData?.recording_url && (
-                    <Button
-                      variant="outline"
-                      className="flex items-center gap-2"
-                      onClick={handlePlayRecording}
-                    >
-                      <Play className="h-4 w-4" />
-                      Play Recording
                     </Button>
                   )}
                   {!callData?.transcript && !callData?.recording_url && (

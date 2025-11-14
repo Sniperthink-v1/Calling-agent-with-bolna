@@ -2216,8 +2216,8 @@ class ApiService {
     return API_ENDPOINTS.CALLS.AUDIO(callId);
   }
 
-  // Method to get the call audio as a Blob for authenticated playback
-  async getCallAudioBlob(callId: string): Promise<Blob> {
+  // Method to get the call audio URL for direct playback
+  async getCallAudioBlob(callId: string): Promise<string> {
     const token = localStorage.getItem('auth_token');
     
     // First, get the recording URL from the API
@@ -2248,14 +2248,8 @@ class ApiService {
       throw new Error('No recording URL found for this call');
     }
     
-    // Now fetch the actual audio file from the recording URL
-    const audioResponse = await fetch(recordingUrl);
-    
-    if (!audioResponse.ok) {
-      throw new Error(`Failed to fetch audio from recording URL: ${audioResponse.status}`);
-    }
-    
-    return audioResponse.blob();
+    // Return the recording URL for direct playback with crossOrigin support
+    return recordingUrl;
   }
 
   // Email API methods
