@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
         "localhost",
         "5235-2401-4900-88b8-37f2-c0c-fb9c-8aaf-9592.ngrok-free.app",
         "53f396a077dd.ngrok-free.app",
+        "bf2d1dbde000.ngrok-free.app",
       ],
       proxy: {
         '/api': {

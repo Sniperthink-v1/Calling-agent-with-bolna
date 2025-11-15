@@ -220,6 +220,7 @@ export class DashboardController {
     // Additional overview data for other dashboard components
     const overviewData = {
       kpis,
+      creditBalance: creditBalance, // For mobile app compatibility
       credits: {
         current: creditBalance,
         usedThisMonth: parseInt(callStats.total_credits_used) || 0,

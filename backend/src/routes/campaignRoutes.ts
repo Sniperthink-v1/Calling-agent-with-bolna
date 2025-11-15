@@ -96,7 +96,7 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
     
     res.status(201).json({
       success: true,
-      campaign
+      data: campaign
     });
   } catch (error) {
     logger.error('Error creating campaign:', error);
@@ -512,7 +512,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<any> => {
     
     res.json({
       success: true,
-      campaign
+      data: campaign
     });
   } catch (error) {
     logger.error('Error fetching campaign:', error);
@@ -552,7 +552,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<any> => {
     
     res.json({
       success: true,
-      campaign
+      data: campaign
     });
   } catch (error) {
     logger.error('Error updating campaign:', error);
@@ -625,7 +625,7 @@ router.post('/:id/start', async (req: Request, res: Response): Promise<any> => {
     res.json({
       success: true,
       message: 'Campaign started successfully',
-      campaign
+      data: campaign
     });
   } catch (error) {
     logger.error('Error starting campaign:', error);
@@ -662,7 +662,7 @@ router.post('/:id/pause', async (req: Request, res: Response): Promise<any> => {
     res.json({
       success: true,
       message: 'Campaign paused successfully',
-      campaign
+      data: campaign
     });
   } catch (error) {
     logger.error('Error pausing campaign:', error);
@@ -699,7 +699,7 @@ router.post('/:id/resume', async (req: Request, res: Response): Promise<any> => 
     res.json({
       success: true,
       message: 'Campaign resumed successfully',
-      campaign
+      data: campaign
     });
   } catch (error) {
     logger.error('Error resuming campaign:', error);
@@ -736,7 +736,7 @@ router.post('/:id/cancel', async (req: Request, res: Response): Promise<any> => 
     res.json({
       success: true,
       message: 'Campaign cancelled successfully',
-      campaign
+      data: campaign
     });
   } catch (error) {
     logger.error('Error cancelling campaign:', error);

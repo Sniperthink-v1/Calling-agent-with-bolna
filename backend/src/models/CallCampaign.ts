@@ -31,28 +31,35 @@ export class CallCampaignModel {
       offset?: number;
     }
   ): Promise<CallCampaign[]> {
-    let query = 'SELECT * FROM call_campaigns WHERE user_id = $1';
+    let query = `
+      SELECT 
+        cc.*,
+        a.name as agent_name
+      FROM call_campaigns cc
+      LEFT JOIN agents a ON cc.agent_id = a.id
+      WHERE cc.user_id = $1
+    `;
     const params: any[] = [userId];
     let paramCount = 1;
 
     if (filters?.status) {
       paramCount++;
       if (Array.isArray(filters.status)) {
-        query += ` AND status = ANY($${paramCount})`;
+        query += ` AND cc.status = ANY($${paramCount})`;
         params.push(filters.status);
       } else {
-        query += ` AND status = $${paramCount}`;
+        query += ` AND cc.status = $${paramCount}`;
         params.push(filters.status);
       }
     }
 
     if (filters?.agent_id) {
       paramCount++;
-      query += ` AND agent_id = $${paramCount}`;
+      query += ` AND cc.agent_id = $${paramCount}`;
       params.push(filters.agent_id);
     }
 
-    query += ' ORDER BY created_at DESC';
+    query += ' ORDER BY cc.created_at DESC';
 
     if (filters?.limit) {
       paramCount++;

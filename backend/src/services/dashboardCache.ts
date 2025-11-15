@@ -130,6 +130,7 @@ export class DashboardCacheService {
 
       // Update credits with real-time data
       const creditBalance = await BillingService.getUserCredits(userId);
+      overviewData.creditBalance = creditBalance; // For mobile app compatibility
       overviewData.credits.current = creditBalance;
       overviewData.credits.remaining = creditBalance;
 
