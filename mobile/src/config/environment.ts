@@ -1,13 +1,13 @@
 // Environment configuration
 const ENV = {
   dev: {
-    apiUrl: 'https://a640c8859563.ngrok-free.app/api',
+    apiUrl: 'https://calling-agent-with-bolna-production.up.railway.app/api',
   },
   staging: {
-    apiUrl: 'https://your-staging-api.com/api',
+    apiUrl: 'https://calling-agent-with-bolna-production.up.railway.app/api',
   },
   prod: {
-    apiUrl: 'https://your-production-api.com/api',
+    apiUrl: 'https://calling-agent-with-bolna-production.up.railway.app/api',
   },
 };
 

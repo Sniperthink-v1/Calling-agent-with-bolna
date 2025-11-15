@@ -63,6 +63,7 @@ export interface DashboardOverviewData {
     description: string;
     efficiency?: string;
   }>;
+  creditBalance?: number; // For mobile app compatibility
   credits: {
     current: number;
     usedThisMonth: number;
