@@ -1410,7 +1410,7 @@ export class AdminController {
       // Extract relevant details
       const agentDetails = {
         bolna_agent_id: bolnaAgent.agent_id,
-        name: bolnaAgent.agent_name || '',
+        name: bolnaAgent.agent_config?.agent_name || '',
         system_prompt: bolnaAgent.agent_prompts?.task_1?.system_prompt || '',
         status: bolnaAgent.status,
       };
