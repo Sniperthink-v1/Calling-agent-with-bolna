@@ -56,10 +56,31 @@ export interface SystemStatistics {
   };
   system: {
     uptime: number;
+    uptimeHours?: number;
     responseTime: number;
     errorRate: number;
     activeConnections: number;
+    cpuUsage?: number;
+    memoryUsage?: {
+      used: number;
+      total: number;
+      percentage: number;
+    };
+    diskUsage?: number;
+    platform?: string;
+    hostname?: string;
+    loadAverage?: {
+      '1min': number;
+      '5min': number;
+      '15min': number;
+    };
   };
+  hourlyActivity?: Array<{
+    hour: string;
+    activeUsers?: number;
+    activeAgents?: number;
+    totalCalls?: number;
+  }>;
 }
 
 export interface AdminDashboardMetrics {

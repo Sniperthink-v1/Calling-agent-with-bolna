@@ -203,6 +203,10 @@ app.use(inputSanitization());
 // Request logging middleware
 app.use(requestLogger);
 
+// Real-time monitoring middleware (tracks response times, errors, connections)
+import { monitoringService } from './services/monitoringService';
+app.use(monitoringService.trackRequest);
+
 // Track user activity for connection pool optimization
 import { trackUserActivity } from './middleware/trackUserActivity';
 app.use(trackUserActivity);

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
     Users,
@@ -20,6 +19,7 @@ import {
 import { AdminCard } from './shared/AdminCard';
 import { useAdminDashboard } from '../../hooks/useAdminDashboard';
 import { useAdminWebSocket } from '../../hooks/useAdminWebSocket';
+import { useSystemHealth } from '../../hooks/useSystemHealth';
 import { ActivityChart, SystemHealthChart } from './charts/AdminCharts';
 import { RealTimeMetrics, SystemStatusIndicator } from './RealTime';
 import { formatDistanceToNow } from 'date-fns';
@@ -31,22 +31,6 @@ import { AuthDebug } from './AuthDebug';
 
 
 
-// Mock chart data for demonstration
-const mockChartData = [
-    { name: '00:00', users: 120, agents: 45, calls: 23 },
-    { name: '04:00', users: 98, agents: 38, calls: 18 },
-    { name: '08:00', users: 180, agents: 67, calls: 45 },
-    { name: '12:00', users: 220, agents: 89, calls: 67 },
-    { name: '16:00', users: 195, agents: 78, calls: 52 },
-    { name: '20:00', users: 165, agents: 56, calls: 38 },
-];
-
-const mockSystemHealthData = [
-    { name: 'CPU', value: 65, status: 'healthy' },
-    { name: 'Memory', value: 78, status: 'warning' },
-    { name: 'Disk', value: 45, status: 'healthy' },
-    { name: 'Network', value: 92, status: 'healthy' },
-];
 
 export function AdminDashboard() {
     // Use the custom admin dashboard hook (must be called before any conditional returns)
@@ -58,6 +42,15 @@ export function AdminDashboard() {
         refetch,
     } = useAdminDashboard({
         refetchInterval: 30000, // Refresh every 30 seconds for real-time updates
+    });
+
+    // Use real-time system health data
+    const {
+        healthData,
+        isLoading: isLoadingHealth,
+        refetch: refetchHealth,
+    } = useSystemHealth({
+        refetchInterval: 30000,
     });
 
     // Use real-time WebSocket data
@@ -156,7 +149,7 @@ export function AdminDashboard() {
     };
 
     const handleRefresh = async () => {
-        await refetch();
+        await Promise.all([refetch(), refetchHealth()]);
     };
 
     if (hasError) {
@@ -298,10 +291,10 @@ export function AdminDashboard() {
 
                         <AdminCard
                             title="System Health"
-                            value={isLoading ? '...' : `${stats?.system?.uptime?.toFixed(1) || '0'}%`}
+                            value={isLoading ? '...' : healthData ? `${healthData.metrics.uptime.percentage.toFixed(1)}%` : `${stats?.system?.uptime?.toFixed(1) || '0'}%`}
                             icon={systemHealth.status === 'healthy' ? CheckCircle :
                                 systemHealth.status === 'warning' ? AlertCircle : XCircle}
-                            description={`${realTimeMetrics?.responseTime || stats?.system?.responseTime || 0}ms avg response`}
+                            description={healthData ? `${healthData.metrics.responseTime.average}ms avg response` : `${realTimeMetrics?.responseTime || stats?.system?.responseTime || 0}ms avg response`}
                             className={`border-l-4 ${systemHealth.status === 'healthy' ? 'border-l-green-500' :
                                 systemHealth.status === 'warning' ? 'border-l-yellow-500' : 'border-l-red-500'
                                 }`}
@@ -310,10 +303,10 @@ export function AdminDashboard() {
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${systemHealth.status === 'healthy' ? 'bg-green-100 text-green-800' :
                                     systemHealth.status === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
                                     }`}>
-                                    {systemHealth.status}
+                                    {healthData?.overall || systemHealth.status}
                                 </span>
                                 <span className="text-gray-500">
-                                    {stats?.system?.activeConnections || 0} active connections
+                                    {healthData?.metrics.connections.active || stats?.system?.activeConnections || 0} active connections
                                 </span>
                             </div>
                         </AdminCard>
@@ -338,12 +331,66 @@ export function AdminDashboard() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Activity Chart */}
                         <AdminCard title="Platform Activity (24h)" className="col-span-1">
-                            <ActivityChart data={mockChartData} className="h-[300px]" />
+                            {isLoading ? (
+                                <div className="h-[300px] flex items-center justify-center text-gray-400">
+                                    <RefreshCw className="h-8 w-8 animate-spin" />
+                                </div>
+                            ) : stats?.hourlyActivity && stats.hourlyActivity.length > 0 ? (
+                                <ActivityChart 
+                                    data={stats.hourlyActivity.map(item => ({
+                                        name: new Date(item.hour).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                                        users: item.activeUsers || 0,
+                                        agents: item.activeAgents || 0,
+                                        calls: item.totalCalls || 0,
+                                    }))} 
+                                    className="h-[300px]" 
+                                />
+                            ) : (
+                                <div className="h-[300px] flex items-center justify-center text-gray-400">
+                                    <Activity className="h-8 w-8 mb-2" />
+                                    <p>No activity data available</p>
+                                </div>
+                            )}
                         </AdminCard>
 
                         {/* System Health Chart */}
                         <AdminCard title="System Resources" className="col-span-1">
-                            <SystemHealthChart data={mockSystemHealthData} className="h-[300px]" />
+                            {isLoadingHealth ? (
+                                <div className="h-[300px] flex items-center justify-center text-gray-400">
+                                    <RefreshCw className="h-8 w-8 animate-spin" />
+                                </div>
+                            ) : healthData?.system ? (
+                                <SystemHealthChart 
+                                    data={[
+                                        {
+                                            name: 'CPU',
+                                            value: healthData.system.cpu.usage,
+                                            status: healthData.system.cpu.usage > 80 ? 'error' : healthData.system.cpu.usage > 60 ? 'warning' : 'healthy'
+                                        },
+                                        {
+                                            name: 'Memory',
+                                            value: healthData.system.memory.usagePercentage,
+                                            status: healthData.system.memory.usagePercentage > 85 ? 'error' : healthData.system.memory.usagePercentage > 70 ? 'warning' : 'healthy'
+                                        },
+                                        {
+                                            name: 'Disk',
+                                            value: healthData.system.disk?.usagePercentage || 0,
+                                            status: (healthData.system.disk?.usagePercentage || 0) > 90 ? 'error' : (healthData.system.disk?.usagePercentage || 0) > 75 ? 'warning' : 'healthy'
+                                        },
+                                        {
+                                            name: 'Response',
+                                            value: Math.min((healthData.metrics.responseTime.average / 1000) * 100, 100),
+                                            status: healthData.metrics.responseTime.status
+                                        },
+                                    ]} 
+                                    className="h-[300px]" 
+                                />
+                            ) : (
+                                <div className="h-[300px] flex items-center justify-center text-gray-400">
+                                    <Activity className="h-8 w-8 mb-2" />
+                                    <p>No system health data available</p>
+                                </div>
+                            )}
                         </AdminCard>
                     </div>
 
@@ -403,31 +450,63 @@ export function AdminDashboard() {
                 {/* System Alerts */}
                 <AdminCard title="System Alerts" className="col-span-1">
                     <div className="space-y-3">
-                        {stats?.system?.errorRate && stats.system.errorRate > 0.05 && (
+                        {/* Error Rate Alert */}
+                        {healthData?.metrics.errorRate.status === 'critical' || (stats?.system?.errorRate && stats.system.errorRate > 0.05) ? (
                             <div className="flex items-center p-3 bg-red-50 rounded-lg">
                                 <XCircle className="h-5 w-5 text-red-400 mr-3" />
                                 <div>
                                     <p className="text-sm font-medium text-red-800">High Error Rate</p>
                                     <p className="text-sm text-red-600">
-                                        Current error rate: {(stats.system.errorRate * 100).toFixed(2)}%
+                                        Current error rate: {healthData ? healthData.metrics.errorRate.percentage.toFixed(2) : (stats?.system?.errorRate ? (stats.system.errorRate * 100).toFixed(2) : '0')}%
                                     </p>
                                 </div>
                             </div>
-                        )}
+                        ) : null}
 
-                        {stats?.system?.responseTime && stats.system.responseTime > 500 && (
+                        {/* Response Time Alert */}
+                        {healthData?.metrics.responseTime.status === 'critical' || healthData?.metrics.responseTime.status === 'warning' || (stats?.system?.responseTime && stats.system.responseTime > 500) ? (
+                            <div className={`flex items-center p-3 rounded-lg ${healthData?.metrics.responseTime.status === 'critical' ? 'bg-red-50' : 'bg-yellow-50'}`}>
+                                <AlertCircle className={`h-5 w-5 mr-3 ${healthData?.metrics.responseTime.status === 'critical' ? 'text-red-400' : 'text-yellow-400'}`} />
+                                <div>
+                                    <p className={`text-sm font-medium ${healthData?.metrics.responseTime.status === 'critical' ? 'text-red-800' : 'text-yellow-800'}`}>
+                                        Slow Response Time
+                                    </p>
+                                    <p className={`text-sm ${healthData?.metrics.responseTime.status === 'critical' ? 'text-red-600' : 'text-yellow-600'}`}>
+                                        Average response: {healthData ? healthData.metrics.responseTime.average : stats?.system?.responseTime || 0}ms
+                                        {healthData?.metrics.responseTime.p95 && ` (P95: ${healthData.metrics.responseTime.p95}ms)`}
+                                    </p>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* CPU Alert */}
+                        {healthData?.system?.cpu.usage && healthData.system.cpu.usage > 80 ? (
+                            <div className="flex items-center p-3 bg-red-50 rounded-lg">
+                                <AlertCircle className="h-5 w-5 text-red-400 mr-3" />
+                                <div>
+                                    <p className="text-sm font-medium text-red-800">High CPU Usage</p>
+                                    <p className="text-sm text-red-600">
+                                        CPU usage at {healthData.system.cpu.usage.toFixed(1)}%
+                                    </p>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* Memory Alert */}
+                        {healthData?.system?.memory.usagePercentage && healthData.system.memory.usagePercentage > 85 ? (
                             <div className="flex items-center p-3 bg-yellow-50 rounded-lg">
                                 <AlertCircle className="h-5 w-5 text-yellow-400 mr-3" />
                                 <div>
-                                    <p className="text-sm font-medium text-yellow-800">Slow Response Time</p>
+                                    <p className="text-sm font-medium text-yellow-800">High Memory Usage</p>
                                     <p className="text-sm text-yellow-600">
-                                        Average response: {stats.system.responseTime}ms
+                                        Memory usage at {healthData.system.memory.usagePercentage.toFixed(1)}%
                                     </p>
                                 </div>
                             </div>
-                        )}
+                        ) : null}
 
-                        {stats?.agents?.healthyPercentage && stats.agents.healthyPercentage < 90 && (
+                        {/* Agent Health Alert */}
+                        {stats?.agents?.healthyPercentage && stats.agents.healthyPercentage < 90 ? (
                             <div className="flex items-center p-3 bg-yellow-50 rounded-lg">
                                 <AlertCircle className="h-5 w-5 text-yellow-400 mr-3" />
                                 <div>
@@ -437,23 +516,26 @@ export function AdminDashboard() {
                                     </p>
                                 </div>
                             </div>
-                        )}
+                        ) : null}
 
-                        {(!stats || (
-                            (!stats.system?.errorRate || stats.system.errorRate <= 0.05) &&
-                            (!stats.system?.responseTime || stats.system.responseTime <= 500) &&
-                            (!stats.agents?.healthyPercentage || stats.agents.healthyPercentage >= 90)
-                        )) && (
-                                <div className="flex items-center p-3 bg-green-50 rounded-lg">
-                                    <CheckCircle className="h-5 w-5 text-green-400 mr-3" />
-                                    <div>
-                                        <p className="text-sm font-medium text-green-800">All Systems Operational</p>
-                                        <p className="text-sm text-green-600">
-                                            No active alerts or issues detected
-                                        </p>
-                                    </div>
+                        {/* All Systems Operational */}
+                        {(!healthData?.metrics.errorRate || healthData.metrics.errorRate.status === 'healthy') &&
+                         (!healthData?.metrics.responseTime || healthData.metrics.responseTime.status === 'healthy') &&
+                         (!healthData?.system?.cpu.usage || healthData.system.cpu.usage <= 80) &&
+                         (!healthData?.system?.memory.usagePercentage || healthData.system.memory.usagePercentage <= 85) &&
+                         (!stats?.agents?.healthyPercentage || stats.agents.healthyPercentage >= 90) &&
+                         (!stats?.system?.errorRate || stats.system.errorRate <= 0.05) &&
+                         (!stats?.system?.responseTime || stats.system.responseTime <= 500) ? (
+                            <div className="flex items-center p-3 bg-green-50 rounded-lg">
+                                <CheckCircle className="h-5 w-5 text-green-400 mr-3" />
+                                <div>
+                                    <p className="text-sm font-medium text-green-800">All Systems Operational</p>
+                                    <p className="text-sm text-green-600">
+                                        No active alerts or issues detected
+                                    </p>
                                 </div>
-                            )}
+                            </div>
+                        ) : null}
                     </div>
                 </AdminCard>
                     </div>

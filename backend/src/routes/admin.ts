@@ -249,7 +249,7 @@ router.get(
   '/analytics/realtime',
   requireAdmin,
   logAdminAction('VIEW_REALTIME_ANALYTICS', 'analytics'),
-  AdminController.getDashboardMetrics
+  AdminController.getRealtimeMetrics
 );
 
 router.get(
@@ -257,6 +257,14 @@ router.get(
   requireAdmin,
   logAdminAction('VIEW_USAGE_ANALYTICS', 'analytics'),
   AdminController.getSystemStats
+);
+
+// System health monitoring endpoint
+router.get(
+  '/health/system',
+  requireAdmin,
+  logAdminAction('VIEW_SYSTEM_HEALTH', 'system'),
+  AdminController.getSystemHealth
 );
 
 // Phone number management routes (admin access required)

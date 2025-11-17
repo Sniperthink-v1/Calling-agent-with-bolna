@@ -6,6 +6,9 @@ import { adminService } from '../services/adminService';
 import { logAdminActionManual } from '../middleware/adminAuth';
 import { logger } from '../utils/logger';
 import { AgentModel } from '../models/Agent';
+import { systemMetricsService } from '../services/systemMetricsService';
+import { databaseAnalyticsService } from '../services/databaseAnalyticsService';
+import { monitoringService } from '../services/monitoringService';
 
 // Admin controller - handles admin panel functionality
 export class AdminController {
@@ -380,10 +383,12 @@ export class AdminController {
     try {
       const userModel = new UserModel();
 
-      // Get essential metrics for dashboard cards
-      const [userStats, agentStats] = await Promise.all([
+      // Get essential metrics from database and system
+      const [userStats, agentStats, analyticsData, systemHealth] = await Promise.all([
         userModel.getSystemStats(),
-        adminService.getAgentStats()
+        adminService.getAgentStats(),
+        databaseAnalyticsService.getAnalyticsSummary(7), // Last 7 days for dashboard
+        systemMetricsService.getSystemHealthScore()
       ]);
 
       // Calculate key performance indicators
@@ -398,8 +403,8 @@ export class AdminController {
         kpis: {
           totalRevenue: {
             value: totalRevenue,
-            change: Math.round(Math.random() * 20 - 10), // -10% to +10%
-            trend: 'up'
+            change: userGrowthRate, // Use user growth as proxy for revenue growth
+            trend: userGrowthRate > 0 ? 'up' : 'down'
           },
           totalUsers: {
             value: userStats.totalUsers,
@@ -408,13 +413,13 @@ export class AdminController {
           },
           activeAgents: {
             value: agentStats.activeAgents,
-            change: Math.round(Math.random() * 10), // 0-10%
-            trend: 'up'
+            change: agentHealthPercentage - 95, // Compare to 95% target
+            trend: agentHealthPercentage >= 95 ? 'up' : 'down'
           },
           systemHealth: {
-            value: agentHealthPercentage,
-            change: Math.round(Math.random() * 5), // 0-5%
-            trend: 'up'
+            value: systemHealth,
+            change: systemHealth - 95, // Compare to 95% target
+            trend: systemHealth >= 95 ? 'up' : 'down'
           }
         },
 
@@ -425,23 +430,15 @@ export class AdminController {
           totalCreditsUsed: userStats.totalCreditsUsed,
           totalCreditsRemaining: userStats.totalCreditsInSystem - userStats.totalCreditsUsed,
           agentUtilization: agentHealthPercentage,
-          recentAgents: agentStats.recentlyCreated
+          recentAgents: agentStats.recentlyCreated,
+          activeUsers: analyticsData.activeUsers
         },
 
-        // Chart Data (simplified for dashboard)
+        // Chart Data (REAL data from database)
         charts: {
-          userGrowth: Array.from({ length: 7 }, (_, i) => ({
-            date: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            users: Math.floor(Math.random() * 10) + 5
-          })),
-          agentActivity: Array.from({ length: 24 }, (_, i) => ({
-            hour: i,
-            active: Math.floor(Math.random() * agentStats.activeAgents) + 1
-          })),
-          creditUsage: Array.from({ length: 30 }, (_, i) => ({
-            day: i + 1,
-            used: Math.floor(Math.random() * 100) + 50
-          }))
+          userGrowth: analyticsData.userGrowth.slice(-7), // Last 7 days
+          agentActivity: analyticsData.hourlyUsage,
+          creditUsage: analyticsData.creditTrends.slice(-7) // Last 7 days
         }
       };
 
@@ -469,23 +466,17 @@ export class AdminController {
     try {
       const userModel = new UserModel();
 
-      // Get comprehensive statistics from all services
-      const [userStats, agentStats, callMonitoring] = await Promise.all([
+      // Get comprehensive statistics from all services (REAL DATA)
+      const [userStats, agentStats, callMonitoring, analyticsData, systemMetrics] = await Promise.all([
         userModel.getSystemStats(),
         adminService.getAgentStats(),
-        adminService.monitorAgents('30d') // Get 30-day call statistics
+        adminService.monitorAgents('30d'), // Get 30-day call statistics
+        databaseAnalyticsService.getAnalyticsSummary(30), // Last 30 days
+        systemMetricsService.getSystemMetrics() // Real Railway server metrics
       ]);
 
-      // Calculate system uptime and health metrics
-      const uptimeSeconds = process.uptime();
-      const uptimeHours = uptimeSeconds / 3600;
-      const uptimePercentage = Math.min(99.9, Math.max(95, 100 - (Math.random() * 2))); // 95-99.9%
-
-      // Get memory usage
-      const memoryUsage = process.memoryUsage();
-      const memoryUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
-      const memoryTotalMB = Math.round(memoryUsage.heapTotal / 1024 / 1024);
-      const memoryUsagePercentage = Math.round((memoryUsedMB / memoryTotalMB) * 100);
+      // Get real system uptime from Railway server
+      const uptimePercentage = systemMetricsService.getUptimePercentage();
 
       // Calculate financial metrics
       const totalCreditsInSystem = userStats.totalCreditsInSystem;
@@ -554,32 +545,35 @@ export class AdminController {
           estimatedMonthlyRevenue: estimatedMonthlyCost
         },
 
-        // System Health Metrics
+        // System Health Metrics (REAL from Railway server)
         system: {
           uptime: uptimePercentage,
-          uptimeHours: Math.round(uptimeHours * 100) / 100,
-          responseTime: Math.round(Math.random() * 50 + 25), // 25-75ms (would be from monitoring)
-          errorRate: Math.round(Math.random() * 100) / 100, // 0-1% (would be from monitoring)
-          activeConnections: Math.floor(Math.random() * 50) + 10, // 10-60 connections
+          uptimeHours: systemMetrics.uptime.processUptimeHours,
+          responseTime: 0, // Could be tracked with middleware in future
+          errorRate: 0, // Could be tracked with error middleware
+          activeConnections: 0, // Could be tracked with connection counter
           memoryUsage: {
-            used: memoryUsedMB,
-            total: memoryTotalMB,
-            percentage: memoryUsagePercentage
+            used: systemMetrics.performance.memory.processHeapUsed,
+            total: systemMetrics.performance.memory.processHeapTotal,
+            percentage: systemMetrics.performance.memory.processHeapPercentage
           },
-          cpuUsage: Math.round(Math.random() * 30 + 10), // 10-40% (would be from monitoring)
-          diskUsage: Math.round(Math.random() * 20 + 30), // 30-50% (would be from monitoring)
-          databaseConnections: Math.floor(Math.random() * 10) + 5, // 5-15 connections
-          cacheHitRate: Math.round(Math.random() * 10 + 85) // 85-95% (would be from cache monitoring)
+          cpuUsage: systemMetrics.performance.cpu.usage,
+          diskUsage: systemMetrics.performance.disk.percentage,
+          databaseConnections: 0, // Could track from pool stats
+          cacheHitRate: 0, // Not implemented yet
+          loadAverage: systemMetrics.performance.cpu.loadAverage,
+          platform: systemMetrics.system.platform,
+          hostname: systemMetrics.system.hostname
         },
 
-        // Performance Metrics
+        // Performance Metrics (placeholder - could add middleware tracking)
         performance: {
-          requestsPerMinute: Math.floor(Math.random() * 100) + 50, // 50-150 RPM
-          averageResponseTime: Math.round(Math.random() * 100 + 50), // 50-150ms
-          p95ResponseTime: Math.round(Math.random() * 200 + 100), // 100-300ms
-          throughput: Math.round(Math.random() * 1000 + 500), // 500-1500 requests/hour
-          errorCount: Math.floor(Math.random() * 5), // 0-5 errors
-          warningCount: Math.floor(Math.random() * 10) + 2 // 2-12 warnings
+          requestsPerMinute: 0, // Add request counter middleware
+          averageResponseTime: 0, // Add timing middleware
+          p95ResponseTime: 0, // Add timing middleware
+          throughput: 0, // Calculated from request counter
+          errorCount: 0, // Track from error handler
+          warningCount: 0 // Track from logger
         },
 
         // Summary Metrics for Dashboard Cards
@@ -593,63 +587,23 @@ export class AdminController {
             Math.round(((userStats.newUsersThisWeek / Math.max(userStats.totalUsers - userStats.newUsersThisWeek, 1)) * 100)) : 0
         },
 
-        // Usage Patterns (for charts)
-        usage: Array.from({ length: 30 }, (_, i) => {
-          const date = new Date();
-          date.setDate(date.getDate() - (29 - i));
-          return {
-            date: date.toISOString().split('T')[0],
-            users: Math.floor(Math.random() * 50) + userStats.totalUsers / 30,
-            calls: Math.floor(Math.random() * 100) + callMonitoring.totalCalls / 30,
-            agents: Math.floor(Math.random() * 10) + agentStats.totalAgents / 30,
-            revenue: Math.floor(Math.random() * 500) + estimatedMonthlyCost / 30
-          };
-        }),
-
-        // User Tiers Distribution
-        userTiers: [
-          { 
-            name: 'Free', 
-            value: Math.round((userStats.totalUsers * 0.7)), 
-            color: '#0088FE' 
-          },
-          { 
-            name: 'Pro', 
-            value: Math.round((userStats.totalUsers * 0.25)), 
-            color: '#00C49F' 
-          },
-          { 
-            name: 'Enterprise', 
-            value: Math.round((userStats.totalUsers * 0.05)), 
-            color: '#FFBB28' 
-          }
-        ],
-
-        // Agent Types Distribution
-        agentTypes: [
-          { 
-            name: 'Sales', 
-            value: agentStats.agentsByType?.call || Math.round(agentStats.totalAgents * 0.5), 
-            color: '#0088FE' 
-          },
-          { 
-            name: 'Support', 
-            value: Math.round(agentStats.totalAgents * 0.3), 
-            color: '#00C49F' 
-          },
-          { 
-            name: 'Survey', 
-            value: Math.round(agentStats.totalAgents * 0.2), 
-            color: '#FFBB28' 
-          }
-        ],
-
-        // Hourly Usage Patterns
-        hourlyUsage: Array.from({ length: 24 }, (_, i) => ({
-          hour: `${i.toString().padStart(2, '0')}:00`,
-          calls: Math.floor(Math.random() * 50) + (i >= 8 && i <= 18 ? 30 : 5), // Higher during business hours
-          users: Math.floor(Math.random() * 30) + (i >= 8 && i <= 18 ? 20 : 3)
+        // Usage Patterns (REAL data from database)
+        usage: analyticsData.userGrowth.map(ug => ({
+          date: ug.date,
+          users: ug.newUsers,
+          calls: analyticsData.callVolume.find(cv => cv.date === ug.date)?.totalCalls || 0,
+          agents: agentStats.totalAgents, // Static for now, could track daily creation
+          revenue: Math.round((analyticsData.callVolume.find(cv => cv.date === ug.date)?.totalCalls || 0) * 0.1) // Estimate
         })),
+
+        // User Tiers Distribution (REAL from database)
+        userTiers: analyticsData.userTiers,
+
+        // Agent Types Distribution (REAL from database)
+        agentTypes: analyticsData.agentTypes,
+
+        // Hourly Usage Patterns (REAL from database - last 24 hours)
+        hourlyUsage: analyticsData.hourlyUsage,
 
         // System Alerts (if any)
         alerts: []
@@ -661,10 +615,11 @@ export class AdminController {
         timestamp: new Date(),
         generatedAt: new Date().toISOString(),
         dataFreshness: {
-          users: 'real-time',
-          agents: 'real-time',
-          calls: '30-day period',
-          system: 'real-time'
+          users: 'real-time from database',
+          agents: 'real-time from database',
+          calls: '30-day period from database',
+          system: 'real-time from Railway server',
+          analytics: 'real-time from database queries'
         }
       });
     } catch (error: any) {
@@ -1632,6 +1587,56 @@ export class AdminController {
         error: {
           code: 'GET_ALL_USERS_ERROR',
           message: error.message || 'Failed to get users',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get real-time system health metrics
+   * Tracks API response time, error rate, uptime, and active connections
+   */
+  static async getSystemHealth(req: Request, res: Response): Promise<void> {
+    try {
+      // Get real-time monitoring metrics
+      const healthStatus = monitoringService.getHealthStatus();
+      
+      res.json({
+        success: true,
+        data: healthStatus,
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      console.error('Get system health error:', error);
+      res.status(500).json({
+        error: {
+          code: 'SYSTEM_HEALTH_ERROR',
+          message: 'Failed to retrieve system health metrics',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get detailed real-time metrics
+   */
+  static async getRealtimeMetrics(req: Request, res: Response): Promise<void> {
+    try {
+      const metrics = monitoringService.getRealTimeMetrics();
+      
+      res.json({
+        success: true,
+        data: metrics,
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      console.error('Get realtime metrics error:', error);
+      res.status(500).json({
+        error: {
+          code: 'REALTIME_METRICS_ERROR',
+          message: 'Failed to retrieve realtime metrics',
           timestamp: new Date(),
         },
       });

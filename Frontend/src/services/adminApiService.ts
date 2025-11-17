@@ -110,6 +110,11 @@ const ADMIN_ENDPOINTS = {
     EXPORT: `${ADMIN_API_BASE}/analytics/export`,
   },
   
+  // Health Monitoring
+  HEALTH: {
+    SYSTEM: `${ADMIN_API_BASE}/health/system`,
+  },
+  
   // Phone Number Management
   PHONE_NUMBERS: {
     LIST: `${ADMIN_API_BASE}/phone-numbers`,
@@ -966,6 +971,14 @@ class AdminApiService {
 
   async getAdminProfile(): Promise<ApiResponse<AdminUser>> {
     return adminRequest<AdminUser>(`${ADMIN_API_BASE}/profile`);
+  }
+
+  // ============================================================================
+  // HEALTH MONITORING METHODS
+  // ============================================================================
+
+  async getSystemHealth(): Promise<ApiResponse<any>> {
+    return adminRequest<any>(ADMIN_ENDPOINTS.HEALTH.SYSTEM);
   }
 }
 
