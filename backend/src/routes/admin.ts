@@ -270,4 +270,76 @@ router.get(
 // Phone number management routes (admin access required)
 router.use('/phone-numbers', requireAdmin, phoneNumberRoutes);
 
+// Client Panel Routes (admin access required)
+router.get(
+  '/client-panel/users',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_USERS', 'client_panel'),
+  AdminController.getClientPanelUsers
+);
+
+router.get(
+  '/client-panel/metrics',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_METRICS', 'client_panel'),
+  AdminController.getClientPanelMetrics
+);
+
+router.get(
+  '/client-panel/overview',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_OVERVIEW', 'client_panel'),
+  AdminController.getClientPanelOverview
+);
+
+router.get(
+  '/client-panel/agents',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_AGENTS', 'client_panel'),
+  AdminController.getClientPanelAgents
+);
+
+router.get(
+  '/client-panel/calls',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_CALLS', 'client_panel'),
+  AdminController.getClientPanelCalls
+);
+
+router.get(
+  '/client-panel/contacts',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_CONTACTS', 'client_panel'),
+  AdminController.getClientPanelContacts
+);
+
+router.get(
+  '/client-panel/campaigns',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_CAMPAIGNS', 'client_panel'),
+  AdminController.getClientPanelCampaigns
+);
+
+router.get(
+  '/client-panel/customers',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_CUSTOMERS', 'client_panel'),
+  AdminController.getClientPanelCustomers
+);
+
+router.get(
+  '/client-panel/lead-intelligence',
+  requireAdmin,
+  logAdminAction('VIEW_CLIENT_PANEL_LEAD_INTELLIGENCE', 'client_panel'),
+  AdminController.getClientPanelLeadIntelligence
+);
+
+// User impersonation route
+router.post(
+  '/impersonate/:userId',
+  requireAdmin,
+  logAdminAction('IMPERSONATE_USER', 'user'),
+  AdminController.impersonateUser
+);
+
 export default router;

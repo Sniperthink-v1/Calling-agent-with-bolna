@@ -14,12 +14,15 @@ import {
   X,
   Menu,
   Phone,
-  Plug
+  Plug,
+  UserCheck
 } from 'lucide-react';
 import { useAdmin } from '@/contexts/AdminContext';
 import { useFocusTrap } from '../../hooks/useAccessibility';
 import { useResponsive, useTouchFriendly } from '../../hooks/useResponsive';
 import type { AdminMenuItem } from '@/types/admin';
+import { UserImpersonationDialog } from './UserImpersonationDialog';
+import { Button } from '@/components/ui/button';
 
 const adminMenuItems: AdminMenuItem[] = [
   {
@@ -126,6 +129,7 @@ export function AdminSidebar() {
   const location = useLocation();
   const { hasRole } = useAdmin();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isImpersonationDialogOpen, setIsImpersonationDialogOpen] = useState(false);
   const { isMobile } = useResponsive();
   const { touchTargetSize } = useTouchFriendly();
   const focusTrapRef = useFocusTrap(isMobileMenuOpen);
@@ -256,6 +260,18 @@ export function AdminSidebar() {
                 {filteredMenuItems.map(item => renderMenuItem(item))}
               </nav>
             </div>
+            <div className="flex-shrink-0 border-t border-gray-200 p-4">
+              <Button
+                onClick={() => {
+                  setIsImpersonationDialogOpen(true);
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-md flex items-center justify-center gap-2"
+              >
+                <UserCheck className="h-4 w-4" />
+                Sign in as User
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -280,8 +296,17 @@ export function AdminSidebar() {
               {filteredMenuItems.map(item => renderMenuItem(item))}
             </nav>
           </div>
-          <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-            <div className="flex items-center">
+          <div className="flex-shrink-0 border-t border-gray-200">
+            <div className="p-4">
+              <Button
+                onClick={() => setIsImpersonationDialogOpen(true)}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-md flex items-center justify-center gap-2"
+              >
+                <UserCheck className="h-4 w-4" />
+                Sign in as User
+              </Button>
+            </div>
+            <div className="flex items-center p-4 pt-0">
               <div className="flex-shrink-0">
                 <div className="h-8 w-8 rounded-full bg-teal-100 flex items-center justify-center">
                   <Shield className="h-5 w-5 text-teal-600" aria-hidden="true" />
@@ -295,6 +320,11 @@ export function AdminSidebar() {
           </div>
         </div>
       </aside>
+
+      <UserImpersonationDialog
+        open={isImpersonationDialogOpen}
+        onOpenChange={setIsImpersonationDialogOpen}
+      />
     </>
   );
 }

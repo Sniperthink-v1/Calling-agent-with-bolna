@@ -31,6 +31,7 @@ import { queryClient } from "./lib/queryClient";
 import OAuthCallback from "./pages/OAuthCallback";
 import EmailVerificationPage from "./pages/EmailVerificationPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ClientPanelLayout from "./components/clientPanel/ClientPanelLayout";
 
 // Lazy load admin components to fix object-to-primitive conversion error
 const LazyUserManagement = lazy(() => import('./components/admin/UserManagement/UserManagement'));
@@ -190,6 +191,16 @@ function App() {
                                 } />
                               </Routes>
                             </AdminLayout>
+                          </AdminRoute>
+                        }
+                      />
+
+                      {/* Client Panel Route */}
+                      <Route
+                        path="/client-panel"
+                        element={
+                          <AdminRoute>
+                            <ClientPanelLayout />
                           </AdminRoute>
                         }
                       />

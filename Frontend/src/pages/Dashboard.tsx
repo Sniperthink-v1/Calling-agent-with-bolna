@@ -20,6 +20,7 @@ import LeadProfileTab from "@/components/chat/LeadProfileTab";
 import Overview from "@/pages/Overview";
 import Agents from "@/pages/Agents";
 import { DashboardErrorBoundary } from "@/components/ui/ErrorBoundaryWrapper";
+import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 
 export interface ChatMessage {
   from: string;
@@ -264,38 +265,44 @@ const DashboardContent = ({
 
   return (
     <div
-      className={`h-screen flex ${theme === "dark" ? "bg-black text-white" : "bg-gray-50 text-gray-900"
+      className={`h-screen flex flex-col ${theme === "dark" ? "bg-black text-white" : "bg-gray-50 text-gray-900"
         }`}
     >
-      {/* Sidebar with fixed width */}
-      <div className={`${sidebarCollapsed ? 'w-0' : 'w-64'} flex-shrink-0 transition-all duration-300 overflow-hidden h-full`}>
-        <Sidebar
-          agents={agents.map(agent => ({
-            id: agent.id,
-            name: agent.name,
-            type: agent.type || 'CallAgent' // Provide default type
-          }))}
-          activeTab={activeTab}
-          setActiveTab={handleTabChange}
-          activeSubTab={activeSubTab}
-          setActiveSubTab={setActiveSubTab}
-          onInviteTeam={() => { }}
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
-      </div>
+      {/* Impersonation Banner - shows when admin is viewing as user */}
+      <ImpersonationBanner />
       
-      {/* Main content area with proper constraints and full height border */}
-      <div className={`flex-1 flex flex-col min-w-0 h-full ${!sidebarCollapsed ? 'sidebar-separator' : ''}`}>
-        <TopNavigation 
-          sidebarCollapsed={sidebarCollapsed}
-          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
-        <main className="flex-1 overflow-hidden">
-          <div className="h-full overflow-auto invisible-scrollbar">
-            {renderContent()}
-          </div>
-        </main>
+      {/* Main dashboard container */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar with fixed width */}
+        <div className={`${sidebarCollapsed ? 'w-0' : 'w-64'} flex-shrink-0 transition-all duration-300 overflow-hidden h-full`}>
+          <Sidebar
+            agents={agents.map(agent => ({
+              id: agent.id,
+              name: agent.name,
+              type: agent.type || 'CallAgent' // Provide default type
+            }))}
+            activeTab={activeTab}
+            setActiveTab={handleTabChange}
+            activeSubTab={activeSubTab}
+            setActiveSubTab={setActiveSubTab}
+            onInviteTeam={() => { }}
+            collapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+        </div>
+        
+        {/* Main content area with proper constraints and full height border */}
+        <div className={`flex-1 flex flex-col min-w-0 h-full ${!sidebarCollapsed ? 'sidebar-separator' : ''}`}>
+          <TopNavigation 
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+          <main className="flex-1 overflow-hidden">
+            <div className="h-full overflow-auto invisible-scrollbar">
+              {renderContent()}
+            </div>
+          </main>
+        </div>
       </div>
       <Toaster position="bottom-right" />
     </div>

@@ -239,29 +239,45 @@ const Sidebar = ({
           <nav className="space-y-2">
             {/* Admin Panel Link */}
             {isAdmin && (
-              <Link
-                to="/admin"
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-left transition-colors ${theme === "dark"
-                  ? "text-slate-300 hover:bg-slate-700 hover:text-white"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                  } border-2 border-teal-200 bg-teal-50 hover:bg-teal-100`}
-              >
-                <div className="flex items-center">
-                  <Shield className="w-5 h-5 mr-3 text-teal-600" />
-                  <span className="font-medium text-teal-800">Admin Panel</span>
-                </div>
-                {adminNotifications > 0 && (
-                  <div className="flex items-center space-x-1">
-                    <Bell className="w-4 h-4 text-teal-600" />
-                    <Badge 
-                      variant="destructive" 
-                      className="h-5 min-w-[20px] text-xs flex items-center justify-center"
-                    >
-                      {adminNotifications > 99 ? '99+' : adminNotifications}
-                    </Badge>
+              <>
+                <Link
+                  to="/admin"
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-left transition-colors ${theme === "dark"
+                    ? "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                    } border-2 border-teal-200 bg-teal-50 hover:bg-teal-100`}
+                >
+                  <div className="flex items-center">
+                    <Shield className="w-5 h-5 mr-3 text-teal-600" />
+                    <span className="font-medium text-teal-800">Admin Panel</span>
                   </div>
-                )}
-              </Link>
+                  {adminNotifications > 0 && (
+                    <div className="flex items-center space-x-1">
+                      <Bell className="w-4 h-4 text-teal-600" />
+                      <Badge 
+                        variant="destructive" 
+                        className="h-5 min-w-[20px] text-xs flex items-center justify-center"
+                      >
+                        {adminNotifications > 99 ? '99+' : adminNotifications}
+                      </Badge>
+                    </div>
+                  )}
+                </Link>
+
+                {/* Client Panel Link */}
+                <Link
+                  to="/client-panel"
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-left transition-colors ${theme === "dark"
+                    ? "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                    } border-2 border-purple-200 bg-purple-50 hover:bg-purple-100`}
+                >
+                  <div className="flex items-center">
+                    <Users2 className="w-5 h-5 mr-3 text-purple-600" />
+                    <span className="font-medium text-purple-800">Client Panel</span>
+                  </div>
+                </Link>
+              </>
             )}
 
             {menuItems.map((item) => {

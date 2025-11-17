@@ -1642,4 +1642,795 @@ export class AdminController {
       });
     }
   }
+
+  // ============================================
+  // CLIENT PANEL ENDPOINTS
+  // ============================================
+
+  /**
+   * Get list of users for client panel dropdown
+   */
+  static async getClientPanelUsers(req: Request, res: Response): Promise<void> {
+    try {
+      const userModel = new UserModel();
+      const { search } = req.query;
+
+      const query = `
+        SELECT 
+          id, 
+          name, 
+          email, 
+          company,
+          role,
+          is_active,
+          created_at
+        FROM users
+        ${search ? 'WHERE name ILIKE $1 OR email ILIKE $1 OR company ILIKE $1' : ''}
+        ORDER BY name ASC
+      `;
+
+      const params = search ? [`%${search}%`] : [];
+      const result = await userModel.query(query, params);
+
+      res.json({
+        success: true,
+        data: result.rows,
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel users error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_USERS_ERROR',
+          message: 'Failed to retrieve users',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get aggregate metrics for client panel (all users or specific user)
+   */
+  static async getClientPanelMetrics(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.query;
+      const userModel = new UserModel();
+
+      const query = `
+        SELECT 
+          COUNT(DISTINCT users.id) as total_users,
+          COUNT(DISTINCT agents.id) as total_agents,
+          COUNT(DISTINCT calls.id) as total_calls,
+          COUNT(DISTINCT contacts.id) as total_contacts,
+          COUNT(DISTINCT call_campaigns.id) as total_campaigns,
+          COUNT(DISTINCT CASE WHEN contacts.is_customer = true THEN contacts.id END) as total_customers,
+          COALESCE(SUM(calls.duration_minutes), 0) as total_call_minutes,
+          COALESCE(SUM(calls.credits_used), 0) as total_credits_used,
+          COUNT(DISTINCT CASE WHEN calls.status = 'completed' THEN calls.id END) as completed_calls,
+          COUNT(DISTINCT CASE WHEN calls.status = 'failed' THEN calls.id END) as failed_calls
+        FROM users
+        LEFT JOIN agents ON agents.user_id = users.id
+        LEFT JOIN calls ON calls.user_id = users.id
+        LEFT JOIN contacts ON contacts.user_id = users.id
+        LEFT JOIN call_campaigns ON call_campaigns.user_id = users.id
+        ${userId ? 'WHERE users.id = $1' : ''}
+      `;
+
+      const params = userId ? [userId] : [];
+      const result = await userModel.query(query, params);
+      const metrics = result.rows[0];
+
+      res.json({
+        success: true,
+        data: {
+          totalUsers: parseInt(metrics.total_users) || 0,
+          totalAgents: parseInt(metrics.total_agents) || 0,
+          totalCalls: parseInt(metrics.total_calls) || 0,
+          totalContacts: parseInt(metrics.total_contacts) || 0,
+          totalCampaigns: parseInt(metrics.total_campaigns) || 0,
+          totalCustomers: parseInt(metrics.total_customers) || 0,
+          totalCallMinutes: parseInt(metrics.total_call_minutes) || 0,
+          totalCreditsUsed: parseInt(metrics.total_credits_used) || 0,
+          completedCalls: parseInt(metrics.completed_calls) || 0,
+          failedCalls: parseInt(metrics.failed_calls) || 0,
+          successRate: metrics.total_calls > 0 
+            ? Math.round((metrics.completed_calls / metrics.total_calls) * 100) 
+            : 0
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel metrics error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_METRICS_ERROR',
+          message: 'Failed to retrieve metrics',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get overview data for client panel
+   */
+  static async getClientPanelOverview(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, startDate, endDate } = req.query;
+      const userModel = new UserModel();
+
+      // Build date filter
+      let dateFilter = '';
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (userId) {
+        params.push(userId);
+        dateFilter += ` AND users.id = $${paramIndex}`;
+        paramIndex++;
+      }
+
+      if (startDate) {
+        params.push(startDate);
+        dateFilter += ` AND calls.created_at >= $${paramIndex}`;
+        paramIndex++;
+      }
+
+      if (endDate) {
+        params.push(endDate);
+        dateFilter += ` AND calls.created_at <= $${paramIndex}`;
+        paramIndex++;
+      }
+
+      // Get call statistics with trends
+      const callStatsQuery = `
+        SELECT 
+          DATE(calls.created_at) as date,
+          COUNT(calls.id) as total_calls,
+          COUNT(CASE WHEN calls.status = 'completed' THEN 1 END) as completed_calls,
+          COUNT(CASE WHEN calls.status = 'failed' THEN 1 END) as failed_calls,
+          SUM(calls.duration_minutes) as total_duration,
+          SUM(calls.credits_used) as credits_used
+        FROM calls
+        JOIN users ON users.id = calls.user_id
+        WHERE 1=1 ${dateFilter}
+        GROUP BY DATE(calls.created_at)
+        ORDER BY date DESC
+        LIMIT 30
+      `;
+
+      const callStats = await userModel.query(callStatsQuery, params);
+
+      res.json({
+        success: true,
+        data: {
+          callTrends: callStats.rows,
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel overview error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_OVERVIEW_ERROR',
+          message: 'Failed to retrieve overview data',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get agents data for client panel
+   */
+  static async getClientPanelAgents(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, page = 1, limit = 50 } = req.query;
+      const userModel = new UserModel();
+      const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+      const query = `
+        SELECT 
+          agents.*,
+          users.name as user_name,
+          users.email as user_email,
+          COUNT(calls.id) as total_calls
+        FROM agents
+        JOIN users ON users.id = agents.user_id
+        LEFT JOIN calls ON calls.agent_id = agents.id
+        ${userId ? 'WHERE agents.user_id = $1' : ''}
+        GROUP BY agents.id, users.id
+        ORDER BY agents.created_at DESC
+        LIMIT $${userId ? 2 : 1} OFFSET $${userId ? 3 : 2}
+      `;
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT agents.id) as total
+        FROM agents
+        ${userId ? 'WHERE agents.user_id = $1' : ''}
+      `;
+
+      const params = userId ? [userId, limit, offset] : [limit, offset];
+      const countParams = userId ? [userId] : [];
+
+      const [agentsResult, countResult] = await Promise.all([
+        userModel.query(query, params),
+        userModel.query(countQuery, countParams)
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          agents: agentsResult.rows,
+          total: parseInt(countResult.rows[0].total),
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel agents error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_AGENTS_ERROR',
+          message: 'Failed to retrieve agents',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get calls data for client panel (unified call logs)
+   */
+  static async getClientPanelCalls(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, page = 1, limit = 50, status, startDate, endDate } = req.query;
+      const userModel = new UserModel();
+      const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+      let filters = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (userId) {
+        filters.push(`calls.user_id = $${paramIndex}`);
+        params.push(userId);
+        paramIndex++;
+      }
+
+      if (status) {
+        filters.push(`calls.status = $${paramIndex}`);
+        params.push(status);
+        paramIndex++;
+      }
+
+      if (startDate) {
+        filters.push(`calls.created_at >= $${paramIndex}`);
+        params.push(startDate);
+        paramIndex++;
+      }
+
+      if (endDate) {
+        filters.push(`calls.created_at <= $${paramIndex}`);
+        params.push(endDate);
+        paramIndex++;
+      }
+
+      const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+      const query = `
+        SELECT 
+          calls.*,
+          agents.name as agent_name,
+          users.name as user_name,
+          users.email as user_email,
+          contacts.name as contact_name
+        FROM calls
+        JOIN users ON users.id = calls.user_id
+        LEFT JOIN agents ON agents.id = calls.agent_id
+        LEFT JOIN contacts ON contacts.id = calls.contact_id
+        ${whereClause}
+        ORDER BY calls.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      params.push(limit, offset);
+
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM calls
+        ${whereClause}
+      `;
+
+      const countParams = params.slice(0, -2);
+
+      const [callsResult, countResult] = await Promise.all([
+        userModel.query(query, params),
+        userModel.query(countQuery, countParams)
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          calls: callsResult.rows,
+          total: parseInt(countResult.rows[0].total),
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel calls error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_CALLS_ERROR',
+          message: 'Failed to retrieve calls',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get contacts data for client panel
+   */
+  static async getClientPanelContacts(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, page = 1, limit = 50, search } = req.query;
+      const userModel = new UserModel();
+      const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+      let filters = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (userId) {
+        filters.push(`contacts.user_id = $${paramIndex}`);
+        params.push(userId);
+        paramIndex++;
+      }
+
+      if (search) {
+        filters.push(`(contacts.name ILIKE $${paramIndex} OR contacts.phone_number ILIKE $${paramIndex} OR contacts.email ILIKE $${paramIndex})`);
+        params.push(`%${search}%`);
+        paramIndex++;
+      }
+
+      const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+      const query = `
+        SELECT 
+          contacts.*,
+          users.name as user_name,
+          users.email as user_email,
+          COUNT(calls.id) as total_calls
+        FROM contacts
+        JOIN users ON users.id = contacts.user_id
+        LEFT JOIN calls ON calls.contact_id = contacts.id
+        ${whereClause}
+        GROUP BY contacts.id, users.id
+        ORDER BY contacts.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      params.push(limit, offset);
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT contacts.id) as total
+        FROM contacts
+        ${whereClause}
+      `;
+
+      const countParams = params.slice(0, -2);
+
+      const [contactsResult, countResult] = await Promise.all([
+        userModel.query(query, params),
+        userModel.query(countQuery, countParams)
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          contacts: contactsResult.rows,
+          total: parseInt(countResult.rows[0].total),
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel contacts error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_CONTACTS_ERROR',
+          message: 'Failed to retrieve contacts',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get campaigns data for client panel
+   */
+  static async getClientPanelCampaigns(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, page = 1, limit = 50, status } = req.query;
+      const userModel = new UserModel();
+      const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+      let filters = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (userId) {
+        filters.push(`call_campaigns.user_id = $${paramIndex}`);
+        params.push(userId);
+        paramIndex++;
+      }
+
+      if (status) {
+        filters.push(`call_campaigns.status = $${paramIndex}`);
+        params.push(status);
+        paramIndex++;
+      }
+
+      const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+      const query = `
+        SELECT 
+          call_campaigns.*,
+          users.name as user_name,
+          users.email as user_email,
+          agents.name as agent_name,
+          COUNT(DISTINCT cq.id) as total_calls
+        FROM call_campaigns
+        JOIN users ON users.id = call_campaigns.user_id
+        LEFT JOIN agents ON agents.id = call_campaigns.agent_id
+        LEFT JOIN call_queue cq ON cq.campaign_id = call_campaigns.id
+        ${whereClause}
+        GROUP BY call_campaigns.id, users.id, agents.id
+        ORDER BY call_campaigns.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      params.push(limit, offset);
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT call_campaigns.id) as total
+        FROM call_campaigns
+        ${whereClause}
+      `;
+
+      const countParams = params.slice(0, -2);
+
+      const [campaignsResult, countResult] = await Promise.all([
+        userModel.query(query, params),
+        userModel.query(countQuery, countParams)
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          campaigns: campaignsResult.rows,
+          total: parseInt(countResult.rows[0].total),
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel campaigns error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_CAMPAIGNS_ERROR',
+          message: 'Failed to retrieve campaigns',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get customers data for client panel
+   */
+  static async getClientPanelCustomers(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, page = 1, limit = 50, search } = req.query;
+      const userModel = new UserModel();
+      const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+      let filters = ['contacts.is_customer = true'];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (userId) {
+        filters.push(`contacts.user_id = $${paramIndex}`);
+        params.push(userId);
+        paramIndex++;
+      }
+
+      if (search) {
+        filters.push(`(contacts.name ILIKE $${paramIndex} OR contacts.company ILIKE $${paramIndex})`);
+        params.push(`%${search}%`);
+        paramIndex++;
+      }
+
+      const whereClause = `WHERE ${filters.join(' AND ')}`;
+
+      const query = `
+        SELECT 
+          contacts.*,
+          users.name as user_name,
+          users.email as user_email,
+          COUNT(DISTINCT calls.id) as total_calls,
+          MAX(calls.created_at) as last_contact_date
+        FROM contacts
+        JOIN users ON users.id = contacts.user_id
+        LEFT JOIN calls ON calls.contact_id = contacts.id
+        ${whereClause}
+        GROUP BY contacts.id, users.id
+        ORDER BY contacts.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      params.push(limit, offset);
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT contacts.id) as total
+        FROM contacts
+        ${whereClause}
+      `;
+
+      const countParams = params.slice(0, -2);
+
+      const [customersResult, countResult] = await Promise.all([
+        userModel.query(query, params),
+        userModel.query(countQuery, countParams)
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          customers: customersResult.rows,
+          total: parseInt(countResult.rows[0].total),
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel customers error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_CUSTOMERS_ERROR',
+          message: 'Failed to retrieve customers',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get lead intelligence data for client panel (grouped leads like user dashboard)
+   */
+  static async getClientPanelLeadIntelligence(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, page = 1, limit = 50 } = req.query;
+      const userModel = new UserModel();
+      const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+      let userFilter = userId ? `AND c.user_id = $1` : '';
+      const params: any[] = userId ? [userId] : [];
+      const offsetParam = params.length + 1;
+      const limitParam = params.length + 2;
+
+      // Grouped leads query matching user dashboard structure
+      const query = `
+        WITH phone_leads_base AS (
+          SELECT 
+            c.phone_number::text as group_key,
+            'phone'::text as group_type,
+            c.phone_number::text as phone,
+            c.user_id,
+            users.name as user_name,
+            users.email as user_email,
+            FIRST_VALUE(COALESCE(co.email, la.extracted_email)) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as email,
+            FIRST_VALUE(COALESCE(co.name, la.extracted_name, 'Anonymous')) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as name,
+            FIRST_VALUE(COALESCE(co.company, la.company_name)) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as company,
+            FIRST_VALUE(c.lead_type) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as lead_type,
+            FIRST_VALUE(
+              CASE 
+                WHEN la.lead_status_tag IS NOT NULL THEN la.lead_status_tag
+                WHEN c.status = 'failed' AND c.call_lifecycle_status IS NOT NULL THEN c.call_lifecycle_status
+                ELSE 'Cold'
+              END
+            ) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as recent_lead_tag,
+            FIRST_VALUE(la.engagement_health) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as recent_engagement_level,
+            FIRST_VALUE(la.intent_level) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as recent_intent_level,
+            FIRST_VALUE(la.budget_constraint) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as recent_budget_constraint,
+            FIRST_VALUE(la.urgency_level) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as recent_timeline_urgency,
+            FIRST_VALUE(la.fit_alignment) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::text as recent_fit_alignment,
+            FIRST_VALUE(COALESCE(la.cta_escalated_to_human, false)) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC) as escalated_to_human,
+            FIRST_VALUE(c.created_at) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC) as last_contact,
+            FIRST_VALUE(la.demo_book_datetime) OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC) as demo_scheduled,
+            COUNT(*) OVER (PARTITION BY c.phone_number, c.user_id)::bigint as interactions,
+            ROW_NUMBER() OVER (PARTITION BY c.phone_number, c.user_id ORDER BY c.created_at DESC)::bigint as rn
+          FROM calls c
+          JOIN users ON users.id = c.user_id
+          LEFT JOIN lead_analytics la ON c.id = la.call_id
+          LEFT JOIN contacts co ON c.contact_id = co.id
+          WHERE c.phone_number IS NOT NULL 
+            AND c.phone_number != ''
+            AND (co.is_customer IS NULL OR co.is_customer = false)
+            ${userFilter}
+        ),
+        phone_leads AS (
+          SELECT 
+            plb.*,
+            COALESCE((SELECT STRING_AGG(DISTINCT a.name, ', ') 
+             FROM calls c2 
+             LEFT JOIN agents a ON c2.agent_id = a.id 
+             WHERE c2.phone_number = plb.phone AND c2.user_id = plb.user_id), '')::text as interacted_agents
+          FROM phone_leads_base plb
+          WHERE plb.rn = 1
+        ),
+        all_leads AS (
+          SELECT * FROM phone_leads
+        )
+        SELECT 
+          al.*,
+          fu.follow_up_date as follow_up_scheduled,
+          fu.follow_up_status
+        FROM all_leads al
+        LEFT JOIN (
+          SELECT DISTINCT ON (lead_phone, user_id)
+            lead_phone,
+            user_id,
+            follow_up_date,
+            follow_up_status
+          FROM follow_ups 
+          WHERE follow_up_status != 'cancelled'
+          ORDER BY lead_phone, user_id, follow_up_date DESC
+        ) fu ON al.phone = fu.lead_phone AND al.user_id = fu.user_id
+        ORDER BY al.last_contact DESC
+        LIMIT $${limitParam} OFFSET $${offsetParam}
+      `;
+
+      params.push(parseInt(limit as string), offset);
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT c.phone_number, c.user_id) as total
+        FROM calls c
+        LEFT JOIN contacts co ON c.contact_id = co.id
+        WHERE c.phone_number IS NOT NULL 
+          AND c.phone_number != ''
+          AND (co.is_customer IS NULL OR co.is_customer = false)
+          ${userFilter}
+      `;
+
+      const countParams = userId ? [userId] : [];
+
+      const [intelligenceResult, countResult] = await Promise.all([
+        userModel.query(query, params),
+        userModel.query(countQuery, countParams)
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          intelligence: intelligenceResult.rows,
+          total: parseInt(countResult.rows[0].total),
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get client panel lead intelligence error:', error);
+      res.status(500).json({
+        error: {
+          code: 'CLIENT_PANEL_LEAD_INTELLIGENCE_ERROR',
+          message: 'Failed to retrieve lead intelligence data',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Impersonate a user (admin-only feature)
+   * Generates a temporary token for the specified user
+   */
+  static async impersonateUser(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const userModel = new UserModel();
+
+      // Fetch the target user with all necessary fields
+      const userQuery = `
+        SELECT id, email, name, role, is_active, email_verified, credits,
+               auth_provider, created_at, updated_at
+        FROM users 
+        WHERE id = $1
+      `;
+      const userResult = await userModel.query(userQuery, [userId]);
+
+      if (userResult.rows.length === 0) {
+        res.status(404).json({
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'User not found',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      const userData = userResult.rows[0];
+
+      if (!userData.is_active) {
+        res.status(400).json({
+          error: {
+            code: 'USER_INACTIVE',
+            message: 'Cannot impersonate inactive user',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      // Create user object matching authService User interface
+      const user = {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        credits: userData.credits,
+        isActive: userData.is_active,
+        emailVerified: userData.email_verified,
+        role: userData.role,
+        authProvider: userData.auth_provider,
+        createdAt: userData.created_at,
+        updatedAt: userData.updated_at,
+      };
+
+      // Import authService
+      const { authService } = await import('../services/authService');
+
+      // Generate proper tokens using authService (same as login)
+      const token = authService.generateToken(user);
+      const refreshToken = authService.generateRefreshToken(user);
+
+      // Create session in database so it can be validated
+      await authService.createSession(user.id, token, req.ip, req.get('User-Agent'), refreshToken);
+
+      logger.info(`Admin ${(req.user as any)?.id} impersonating user ${userId}`);
+
+      res.json({
+        success: true,
+        data: {
+          token,
+          refreshToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          },
+        },
+        timestamp: new Date(),
+      });
+    } catch (error: any) {
+      logger.error('Impersonate user error:', error);
+      res.status(500).json({
+        error: {
+          code: 'IMPERSONATION_ERROR',
+          message: 'Failed to impersonate user',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
 }
