@@ -750,6 +750,7 @@ export class CallService {
         agent_id: callRequest.agentId,
         user_id: callRequest.userId,
         contact_id: callRequest.contactId,
+        campaign_id: callRequest.metadata?.campaign_id, // Pass campaign_id from metadata
         bolna_execution_id: bolnaResponse.execution_id,
         phone_number: callRequest.phoneNumber,
         call_source: 'phone',

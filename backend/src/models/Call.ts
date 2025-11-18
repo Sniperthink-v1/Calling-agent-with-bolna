@@ -238,6 +238,7 @@ export class CallModel extends BaseModel<CallInterface> {
     agent_id: string;
     user_id: string;
     contact_id?: string;
+    campaign_id?: string; // Track campaign association
     bolna_execution_id: string;
     phone_number: string;
     call_source?: 'phone' | 'internet' | 'unknown';
@@ -261,7 +262,50 @@ export class CallModel extends BaseModel<CallInterface> {
     if (callData.id) {
       // Use pre-reserved ID
       const baseCols = `
-        id, agent_id, user_id, contact_id, bolna_execution_id,
+        id, agent_id, user_id, contact_id, campaign_id, bolna_execution_id,
+        phone_number, call_source, caller_name, caller_email,
+        duration_seconds, duration_minutes, credits_used, status,
+        recording_url, metadata, completed_at
+      `;
+
+      const baseVals = `
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10,
+        $11, $12, $13, $14,
+        $15, $16,
+      `;
+
+      query = `
+        INSERT INTO calls (${baseCols})
+        VALUES (
+          ${baseVals}
+          ${completeNow ? 'CURRENT_TIMESTAMP' : 'NULL'}
+        )
+        RETURNING *
+      `;
+
+      params = [
+        callData.id, // Pre-reserved ID
+        callData.agent_id,
+        callData.user_id,
+        callData.contact_id ?? null,
+        callData.campaign_id ?? null, // Store campaign association
+        callData.bolna_execution_id,
+        callData.phone_number,
+        callData.call_source || 'phone',
+        callData.caller_name ?? null,
+        callData.caller_email ?? null,
+        durationSeconds,
+        durationMinutes,
+        creditsUsed,
+        status,
+        null, // recording_url not set at creation
+        callData.metadata || {}
+      ];
+    } else {
+      // Generate new ID automatically
+      const baseCols = `
+        agent_id, user_id, contact_id, campaign_id, bolna_execution_id,
         phone_number, call_source, caller_name, caller_email,
         duration_seconds, duration_minutes, credits_used, status,
         recording_url, metadata, completed_at
@@ -284,51 +328,10 @@ export class CallModel extends BaseModel<CallInterface> {
       `;
 
       params = [
-        callData.id, // Pre-reserved ID
         callData.agent_id,
         callData.user_id,
         callData.contact_id ?? null,
-        callData.bolna_execution_id,
-        callData.phone_number,
-        callData.call_source || 'phone',
-        callData.caller_name ?? null,
-        callData.caller_email ?? null,
-        durationSeconds,
-        durationMinutes,
-        creditsUsed,
-        status,
-        null, // recording_url not set at creation
-        callData.metadata || {}
-      ];
-    } else {
-      // Generate new ID automatically
-      const baseCols = `
-        agent_id, user_id, contact_id, bolna_execution_id,
-        phone_number, call_source, caller_name, caller_email,
-        duration_seconds, duration_minutes, credits_used, status,
-        recording_url, metadata, completed_at
-      `;
-
-      const baseVals = `
-        $1, $2, $3, $4,
-        $5, $6, $7, $8,
-        $9, $10, $11, $12,
-        $13, $14,
-      `;
-
-      query = `
-        INSERT INTO calls (${baseCols})
-        VALUES (
-          ${baseVals}
-          ${completeNow ? 'CURRENT_TIMESTAMP' : 'NULL'}
-        )
-        RETURNING *
-      `;
-
-      params = [
-        callData.agent_id,
-        callData.user_id,
-        callData.contact_id ?? null,
+        callData.campaign_id ?? null, // Store campaign association
         callData.bolna_execution_id,
         callData.phone_number,
         callData.call_source || 'phone',
