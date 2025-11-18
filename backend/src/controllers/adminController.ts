@@ -9,6 +9,7 @@ import { AgentModel } from '../models/Agent';
 import { systemMetricsService } from '../services/systemMetricsService';
 import { databaseAnalyticsService } from '../services/databaseAnalyticsService';
 import { monitoringService } from '../services/monitoringService';
+import { configService } from '../services/configService';
 
 // Admin controller - handles admin panel functionality
 export class AdminController {
@@ -370,6 +371,126 @@ export class AdminController {
         error: {
           code: 'ADJUST_CREDITS_ERROR',
           message: 'Failed to adjust user credits',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get user concurrency settings
+   */
+  static async getUserConcurrency(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const userModel = new UserModel();
+
+      const user = await userModel.findById(userId);
+
+      if (!user) {
+        res.status(404).json({
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'User not found',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      // Get active calls count for this user
+      const activeCallsQuery = `
+        SELECT COUNT(*) as active_calls
+        FROM calls
+        WHERE user_id = $1 
+        AND status IN ('active', 'ringing', 'in_progress')
+      `;
+      const activeCallsResult = await userModel.query(activeCallsQuery, [userId]);
+      const activeCalls = parseInt(activeCallsResult.rows[0]?.active_calls || '0');
+
+      // Get user's concurrent call limit (default to system max or 5)
+      const userLimit = user.concurrent_calls_limit || configService.get('max_concurrent_calls') || 5;
+      const availableSlots = Math.max(0, userLimit - activeCalls);
+
+      res.json({
+        success: true,
+        settings: {
+          user_concurrent_calls_limit: userLimit,
+          user_active_calls: activeCalls,
+          user_available_slots: availableSlots
+        },
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Get user concurrency error:', error);
+      res.status(500).json({
+        error: {
+          code: 'GET_USER_CONCURRENCY_ERROR',
+          message: 'Failed to retrieve user concurrency settings',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Update user concurrency limit
+   */
+  static async updateUserConcurrency(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { user_limit } = req.body;
+
+      if (!user_limit || user_limit < 1 || user_limit > 10) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_LIMIT',
+            message: 'Concurrency limit must be between 1 and 10',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      const userModel = new UserModel();
+      const user = await userModel.findById(userId);
+
+      if (!user) {
+        res.status(404).json({
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'User not found',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      // Update user's concurrent calls limit
+      const updateQuery = `
+        UPDATE users 
+        SET concurrent_calls_limit = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING *
+      `;
+      const result = await userModel.query(updateQuery, [user_limit, userId]);
+      const updatedUser = result.rows[0];
+
+      res.json({
+        success: true,
+        data: {
+          userId: updatedUser.id,
+          concurrent_calls_limit: updatedUser.concurrent_calls_limit
+        },
+        message: 'User concurrency limit updated successfully',
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      logger.error('Update user concurrency error:', error);
+      res.status(500).json({
+        error: {
+          code: 'UPDATE_USER_CONCURRENCY_ERROR',
+          message: 'Failed to update user concurrency limit',
           timestamp: new Date(),
         },
       });
@@ -948,13 +1069,41 @@ export class AdminController {
    */
   static async getSystemConfig(req: Request, res: Response): Promise<void> {
     try {
-      // This would typically query the system_config table
-      // For now, return a placeholder response
+      // Return all configuration values from database
       const config = {
-        credits_per_minute: 1,
-        max_contacts_per_upload: 1000,
-        new_user_bonus_credits: 15,
-        minimum_credit_purchase: 50
+        // Legacy Billing Configuration
+        credits_per_minute: configService.get('credits_per_minute'),
+        max_contacts_per_upload: configService.get('max_contacts_per_upload'),
+        new_user_bonus_credits: configService.get('new_user_bonus_credits'),
+        minimum_credit_purchase: configService.get('minimum_credit_purchase'),
+        
+        // Legacy Authentication & Security
+        session_duration_hours: configService.get('session_duration_hours'),
+        max_login_attempts: configService.get('max_login_attempts'),
+        lockout_duration_minutes: configService.get('lockout_duration_minutes'),
+        password_min_length: configService.get('password_min_length'),
+        require_email_verification: configService.get('require_email_verification'),
+        password_reset_token_expiry_hours: configService.get('password_reset_token_expiry_hours'),
+        
+        // Legacy System Operations
+        kpi_refresh_interval_minutes: configService.get('kpi_refresh_interval_minutes'),
+        
+        // New Billing Configuration
+        stripe_webhook_secret: configService.get('stripe_webhook_secret'),
+        stripe_secret_key: configService.get('stripe_secret_key'),
+        stripe_public_key: configService.get('stripe_public_key'),
+        monthly_call_limit: configService.get('monthly_call_limit'),
+        
+        // New Authentication Settings
+        jwt_secret: configService.get('jwt_secret'),
+        jwt_expiration: configService.get('jwt_expiration'),
+        session_timeout: configService.get('session_timeout'),
+        
+        // New System Operations
+        max_concurrent_calls: configService.get('max_concurrent_calls'),
+        default_voice_settings: configService.get('default_voice_settings'),
+        call_recording_enabled: configService.get('call_recording_enabled'),
+        system_timezone: configService.get('system_timezone')
       };
 
       res.json({
@@ -979,9 +1128,9 @@ export class AdminController {
    */
   static async updateSystemConfig(req: Request, res: Response): Promise<void> {
     try {
-      const { config } = req.body;
+      const config = req.body;
 
-      if (!config) {
+      if (!config || Object.keys(config).length === 0) {
         res.status(400).json({
           error: {
             code: 'MISSING_CONFIG',
@@ -992,11 +1141,32 @@ export class AdminController {
         return;
       }
 
-      // This would typically update the system_config table
-      // For now, return a success response
+      // Update system configuration in database and refresh cache
+      await configService.updateConfig(config);
+
+      // Return updated configuration
+      const updatedConfig = {
+        // Billing Configuration
+        stripe_webhook_secret: configService.get('stripe_webhook_secret'),
+        stripe_secret_key: configService.get('stripe_secret_key'),
+        stripe_public_key: configService.get('stripe_public_key'),
+        monthly_call_limit: configService.get('monthly_call_limit'),
+        
+        // Authentication Settings
+        jwt_secret: configService.get('jwt_secret'),
+        jwt_expiration: configService.get('jwt_expiration'),
+        session_timeout: configService.get('session_timeout'),
+        
+        // System Operations
+        max_concurrent_calls: configService.get('max_concurrent_calls'),
+        default_voice_settings: configService.get('default_voice_settings'),
+        call_recording_enabled: configService.get('call_recording_enabled'),
+        system_timezone: configService.get('system_timezone')
+      };
+
       res.json({
         success: true,
-        data: config,
+        data: updatedConfig,
         message: 'System configuration updated successfully',
         timestamp: new Date()
       });
@@ -1697,29 +1867,69 @@ export class AdminController {
       const { userId } = req.query;
       const userModel = new UserModel();
 
-      const query = `
-        SELECT 
-          COUNT(DISTINCT users.id) as total_users,
-          COUNT(DISTINCT agents.id) as total_agents,
-          COUNT(DISTINCT calls.id) as total_calls,
-          COUNT(DISTINCT contacts.id) as total_contacts,
-          COUNT(DISTINCT call_campaigns.id) as total_campaigns,
-          COUNT(DISTINCT CASE WHEN contacts.is_customer = true THEN contacts.id END) as total_customers,
-          COALESCE(SUM(calls.duration_minutes), 0) as total_call_minutes,
-          COALESCE(SUM(calls.credits_used), 0) as total_credits_used,
-          COUNT(DISTINCT CASE WHEN calls.status = 'completed' THEN calls.id END) as completed_calls,
-          COUNT(DISTINCT CASE WHEN calls.status = 'failed' THEN calls.id END) as failed_calls
-        FROM users
-        LEFT JOIN agents ON agents.user_id = users.id
-        LEFT JOIN calls ON calls.user_id = users.id
-        LEFT JOIN contacts ON contacts.user_id = users.id
-        LEFT JOIN call_campaigns ON call_campaigns.user_id = users.id
-        ${userId ? 'WHERE users.id = $1' : ''}
-      `;
-
+      // Optimized parallel queries instead of expensive JOINs
+      const userFilter = userId ? 'WHERE user_id = $1' : '';
       const params = userId ? [userId] : [];
-      const result = await userModel.query(query, params);
-      const metrics = result.rows[0];
+
+      const [
+        userCount,
+        agentCount,
+        callStats,
+        contactStats,
+        campaignCount
+      ] = await Promise.all([
+        // User count
+        userModel.query(
+          userId 
+            ? `SELECT 1 as total_users WHERE EXISTS (SELECT 1 FROM users WHERE id = $1)`
+            : `SELECT COUNT(*) as total_users FROM users`,
+          params
+        ),
+        // Agent count
+        userModel.query(
+          `SELECT COUNT(*) as total_agents FROM agents ${userFilter}`,
+          params
+        ),
+        // Call statistics (combined to reduce queries)
+        userModel.query(
+          `SELECT 
+            COUNT(*) as total_calls,
+            COALESCE(SUM(duration_minutes), 0) as total_call_minutes,
+            COALESCE(SUM(credits_used), 0) as total_credits_used,
+            COUNT(*) FILTER (WHERE status = 'completed') as completed_calls,
+            COUNT(*) FILTER (WHERE status = 'failed') as failed_calls
+          FROM calls ${userFilter}`,
+          params
+        ),
+        // Contact statistics
+        userModel.query(
+          `SELECT 
+            COUNT(*) as total_contacts,
+            COUNT(*) FILTER (WHERE is_customer = true) as total_customers
+          FROM contacts ${userFilter}`,
+          params
+        ),
+        // Campaign count
+        userModel.query(
+          `SELECT COUNT(*) as total_campaigns FROM call_campaigns ${userFilter}`,
+          params
+        )
+      ]);
+
+      const calls = callStats.rows[0];
+      const contacts = contactStats.rows[0];
+      const metrics = {
+        total_users: userId ? (userCount.rows[0]?.total_users || 0) : parseInt(userCount.rows[0]?.total_users || '0'),
+        total_agents: parseInt(agentCount.rows[0]?.total_agents || '0'),
+        total_calls: parseInt(calls?.total_calls || '0'),
+        total_contacts: parseInt(contacts?.total_contacts || '0'),
+        total_campaigns: parseInt(campaignCount.rows[0]?.total_campaigns || '0'),
+        total_customers: parseInt(contacts?.total_customers || '0'),
+        total_call_minutes: parseFloat(calls?.total_call_minutes || '0'),
+        total_credits_used: parseFloat(calls?.total_credits_used || '0'),
+        completed_calls: parseInt(calls?.completed_calls || '0'),
+        failed_calls: parseInt(calls?.failed_calls || '0')
+      };
 
       res.json({
         success: true,

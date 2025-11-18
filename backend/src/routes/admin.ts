@@ -45,6 +45,21 @@ router.post(
   AdminController.adjustCredits
 );
 
+// User concurrency management
+router.get(
+  '/users/:userId/concurrency',
+  requireAdmin,
+  logAdminAction('VIEW_USER_CONCURRENCY', 'user'),
+  AdminController.getUserConcurrency
+);
+
+router.put(
+  '/users/:userId/concurrency',
+  requireAdmin,
+  logAdminAction('UPDATE_USER_CONCURRENCY', 'user'),
+  AdminController.updateUserConcurrency
+);
+
 // System statistics (admin access required)
 router.get(
   '/stats/system',
@@ -101,6 +116,21 @@ router.get(
 
 router.put(
   '/config',
+  requireSuperAdmin,
+  logAdminAction('UPDATE_SYSTEM_CONFIG', 'config'),
+  AdminController.updateSystemConfig
+);
+
+// System configuration endpoints (super admin access required)
+router.get(
+  '/config/system',
+  requireSuperAdmin,
+  logAdminAction('VIEW_SYSTEM_CONFIG', 'config'),
+  AdminController.getSystemConfig
+);
+
+router.put(
+  '/config/system',
   requireSuperAdmin,
   logAdminAction('UPDATE_SYSTEM_CONFIG', 'config'),
   AdminController.updateSystemConfig

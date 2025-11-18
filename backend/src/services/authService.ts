@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { databaseService } from './databaseService';
 import { emailService } from './emailService';
+import { configService } from './configService';
 import database from '../config/database';
 
 export interface User {
@@ -35,11 +36,8 @@ interface LoginAttempt {
 
 class AuthService {
   private readonly JWT_SECRET: string;
-  private readonly JWT_EXPIRES_IN = '24h';
   private readonly JWT_REFRESH_EXPIRES_IN = '7d'; // 7 days for refresh tokens
   private readonly SALT_ROUNDS = 12;
-  private readonly MAX_LOGIN_ATTEMPTS = 5;
-  private readonly LOCKOUT_DURATION = 30 * 60 * 1000; // 30 minutes
   private sessionCleanupInterval: NodeJS.Timeout | null = null;
   private readonly SESSION_RETENTION_DAYS = 15; // Keep sessions for 15 days
 
@@ -74,7 +72,7 @@ class AuthService {
       email: user.email,
       type: 'access',
       iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours
+      exp: Math.floor(Date.now() / 1000) + (configService.get('session_duration_hours') * 60 * 60), // From config
     };
 
     return jwt.sign(payload, this.JWT_SECRET);
@@ -367,7 +365,8 @@ class AuthService {
     try {
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       const refreshTokenHash = refreshToken ? crypto.createHash('sha256').update(refreshToken).digest('hex') : null;
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      const sessionHours = configService.get('session_duration_hours');
+      const expiresAt = new Date(Date.now() + sessionHours * 60 * 60 * 1000); // From config
       const refreshExpiresAt = refreshToken ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null; // 7 days
 
       const query = `
@@ -388,7 +387,8 @@ class AuthService {
     try {
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       const refreshTokenHash = refreshToken ? crypto.createHash('sha256').update(refreshToken).digest('hex') : null;
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      const sessionHours = configService.get('session_duration_hours');
+      const expiresAt = new Date(Date.now() + sessionHours * 60 * 60 * 1000); // From config
       const refreshExpiresAt = refreshToken ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null; // 7 days
 
       // Use a transaction to combine both operations
@@ -473,7 +473,8 @@ class AuthService {
       // Update session with new tokens
       const newTokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
       const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      const sessionHours = configService.get('session_duration_hours');
+      const expiresAt = new Date(Date.now() + sessionHours * 60 * 60 * 1000); // From config
       const refreshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
       const updateQuery = `
@@ -542,18 +543,20 @@ class AuthService {
    */
   async isAccountLocked(email: string): Promise<boolean> {
     try {
+      const lockoutMinutes = configService.get('lockout_duration_minutes');
       const query = `
         SELECT COUNT(*) as failed_count
         FROM login_attempts 
         WHERE email = $1 
           AND success = false 
-          AND attempted_at > CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+          AND attempted_at > CURRENT_TIMESTAMP - INTERVAL '${lockoutMinutes} minutes'
       `;
 
       const result = await databaseService.query(query, [email]);
       const failedCount = parseInt(result.rows[0].failed_count);
 
-      return failedCount >= this.MAX_LOGIN_ATTEMPTS;
+      const maxAttempts = configService.get('max_login_attempts');
+      return failedCount >= maxAttempts;
     } catch (error) {
       console.error('Error checking account lock status:', error);
       return false;

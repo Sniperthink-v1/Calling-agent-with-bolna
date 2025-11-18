@@ -43,13 +43,14 @@ const UserConcurrency: React.FC = () => {
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ['admin-users'],
     queryFn: async () => {
-      const response = await authenticatedFetch('/api/admin/users');
+      const response = await authenticatedFetch('/api/admin/users?limit=1000');
       if (!response.ok) throw new Error('Failed to fetch users');
-      return response.json();
+      const result = await response.json();
+      return result;
     },
   });
 
-  const users = usersData?.users || [];
+  const users = usersData?.data?.users || [];
 
   // Fetch concurrency settings for selected user
   const { data: settings, isLoading: settingsLoading } = useQuery({

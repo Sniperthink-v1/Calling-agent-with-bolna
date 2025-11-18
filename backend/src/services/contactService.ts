@@ -1,5 +1,6 @@
 import ContactModel, { ContactInterface, CreateContactData, UpdateContactData } from '../models/Contact';
 import { logger } from '../utils/logger';
+import { configService } from './configService';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 
@@ -343,9 +344,10 @@ export class ContactService {
       // Parse Excel file
       const contacts = this.parseExcelFile(fileBuffer, filename);
       
-      // Validate contact limit - increased to 10,000
-      if (contacts.length > 10000) {
-        throw new Error('Maximum 10,000 contacts allowed per upload');
+      // Validate contact limit using configuration
+      const maxContacts = configService.get('max_contacts_per_upload');
+      if (contacts.length > maxContacts) {
+        throw new Error(`Maximum ${maxContacts} contacts allowed per upload`);
       }
 
       // Process contacts efficiently with bulk insert

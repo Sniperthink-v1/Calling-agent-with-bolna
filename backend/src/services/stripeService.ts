@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { BillingService } from './billingService';
 import CreditTransactionModel from '../models/CreditTransaction';
+import { configService } from './configService';
 
 export class StripeService {
   private static stripe: Stripe | null = null;
@@ -58,9 +59,10 @@ export class StripeService {
       throw new Error('Stripe is not configured');
     }
 
-    // Validate minimum credit purchase
-    if (creditAmount < 50) {
-      throw new Error('Minimum credit purchase is 50 credits');
+    // Validate minimum credit purchase using configuration
+    const minimumPurchase = configService.get('minimum_credit_purchase');
+    if (creditAmount < minimumPurchase) {
+      throw new Error(`Minimum credit purchase is ${minimumPurchase} credits`);
     }
 
     // Calculate price (assuming $1 per credit for now - this should be configurable)
@@ -336,7 +338,7 @@ export class StripeService {
   }
 
   /**
-   * Get pricing configuration (this should be moved to database/config later)
+   * Get pricing configuration from system config
    */
   static getPricingConfig(): {
     pricePerCredit: number;
@@ -344,8 +346,8 @@ export class StripeService {
     currency: string;
   } {
     return {
-      pricePerCredit: 1, // $1 per credit
-      minimumPurchase: 50, // 50 credits minimum
+      pricePerCredit: 1, // $1 per credit (could be made configurable later)
+      minimumPurchase: configService.get('minimum_credit_purchase'),
       currency: 'usd'
     };
   }

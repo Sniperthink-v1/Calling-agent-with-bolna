@@ -163,9 +163,18 @@ function App() {
                                   </Suspense>
                                 } />
                                 <Route path="configuration" element={
-                                  <Suspense fallback={<div>Loading...</div>}>
-                                    <LazyConfiguration />
-                                  </Suspense>
+                                  <AdminRoute requiredRole="super_admin">
+                                    <Suspense fallback={<div>Loading...</div>}>
+                                      <LazyConfiguration />
+                                    </Suspense>
+                                  </AdminRoute>
+                                } />
+                                <Route path="config/*" element={
+                                  <AdminRoute requiredRole="super_admin">
+                                    <Suspense fallback={<div>Loading...</div>}>
+                                      <LazyConfiguration />
+                                    </Suspense>
+                                  </AdminRoute>
                                 } />
                                 <Route path="integrations" element={
                                   <Suspense fallback={<div>Loading...</div>}>

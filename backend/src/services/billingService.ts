@@ -2,6 +2,7 @@ import UserModel, { UserInterface } from '../models/User';
 import CreditTransactionModel, { CreditTransactionInterface, CreateCreditTransactionData } from '../models/CreditTransaction';
 import { DatabaseService } from './databaseService';
 import { notificationService } from './notificationService';
+import { configService } from './configService';
 
 // Billing service - business logic for credit management and billing
 export class BillingService {
@@ -23,8 +24,10 @@ export class BillingService {
   static calculateCreditsForDuration(durationSeconds: number): number {
     if (durationSeconds <= 0) return 0;
     
+    // Get credits per minute from configuration
+    const creditsPerMinute = configService.get('credits_per_minute');
     const minutes = Math.ceil(durationSeconds / 60);
-    return minutes;
+    return minutes * creditsPerMinute;
   }
 
   /**
@@ -217,13 +220,14 @@ export class BillingService {
   }
 
   /**
-   * Grant new user bonus credits (15 credits)
+   * Grant new user bonus credits (from configuration)
    */
   static async grantNewUserBonus(userId: string): Promise<{
     user: UserInterface;
     transaction: CreditTransactionInterface;
   }> {
-    const bonusAmount = 15; // Default bonus for new users
+    // Get bonus amount from configuration
+    const bonusAmount = configService.get('new_user_bonus_credits');
     
     return await this.addCredits(
       userId,

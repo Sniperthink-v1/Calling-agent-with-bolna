@@ -30,6 +30,7 @@ import { performanceMonitoring, addPerformanceEndpoints } from './middleware/per
 import { scheduledTaskService } from './services/scheduledTaskService';
 import { webhookRetryService } from './services/webhookRetryService';
 import { QueueProcessorService } from './services/QueueProcessorService';
+import { configService } from './services/configService';
 
 // Environment variables already loaded at the top of this file
 
@@ -303,6 +304,14 @@ async function startServer() {
       ...((process.env.NODE_ENV !== 'production' && process.env.DEV_ALLOW_LOCALHOST === 'true') ? ['http://localhost:8080','http://localhost:8081','http://localhost:8082','http://localhost:5173'] : [])
     ];
     
+    // Initialize system configuration from database
+    try {
+      await configService.initialize();
+      console.log('🔧 System configuration initialized successfully');
+    } catch (error) {
+      console.error('⚠️ Failed to initialize system configuration:', error);
+    }
+
     // Start session cleanup service
     const { authService } = await import('./services/authService');
     authService.startSessionCleanup();

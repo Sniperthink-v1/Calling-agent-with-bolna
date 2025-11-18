@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { authService } from '../services/authService';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { body, validationResult } from 'express-validator';
+import { configService } from '../services/configService';
 
 // Authentication controller - handles user registration, login, and session management
 export class AuthController {
@@ -537,15 +538,37 @@ export class AuthController {
   }
 }
 
+// Custom password validation middleware that uses configService
+const validatePasswordLength = (req: Request, res: Response, next: any): void => {
+  const password = req.body.password;
+  const minLength = configService.get('password_min_length');
+  
+  if (!password || password.length < minLength) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        details: [{
+          field: 'password',
+          value: password?.length || 0,
+          message: `Password must be at least ${minLength} characters long`
+        }]
+      }
+    });
+    return;
+  }
+  
+  next();
+};
+
 // Validation middleware for registration
 export const validateRegistration = [
   body('email')
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email address'),
-  body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
+  validatePasswordLength,
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })

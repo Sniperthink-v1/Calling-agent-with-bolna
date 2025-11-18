@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { BillingController } from '../controllers/billingController';
 import { authenticateToken, requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { body, query, validationResult } from 'express-validator';
+import { configService } from '../services/configService';
 
 const router = Router();
 
@@ -13,12 +14,36 @@ const validateRequest = (req: Request, res: Response, next: any): void => {
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
-        message: 'Invalid request data',
+        message: 'Validation failed',
         details: errors.array()
       }
     });
     return;
   }
+  next();
+};
+
+// Custom validation for minimum credit purchase
+const validateMinimumCredit = (req: Request, res: Response, next: any): void => {
+  const amount = parseInt(req.body.amount);
+  const minimumPurchase = configService.get('minimum_credit_purchase');
+  
+  if (isNaN(amount) || amount < minimumPurchase) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Minimum credit purchase is ${minimumPurchase} credits`,
+        details: [{
+          field: 'amount',
+          value: amount,
+          message: `Minimum credit purchase is ${minimumPurchase} credits`
+        }]
+      }
+    });
+    return;
+  }
+  
   next();
 };
 
@@ -52,8 +77,9 @@ router.get('/history', [
  * Purchase credits via Stripe
  */
 router.post('/purchase', [
-  body('amount').isInt({ min: 50 }).withMessage('Minimum credit purchase is 50 credits'),
-  validateRequest
+  body('amount').isInt().withMessage('Amount must be a valid integer'),
+  validateRequest,
+  validateMinimumCredit
 ], (req: Request, res: Response) => BillingController.purchaseCredits(req as AuthenticatedRequest, res));
 
 /**

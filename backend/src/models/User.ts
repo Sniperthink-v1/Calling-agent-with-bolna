@@ -33,6 +33,8 @@ export interface UserInterface extends BaseModelInterface {
   google_calendar_connected?: boolean;
   google_calendar_id?: string | null;
   google_email?: string | null;
+  // Concurrency control
+  concurrent_calls_limit?: number;
 }
 
 export class UserModel extends BaseModel<UserInterface> {

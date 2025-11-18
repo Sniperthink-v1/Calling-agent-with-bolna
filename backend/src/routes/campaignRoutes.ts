@@ -4,6 +4,7 @@ import Contact from '../models/Contact';
 import { authenticateToken } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { uploadExcel } from '../middleware/upload';
+import { configService } from '../services/configService';
 import * as XLSX from 'xlsx';
 import { ContactService } from '../services/contactService';
 
@@ -215,11 +216,12 @@ router.post('/upload-csv', uploadExcel.single('file'), async (req: Request, res:
       return res.status(400).json({ success: false, error: 'Upload file contains no rows' });
     }
 
-    // Validate row limit - increased to 10,000
-    if (rows.length > 10000) {
+    // Validate row limit using configuration
+    const maxContacts = configService.get('max_contacts_per_upload');
+    if (rows.length > maxContacts) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Maximum 10,000 contacts allowed per campaign upload. Please split your data into smaller batches.' 
+        error: `Maximum ${maxContacts} contacts allowed per campaign upload. Please split your data into smaller batches.` 
       });
     }
 

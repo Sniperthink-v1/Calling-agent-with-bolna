@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import {
@@ -21,7 +22,52 @@ interface ConfigurationProps {
 }
 
 export const Configuration: React.FC<ConfigurationProps> = ({ className }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('api-keys');
+
+  // Extract tab from URL path
+  useEffect(() => {
+    const pathname = location.pathname;
+    if (pathname.includes('/api-keys')) {
+      setActiveTab('api-keys');
+    } else if (pathname.includes('/feature-flags')) {
+      setActiveTab('feature-flags');
+    } else if (pathname.includes('/system')) {
+      setActiveTab('system-settings');
+    } else if (pathname.includes('/user-tiers')) {
+      setActiveTab('user-tiers');
+    } else {
+      // Default to system settings for main config path
+      setActiveTab('system-settings');
+    }
+  }, [location.pathname]);
+
+  // Handle tab change with URL update
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    const basePath = '/admin/config';
+    let tabPath = '';
+    
+    switch (tabId) {
+      case 'api-keys':
+        tabPath = '/api-keys';
+        break;
+      case 'feature-flags':
+        tabPath = '/feature-flags';
+        break;
+      case 'system-settings':
+        tabPath = '/system';
+        break;
+      case 'user-tiers':
+        tabPath = '/user-tiers';
+        break;
+      default:
+        tabPath = '/system';
+    }
+    
+    navigate(basePath + tabPath, { replace: true });
+  };
 
   const configurationTabs = [
     {
@@ -71,7 +117,7 @@ export const Configuration: React.FC<ConfigurationProps> = ({ className }) => {
       </div>
 
       {/* Configuration Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
           {configurationTabs.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id} className="flex items-center space-x-2">
