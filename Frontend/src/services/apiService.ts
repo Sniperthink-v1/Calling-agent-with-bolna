@@ -1393,7 +1393,7 @@ class ApiService {
       throw createApiError('User must be authenticated to schedule demos', 401, 'UNAUTHORIZED');
     }
 
-    return this.request<any>('/api/demos/schedule', {
+    return this.request<any>(`${API_URL}/demos/schedule`, {
       method: 'POST',
       body: JSON.stringify(demoData),
     });
