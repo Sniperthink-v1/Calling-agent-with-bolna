@@ -1895,6 +1895,72 @@ class ApiService {
     return this.request<any>(API_ENDPOINTS.CALL_ANALYTICS.SUMMARY);
   }
 
+  // Demo Schedule API methods
+  async getScheduledDemos(params?: { 
+    status?: 'upcoming' | 'past' | 'all';
+    dateFrom?: string;
+    dateTo?: string;
+    leadQuality?: string;
+    agentId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<any>> {
+    let url = '/api/demos/scheduled';
+    if (params) {
+      const queryParams = new URLSearchParams();
+      if (params.status) queryParams.append('status', params.status);
+      if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+      if (params.dateTo) queryParams.append('dateTo', params.dateTo);
+      if (params.leadQuality) queryParams.append('leadQuality', params.leadQuality);
+      if (params.agentId) queryParams.append('agentId', params.agentId);
+      if (params.limit) queryParams.append('limit', params.limit.toString());
+      if (params.offset) queryParams.append('offset', params.offset.toString());
+
+      if (queryParams.toString()) {
+        url += `?${queryParams.toString()}`;
+      }
+    }
+    return this.request<any>(url);
+  }
+
+  async getDemoStats(params?: { 
+    dateFrom?: string;
+    dateTo?: string;
+    agentId?: string;
+  }): Promise<ApiResponse<any>> {
+    let url = '/api/demos/stats';
+    if (params) {
+      const queryParams = new URLSearchParams();
+      if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+      if (params.dateTo) queryParams.append('dateTo', params.dateTo);
+      if (params.agentId) queryParams.append('agentId', params.agentId);
+
+      if (queryParams.toString()) {
+        url += `?${queryParams.toString()}`;
+      }
+    }
+    return this.request<any>(url);
+  }
+
+  async rescheduleDemo(demoId: string, rescheduledTo: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/api/demos/${demoId}/reschedule`, {
+      method: 'PATCH',
+      body: JSON.stringify({ rescheduled_to: rescheduledTo }),
+    });
+  }
+
+  async cancelDemo(demoId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/api/demos/${demoId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async sendDemoReminder(demoId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/api/demos/${demoId}/send-reminder`, {
+      method: 'POST',
+    });
+  }
+
   // Dashboard API methods with agent context
   async getDashboardOverview(agentId?: string): Promise<ApiResponse<DashboardOverview>> {
     const targetAgentId = agentId || this.currentAgentId;

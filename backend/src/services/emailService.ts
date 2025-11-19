@@ -720,6 +720,352 @@ View full details: ${appBaseUrl}/meetings
   }
 
   /**
+   * Send demo reminder email to lead
+   */
+  async sendDemoReminder(params: {
+    leadEmail: string;
+    leadName: string;
+    meetingTime: Date;
+    meetingLink: string;
+    meetingTitle?: string;
+    userName?: string;
+    company?: string;
+  }): Promise<boolean> {
+    const { leadEmail, leadName, meetingTime, meetingLink, meetingTitle, userName, company } = params;
+
+    const meetingTimeFormatted = meetingTime.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
+    const timeUntilMeeting = Math.ceil((meetingTime.getTime() - Date.now()) / (1000 * 60 * 60)); // hours
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Demo Reminder</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { padding: 30px; background: #f9f9f9; }
+          .reminder-box { background: white; border-left: 4px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .button { display: inline-block; padding: 12px 30px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
+          .time-badge { display: inline-block; padding: 8px 16px; background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 16px; font-weight: bold; margin: 10px 0; }
+          .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; border-radius: 0 0 10px 10px; background: #f9f9f9; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>⏰ Demo Reminder</h1>
+            <p>Your demo is coming up soon!</p>
+          </div>
+          
+          <div class="content">
+            <p>Hi ${leadName},</p>
+            <p>This is a friendly reminder about your upcoming demo${userName ? ` with ${userName}` : ''}.</p>
+            
+            <div class="reminder-box">
+              <h2>📅 ${meetingTitle || 'Demo Meeting'}</h2>
+              <p><strong>When:</strong> ${meetingTimeFormatted}</p>
+              ${timeUntilMeeting > 0 ? `<p class="time-badge">⏱️ Starting in ${timeUntilMeeting} hour${timeUntilMeeting !== 1 ? 's' : ''}</p>` : ''}
+              ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
+              
+              <div style="margin-top: 20px;">
+                <a href="${meetingLink}" class="button">🎥 Join Meeting</a>
+              </div>
+            </div>
+            
+            <p style="margin-top: 30px;">
+              <strong>What to prepare:</strong><br>
+              • Make sure you have a stable internet connection<br>
+              • Test your camera and microphone<br>
+              • Prepare any questions you'd like to ask<br>
+              • Have a pen and paper ready for notes
+            </p>
+            
+            <p style="margin-top: 20px;">
+              We're looking forward to showing you what we can do! If you need to reschedule or have any questions, please let us know.
+            </p>
+          </div>
+          
+          <div class="footer">
+            <p>© 2024 AI Calling Agent Platform. All rights reserved.</p>
+            <p>If you need to reschedule, please contact us as soon as possible.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Demo Reminder
+
+Hi ${leadName},
+
+This is a friendly reminder about your upcoming demo${userName ? ` with ${userName}` : ''}.
+
+MEETING DETAILS:
+${meetingTitle || 'Demo Meeting'}
+When: ${meetingTimeFormatted}
+${timeUntilMeeting > 0 ? `Starting in ${timeUntilMeeting} hour${timeUntilMeeting !== 1 ? 's' : ''}` : ''}
+${company ? `Company: ${company}` : ''}
+
+Join Meeting: ${meetingLink}
+
+WHAT TO PREPARE:
+• Make sure you have a stable internet connection
+• Test your camera and microphone
+• Prepare any questions you'd like to ask
+• Have a pen and paper ready for notes
+
+We're looking forward to showing you what we can do! If you need to reschedule or have any questions, please let us know.
+    `;
+
+    return await this.sendEmail({
+      to: leadEmail,
+      subject: `⏰ Reminder: Your demo is coming up soon!`,
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Send demo cancellation email to lead
+   */
+  async sendDemoCancellation(params: {
+    leadEmail: string;
+    leadName: string;
+    meetingTime: Date;
+    meetingTitle?: string;
+    cancellationReason?: string;
+  }): Promise<boolean> {
+    const { leadEmail, leadName, meetingTime, meetingTitle, cancellationReason } = params;
+
+    const meetingTimeFormatted = meetingTime.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Meeting Cancelled</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { padding: 30px; background: #f9f9f9; }
+          .cancellation-box { background: white; border-left: 4px solid #ef4444; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; border-radius: 0 0 10px 10px; background: #f9f9f9; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>❌ Meeting Cancelled</h1>
+            <p>Your scheduled meeting has been cancelled</p>
+          </div>
+          
+          <div class="content">
+            <p>Hi ${leadName},</p>
+            <p>We regret to inform you that your scheduled demo meeting has been cancelled.</p>
+            
+            <div class="cancellation-box">
+              <h2>Cancelled Meeting Details</h2>
+              <p><strong>Meeting:</strong> ${meetingTitle || 'Demo Meeting'}</p>
+              <p><strong>Original Time:</strong> ${meetingTimeFormatted}</p>
+              ${cancellationReason ? `<p><strong>Reason:</strong> ${cancellationReason}</p>` : ''}
+            </div>
+            
+            <p>If you'd like to reschedule or have any questions, please don't hesitate to reach out to us.</p>
+            
+            <p>We apologize for any inconvenience this may cause.</p>
+          </div>
+          
+          <div class="footer">
+            <p>© 2024 AI Calling Agent Platform. All rights reserved.</p>
+            <p>This is an automated notification.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Meeting Cancelled
+
+Hi ${leadName},
+
+We regret to inform you that your scheduled demo meeting has been cancelled.
+
+CANCELLED MEETING DETAILS:
+Meeting: ${meetingTitle || 'Demo Meeting'}
+Original Time: ${meetingTimeFormatted}
+${cancellationReason ? `Reason: ${cancellationReason}` : ''}
+
+If you'd like to reschedule or have any questions, please don't hesitate to reach out to us.
+
+We apologize for any inconvenience this may cause.
+    `;
+
+    return await this.sendEmail({
+      to: leadEmail,
+      subject: `Meeting Cancelled: ${meetingTitle || 'Demo'}`,
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Send demo reschedule email to lead
+   */
+  async sendDemoReschedule(params: {
+    leadEmail: string;
+    leadName: string;
+    oldMeetingTime: Date;
+    newMeetingTime: Date;
+    meetingLink: string;
+    meetingTitle?: string;
+    userName?: string;
+    company?: string;
+  }): Promise<boolean> {
+    const { leadEmail, leadName, oldMeetingTime, newMeetingTime, meetingLink, meetingTitle, userName, company } = params;
+
+    const oldTimeFormatted = oldMeetingTime.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
+    const newTimeFormatted = newMeetingTime.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Meeting Rescheduled</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
+          .content { padding: 30px; background: #f9f9f9; }
+          .meeting-box { background: white; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 5px; }
+          .time-change { background: #fef3c7; border: 2px solid #fbbf24; padding: 15px; border-radius: 5px; margin: 20px 0; }
+          .button { display: inline-block; padding: 12px 30px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+          .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; }
+          .strikethrough { text-decoration: line-through; color: #999; }
+          .highlight { color: #667eea; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>📅 Meeting Rescheduled</h1>
+          </div>
+          
+          <div class="content">
+            <h2>Hi ${leadName},</h2>
+            <p>Your demo meeting${userName ? ` with ${userName}` : ''} has been rescheduled to a new time.</p>
+            
+            <div class="time-change">
+              <p><strong>⚠️ Important Time Change</strong></p>
+              <p class="strikethrough">Previous Time: ${oldTimeFormatted}</p>
+              <p class="highlight">New Time: ${newTimeFormatted}</p>
+            </div>
+            
+            <div class="meeting-box">
+              <h3>${meetingTitle || 'Demo Meeting'}</h3>
+              ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
+              <p><strong>When:</strong> ${newTimeFormatted}</p>
+              <p><strong>Meeting Link:</strong></p>
+              <a href="${meetingLink}" class="button">Join Meeting</a>
+              <p style="font-size: 12px; color: #666; word-break: break-all;">${meetingLink}</p>
+            </div>
+            
+            <p><strong>What to prepare:</strong></p>
+            <ul>
+              <li>Add the new time to your calendar</li>
+              <li>Test your camera and microphone before the meeting</li>
+              <li>Ensure you have a stable internet connection</li>
+              <li>Prepare any questions you'd like to discuss</li>
+            </ul>
+            
+            <p>We look forward to meeting with you at the new time! If you have any questions or need to make further changes, please let us know.</p>
+          </div>
+          
+          <div class="footer">
+            <p>© 2024 AI Calling Agent Platform. All rights reserved.</p>
+            <p>This is an automated notification.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Meeting Rescheduled
+
+Hi ${leadName},
+
+Your demo meeting${userName ? ` with ${userName}` : ''} has been rescheduled.
+
+PREVIOUS TIME:
+${oldTimeFormatted}
+
+NEW TIME:
+${newTimeFormatted}
+
+MEETING DETAILS:
+${meetingTitle || 'Demo Meeting'}
+${company ? `Company: ${company}` : ''}
+Meeting Link: ${meetingLink}
+
+Please make sure to update your calendar with the new time. We look forward to meeting with you!
+
+If you have any questions, please don't hesitate to reach out.
+    `;
+
+    return await this.sendEmail({
+      to: leadEmail,
+      subject: `📅 Meeting Rescheduled: ${meetingTitle || 'Demo'}`,
+      html,
+      text,
+    });
+  }
+
+  /**
    * Test email configuration
    */
   async testEmailConfiguration(): Promise<boolean> {

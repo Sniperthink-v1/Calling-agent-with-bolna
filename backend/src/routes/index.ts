@@ -30,6 +30,7 @@ import openaiPromptRoutes from './openaiPromptRoutes';
 import schedulerRoutes from './schedulerRoutes';
 import userPhoneNumbersRoutes from './userPhoneNumbers';
 import integrationRoutes from './integrations';
+import demoRoutes from './demoRoutes';
 
 // Import rate limiting middleware
 import { generalRateLimit, authRateLimit } from '../middleware/rateLimit';
@@ -92,6 +93,7 @@ router.use('/openai-prompts', authenticatedRateLimit, openaiPromptRoutes);
 router.use('/scheduler', authenticatedRateLimit, schedulerRoutes); // Campaign scheduler monitoring
 router.use('/phone-numbers', authenticatedRateLimit, userPhoneNumbersRoutes); // User phone numbers
 router.use('/integrations', integrationRoutes); // Google Calendar and other integrations (has mixed auth)
+router.use('/demos', authenticatedRateLimit, demoRoutes); // Demo schedule management
 
 // Monitoring routes - no rate limiting
 router.use('/monitoring', monitoringRoutes);

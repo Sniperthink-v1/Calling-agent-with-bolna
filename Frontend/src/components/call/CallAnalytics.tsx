@@ -44,6 +44,8 @@ import { InfoIcon } from "@/components/ui/info-icon";
 import { apiService } from "@/services/apiService";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import CallSourceExport from "./CallSourceExport";
+import { DemoScheduleModal } from "@/components/demo/DemoScheduleModal";
+import { HotLeadsModal } from "./HotLeadsModal";
 
 const CALL_ANALYTICS_COLORS = [
   "#1A6262",
@@ -87,6 +89,14 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
   const [selectedDateOption, setSelectedDateOption] = useState("30 days");
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [selectedCallSource, setSelectedCallSource] = useState("");
+
+  // State for demo modal
+  const [showDemoModal, setShowDemoModal] = useState(false);
+  const [demoData, setDemoData] = useState<any[]>([]);
+  const [loadingDemos, setLoadingDemos] = useState(false);
+
+  // State for hot leads modal
+  const [showHotLeadsModal, setShowHotLeadsModal] = useState(false);
 
   // State for real data
   const [loading, setLoading] = useState(true);
@@ -273,6 +283,42 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
       setLoading(false);
     }
   };
+
+  const handleDemoScheduleClick = async () => {
+    try {
+      setLoadingDemos(true);
+      setShowDemoModal(true);
+      
+      // For demos, we want to show all demos (not limited to dashboard date range)
+      // Get demos from 6 months ago to 6 months in the future
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      
+      const sixMonthsFromNow = new Date();
+      sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+      
+      const params = {
+        status: 'all' as const,
+        dateFrom: sixMonthsAgo.toISOString(),
+        dateTo: sixMonthsFromNow.toISOString(),
+        ...(selectedCallSource && { callSource: selectedCallSource }),
+        ...(selectedAgentId && { agentId: selectedAgentId }),
+      };
+
+      const response = await apiService.getScheduledDemos(params);
+      setDemoData(response.data || []);
+    } catch (err) {
+      console.error('Error fetching demo schedules:', err);
+      setDemoData([]);
+    } finally {
+      setLoadingDemos(false);
+    }
+  };
+
+  const handleRefreshDemos = async () => {
+    await handleDemoScheduleClick();
+  };
+
   const handleDateOptionChange = (option: string) => {
     setSelectedDateOption(option);
     if (option === "Custom range") {
@@ -838,10 +884,17 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
           };
 
           const IconComponent = getIcon(metric.title);
+          const isDemoCard = metric.title === "Demo Scheduled";
+          const isHotLeadsCard = metric.title === "Hot Leads Generated";
+          
           return (
             <div
               key={index}
               className="bg-card border border-border rounded-xl p-6 hover:shadow-lg transition-all duration-300 cursor-pointer group"
+              onClick={() => {
+                if (isDemoCard) handleDemoScheduleClick();
+                if (isHotLeadsCard) setShowHotLeadsModal(true);
+              }}
             >
               <div className="flex items-center justify-between mb-2">
                 <div
@@ -1088,6 +1141,25 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
           </div>
         )}
       </div>
+
+      {/* Demo Schedule Modal */}
+      <DemoScheduleModal
+        open={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+        demos={demoData}
+        loading={loadingDemos}
+        onRefresh={handleRefreshDemos}
+      />
+
+      {/* Hot Leads Modal */}
+      <HotLeadsModal
+        open={showHotLeadsModal}
+        onClose={() => setShowHotLeadsModal(false)}
+        dateFrom={getDateRange().fromDate.toISOString()}
+        dateTo={getDateRange().toDate.toISOString()}
+        selectedAgentId={selectedAgentId}
+        selectedCallSource={selectedCallSource}
+      />
     </div>
   );
 };
