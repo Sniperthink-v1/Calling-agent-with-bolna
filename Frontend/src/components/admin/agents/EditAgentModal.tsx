@@ -122,7 +122,7 @@ export const EditAgentModal: React.FC<EditAgentModalProps> = ({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/admin/agents/${agent.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/agents/${agent.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

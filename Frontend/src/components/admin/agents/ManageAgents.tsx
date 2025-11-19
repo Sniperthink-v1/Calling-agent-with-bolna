@@ -62,7 +62,7 @@ export const ManageAgents: React.FC = () => {
   const fetchAgents = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/admin/agents', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/agents`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -130,7 +130,7 @@ export const ManageAgents: React.FC = () => {
     setIsDeleting(true);
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/admin/agents/${agentToDelete.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/agents/${agentToDelete.id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,

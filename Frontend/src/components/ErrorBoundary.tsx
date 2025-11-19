@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { toast } from 'sonner';
 import { generateErrorId } from '@/utils/uuid';
+import { API_BASE_URL } from '@/config/api';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -116,7 +117,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     // For now, we'll just log it
     try {
       // Example: Send to monitoring API
-      fetch('/api/errors', {
+      fetch(`${API_BASE_URL}/api/errors`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

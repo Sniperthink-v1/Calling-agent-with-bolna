@@ -109,7 +109,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
     try {
       const token = localStorage.getItem('auth_token');
       const response = await fetch(
-        `/api/admin/agents/bolna/${bolnaAgentId.trim()}`,
+        `${API_BASE_URL}/api/admin/agents/bolna/${bolnaAgentId.trim()}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -150,7 +150,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/admin/agents', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/agents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
