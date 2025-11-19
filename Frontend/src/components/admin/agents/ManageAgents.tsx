@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
+import { API_BASE_URL } from '@/config/api';
 import { Input } from '../../ui/input';
 import {
   Table,
@@ -83,7 +84,7 @@ export const ManageAgents: React.FC = () => {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

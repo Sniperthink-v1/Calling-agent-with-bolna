@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../ui/dialog';
+import { API_BASE_URL } from '@/config/api';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -61,7 +62,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
     const fetchWebhookUrl = async () => {
       try {
         const token = localStorage.getItem('auth_token');
-        const response = await fetch('/api/admin/config/webhook-url', {
+        const response = await fetch(`${API_BASE_URL}/api/admin/config/webhook-url`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw, Home, Bug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { API_BASE_URL } from '@/config/api';
 
 interface AdminErrorBoundaryProps {
   children: ReactNode;
@@ -71,7 +72,7 @@ export class AdminErrorBoundary extends Component<AdminErrorBoundaryProps, Admin
       };
 
       // Send to admin error reporting endpoint
-      await fetch('/api/admin/errors', {
+      await fetch(`${API_BASE_URL}/api/admin/errors`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

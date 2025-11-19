@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
-
+import { API_BASE_URL } from '@/config/api';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Upload,
@@ -318,7 +318,7 @@ export const BulkContactUpload: React.FC<BulkContactUploadProps> = ({
       // Test backend connectivity first
       try {
         console.log('Testing backend connectivity...');
-        const testResponse = await fetch('/api/contacts/test-upload', {
+        const testResponse = await fetch(`${API_BASE_URL}/api/contacts/test-upload`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,

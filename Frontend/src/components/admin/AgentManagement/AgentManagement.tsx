@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+import { API_BASE_URL } from '@/config/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
@@ -83,7 +84,7 @@ export const AgentManagement: React.FC<AgentManagementProps> = ({ className }) =
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
