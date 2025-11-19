@@ -538,6 +538,22 @@ export class CallService {
                     phoneNumberName: callerPhoneNumber.name
                   }
                 });
+              } else {
+                // Priority 3: Fallback to any phone number belonging to user (newest first)
+                callerPhoneNumber = await PhoneNumber.findAnyByUserId(callRequest.userId);
+                
+                if (callerPhoneNumber) {
+                  Sentry.addBreadcrumb({
+                    category: 'call',
+                    message: 'Using fallback phone number from user pool',
+                    level: 'info',
+                    data: {
+                      phoneNumberId: callerPhoneNumber.id,
+                      phoneNumberName: callerPhoneNumber.name
+                    }
+                  });
+                  logger.info(`Using fallback phone number for call: ${callerPhoneNumber.name} (${callerPhoneNumber.phone_number})`);
+                }
               }
             }
             
@@ -712,8 +728,22 @@ export class CallService {
         throw new Error('Agent is not configured for Bolna.ai');
       }
       
-      // Fetch agent's assigned phone number (if any)
-      const assignedPhoneNumber = await PhoneNumber.findByAgentId(callRequest.agentId);
+      // Determine which phone number to use for campaign call
+      let callerPhoneNumber: any = null;
+      
+      // Priority 1: Agent's assigned phone number
+      callerPhoneNumber = await PhoneNumber.findByAgentId(callRequest.agentId);
+      
+      if (!callerPhoneNumber) {
+        // Priority 2: Fallback to any phone number belonging to user (newest first)
+        callerPhoneNumber = await PhoneNumber.findAnyByUserId(callRequest.userId);
+        
+        if (callerPhoneNumber) {
+          logger.info(`Campaign call using fallback phone number from user pool: ${callerPhoneNumber.name} (${callerPhoneNumber.phone_number})`);
+        }
+      } else {
+        logger.info(`Campaign call using agent assigned phone number: ${callerPhoneNumber.name} (${callerPhoneNumber.phone_number})`);
+      }
       
       // Prepare Bolna.ai call request
       const bolnaCallData: BolnaCallRequest = {
@@ -728,11 +758,9 @@ export class CallService {
         }
       };
 
-      // Add from_phone_number only if agent has an assigned phone number
-      if (assignedPhoneNumber && assignedPhoneNumber.phone_number) {
-        bolnaCallData.from_phone_number = assignedPhoneNumber.phone_number;
-        
-        logger.info(`Campaign call using agent assigned phone number: ${assignedPhoneNumber.name} (${assignedPhoneNumber.phone_number})`);
+      // Add from_phone_number if a phone number is available
+      if (callerPhoneNumber && callerPhoneNumber.phone_number) {
+        bolnaCallData.from_phone_number = callerPhoneNumber.phone_number;
       }
       
       // Make the call via Bolna.ai

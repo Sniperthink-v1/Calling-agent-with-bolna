@@ -1,13 +1,13 @@
 // Environment configuration
 const ENV = {
   dev: {
-    apiUrl: 'https://calling-agent-with-bolna-production.up.railway.app/api',
+    apiUrl: 'https://agentbackend.sniperthink.com/api',
   },
   staging: {
-    apiUrl: 'https://calling-agent-with-bolna-production.up.railway.app/api',
+    apiUrl: 'https://agentbackend.sniperthink.com/api',
   },
   prod: {
-    apiUrl: 'https://calling-agent-with-bolna-production.up.railway.app/api',
+    apiUrl: 'https://agentbackend.sniperthink.com/api',
   },
 };
 

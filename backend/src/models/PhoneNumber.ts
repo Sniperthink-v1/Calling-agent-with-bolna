@@ -58,6 +58,22 @@ export class PhoneNumberModel extends BaseModel<PhoneNumberInterface> {
   }
 
   /**
+   * Find any active phone number belonging to user (newest first)
+   * Used as fallback when agent has no assigned number
+   */
+  async findAnyByUserId(userId: string): Promise<PhoneNumberInterface | null> {
+    const query = `
+      SELECT * FROM phone_numbers
+      WHERE user_id = $1 
+      AND is_active = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    const result = await this.query(query, [userId]);
+    return result.rows[0] || null;
+  }
+
+  /**
    * Get all phone numbers with agent details
    */
   async findAllWithAgentDetails(): Promise<any[]> {
