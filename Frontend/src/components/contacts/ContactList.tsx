@@ -31,6 +31,7 @@ import {
   Trash2,
   PhoneCall,
   Loader2,
+  PhoneIncoming,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -39,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { useContacts } from '@/hooks/useContacts';
 import { useToast } from '@/components/ui/use-toast';
 import DeleteContactDialog from './DeleteContactDialog';
@@ -436,6 +438,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                   </th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Email</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Company</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Last Status</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
                     Created
                   </th>
@@ -456,10 +459,41 @@ export const ContactList: React.FC<ContactListProps> = ({
                             onCheckedChange={(checked) => handleSelectContact(contact.id, checked as boolean)}
                           />
                         </td>
-                        <td className="p-4 align-middle font-medium">{contact.name}</td>
+                        <td className="p-4 align-middle">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{contact.name}</span>
+                            {contact.isAutoCreated && contact.autoCreationSource === 'webhook' && (
+                              <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                                <PhoneIncoming className="w-3 h-3" />
+                                Inbound Call
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-4 align-middle">{contact.phoneNumber}</td>
                         <td className="p-4 align-middle">{contact.email || '-'}</td>
                         <td className="p-4 align-middle">{contact.company || '-'}</td>
+                        <td className="p-4 align-middle">
+                          {contact.lastCallStatus ? (
+                            <Badge 
+                              variant="outline" 
+                              className={
+                                contact.lastCallStatus === 'completed' ? 'bg-green-50 text-green-700 border-green-500 border-2' :
+                                contact.lastCallStatus.toLowerCase().includes('not') || contact.lastCallStatus.toLowerCase().includes('answer') ? 'bg-yellow-50 text-yellow-700 border-yellow-500 border-2' :
+                                contact.lastCallStatus === 'busy' ? 'bg-red-50 text-red-700 border-red-500 border-2' :
+                                contact.lastCallStatus === 'in-progress' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                contact.lastCallStatus === 'ringing' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                contact.lastCallStatus === 'call-disconnected' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                contact.lastCallStatus === 'initiated' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                'bg-gray-50 text-gray-700 border-gray-200'
+                              }
+                            >
+                              {contact.lastCallStatus}
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
                         <td className="p-4 align-middle">
                           {new Date(contact.createdAt).toLocaleDateString()}
                         </td>
@@ -501,7 +535,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                       {/* Trigger element for loading more */}
                       {isTriggerPosition && enableInfiniteScroll && (
                         <tr>
-                          <td colSpan={7}>
+                          <td colSpan={8}>
                             <div ref={triggerElementRef} className="h-1" />
                           </td>
                         </tr>

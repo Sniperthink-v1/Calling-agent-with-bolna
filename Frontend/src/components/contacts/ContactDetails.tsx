@@ -12,6 +12,7 @@ import {
   Edit,
   Trash2,
   FileText,
+  PhoneIncoming,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useContacts } from '@/hooks/useContacts';
@@ -104,7 +105,15 @@ export const ContactDetails: React.FC<ContactDetailsProps> = ({
             Back to Contacts
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">{contact.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">{contact.name}</h1>
+              {contact.isAutoCreated && contact.autoCreationSource === 'webhook' && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  <PhoneIncoming className="w-3 h-3" />
+                  Inbound Call
+                </Badge>
+              )}
+            </div>
             {contact.isAutoCreated && (
               <p className="text-sm text-muted-foreground mt-1">
                 Auto created and linked to call
@@ -287,14 +296,24 @@ export const ContactDetails: React.FC<ContactDetailsProps> = ({
                   <label className="text-sm font-medium text-gray-500">Call Information</label>
                   <div className="space-y-2">
                     {contact.isAutoCreated && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                          Auto-created from call
-                        </Badge>
-                        {contact.callCreatedAt && (
-                          <span className="text-gray-500">
-                            on {formatDate(contact.callCreatedAt)}
-                          </span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            Auto-created from call
+                          </Badge>
+                          {contact.callCreatedAt && (
+                            <span className="text-gray-500">
+                              on {formatDate(contact.callCreatedAt)}
+                            </span>
+                          )}
+                        </div>
+                        {contact.autoCreationSource === 'webhook' && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1">
+                              <PhoneIncoming className="w-3 h-3" />
+                              Created from inbound call
+                            </Badge>
+                          </div>
                         )}
                       </div>
                     )}

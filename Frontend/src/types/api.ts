@@ -237,6 +237,7 @@ export interface Contact {
   linkedCallId?: string;
   callLinkType?: 'auto_created' | 'manually_linked' | 'not_linked';
   callCreatedAt?: string;
+  lastCallStatus?: string;
   createdAt: string;
   updatedAt: string;
 }

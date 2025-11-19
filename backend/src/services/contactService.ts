@@ -34,9 +34,17 @@ export class ContactService {
               WHEN c.auto_created_from_call_id IS NOT NULL THEN 'auto_created'
               WHEN EXISTS(SELECT 1 FROM calls WHERE contact_id = c.id) THEN 'manually_linked'
               ELSE 'not_linked'
-            END as call_link_type
+            END as call_link_type,
+            last_call.call_lifecycle_status as last_call_status
           FROM contacts c
           LEFT JOIN calls ON c.auto_created_from_call_id = calls.id
+          LEFT JOIN LATERAL (
+            SELECT call_lifecycle_status
+            FROM calls
+            WHERE (contact_id = c.id OR phone_number = c.phone_number)
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) last_call ON true
           WHERE c.user_id = $1 
           AND (c.name ILIKE $2 OR c.phone_number LIKE $3 OR c.email ILIKE $2 OR c.company ILIKE $2)
           ORDER BY c.name
@@ -65,9 +73,17 @@ export class ContactService {
               WHEN c.auto_created_from_call_id IS NOT NULL THEN 'auto_created'
               WHEN EXISTS(SELECT 1 FROM calls WHERE contact_id = c.id) THEN 'manually_linked'
               ELSE 'not_linked'
-            END as call_link_type
+            END as call_link_type,
+            last_call.call_lifecycle_status as last_call_status
           FROM contacts c
           LEFT JOIN calls ON c.auto_created_from_call_id = calls.id
+          LEFT JOIN LATERAL (
+            SELECT call_lifecycle_status
+            FROM calls
+            WHERE (contact_id = c.id OR phone_number = c.phone_number)
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) last_call ON true
           WHERE c.user_id = $1 
           ORDER BY ${sortColumn} ${sortDirection}
           LIMIT $2 OFFSET $3
