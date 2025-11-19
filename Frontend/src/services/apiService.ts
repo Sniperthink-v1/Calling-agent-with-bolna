@@ -2,7 +2,7 @@
 // This service handles all API calls to the backend with comprehensive error handling,
 // retry logic, request/response interceptors, and timeout management
 
-import API_ENDPOINTS from '../config/api';
+import API_ENDPOINTS, { API_URL } from '../config/api';
 import { errorHandler, type ApiError as ErrorHandlerApiError } from '../utils/errorHandler';
 import type {
   ApiResponse,
@@ -1905,7 +1905,7 @@ class ApiService {
     limit?: number;
     offset?: number;
   }): Promise<ApiResponse<any>> {
-    let url = '/api/demos/scheduled';
+    let url = `${API_URL}/demos/scheduled`;
     if (params) {
       const queryParams = new URLSearchParams();
       if (params.status) queryParams.append('status', params.status);
@@ -1928,7 +1928,7 @@ class ApiService {
     dateTo?: string;
     agentId?: string;
   }): Promise<ApiResponse<any>> {
-    let url = '/api/demos/stats';
+    let url = `${API_URL}/demos/stats`;
     if (params) {
       const queryParams = new URLSearchParams();
       if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
@@ -1943,20 +1943,20 @@ class ApiService {
   }
 
   async rescheduleDemo(demoId: string, rescheduledTo: string): Promise<ApiResponse<any>> {
-    return this.request<any>(`/api/demos/${demoId}/reschedule`, {
+    return this.request<any>(`${API_URL}/demos/${demoId}/reschedule`, {
       method: 'PATCH',
       body: JSON.stringify({ rescheduled_to: rescheduledTo }),
     });
   }
 
   async cancelDemo(demoId: string): Promise<ApiResponse<void>> {
-    return this.request<void>(`/api/demos/${demoId}`, {
+    return this.request<void>(`${API_URL}/demos/${demoId}`, {
       method: 'DELETE',
     });
   }
 
   async sendDemoReminder(demoId: string): Promise<ApiResponse<any>> {
-    return this.request<any>(`/api/demos/${demoId}/send-reminder`, {
+    return this.request<any>(`${API_URL}/demos/${demoId}/send-reminder`, {
       method: 'POST',
     });
   }
