@@ -84,8 +84,9 @@ export class CallCampaignModel {
     const result = await pool.query(
       `INSERT INTO call_campaigns (
         user_id, name, description, agent_id, next_action,
-        first_call_time, last_call_time, status, start_date, end_date, started_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        first_call_time, last_call_time, status, start_date, end_date, started_at,
+        campaign_timezone, use_custom_timezone
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         userId,
@@ -98,7 +99,9 @@ export class CallCampaignModel {
         'active',  // Changed from 'draft' to 'active'
         data.start_date,
         data.end_date || null,
-        new Date()  // Set started_at to now
+        new Date(),  // Set started_at to now
+        data.campaign_timezone || null,
+        data.use_custom_timezone || false
       ]
     );
     return result.rows[0];

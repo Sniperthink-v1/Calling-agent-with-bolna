@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Globe, AlertCircle } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { detectBrowserTimezone } from '@/utils/timezone';
-import { authenticatedFetch } from '@/utils/auth';
+import apiService from '@/services/apiService';
 import { useNavigate } from 'react-router-dom';
 
 const TimezoneDisplay = () => {
@@ -19,22 +19,34 @@ const TimezoneDisplay = () => {
         const detected = detectBrowserTimezone();
         setDetectedTimezone(detected);
         
-        const response = await authenticatedFetch('/api/users/profile');
-        if (response.ok) {
-          const data = await response.json();
-          const userTimezone = data.user?.timezone || detected;
-          setTimezone(userTimezone);
-          
-          // Check if location has changed
-          if (userTimezone !== detected && data.user?.timezone_manually_set) {
-            setShowMismatch(true);
+        const response = await apiService.getUserProfile();
+        // Backend returns { user: {...} } directly, not wrapped in ApiResponse
+        const userData = (response as any).user;
+        
+        if (userData) {
+          // Always prefer user's saved timezone from DB
+          const userTimezone = userData.timezone;
+
+          console.log('TimezoneDisplay - User timezone:', userTimezone, 'Detected:', detected);
+          console.log('Manually set:', userData.timezone_manually_set);
+
+          if (userTimezone) {
+            setTimezone(userTimezone);
+
+            // Check if location has changed (only if manually set)
+            if (userTimezone !== detected && userData.timezone_manually_set === true) {
+              setShowMismatch(true);
+            }
+          } else {
+            // Only fall back to detected if user has no timezone saved yet
+            setTimezone(detected);
           }
         } else {
-          setTimezone(detected);
+          setTimezone('UTC');
         }
       } catch (error) {
         console.error('Failed to fetch user timezone:', error);
-        setTimezone(detectBrowserTimezone());
+        setTimezone('UTC');
       } finally {
         setLoading(false);
       }
@@ -44,6 +56,7 @@ const TimezoneDisplay = () => {
     
     // Listen for timezone updates
     const handleTimezoneUpdate = (event: any) => {
+      console.log('Timezone updated event:', event.detail);
       setTimezone(event.detail.timezone);
       setShowMismatch(false);
     };
@@ -62,7 +75,7 @@ const TimezoneDisplay = () => {
 
   const handleClick = () => {
     if (showMismatch) {
-      navigate('/settings');
+      navigate('/dashboard?tab=profile');
     }
   };
 

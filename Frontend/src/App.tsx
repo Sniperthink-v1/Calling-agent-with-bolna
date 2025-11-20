@@ -17,7 +17,6 @@ import { ToastProvider } from "./components/ui/ToastProvider";
 import { CreditBanner } from "./components/dashboard/CreditBanner";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
-import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import LeadProfileTab from "./components/chat/LeadProfileTab";
 import ChatDataPage from "./pages/ChatDataPage";
@@ -97,16 +96,6 @@ function App() {
                         element={
                           <ProtectedRoute>
                             <EnhancedLeadCardDemo />
-                          </ProtectedRoute>
-                        }
-                      />
-
-                      {/* Settings Route */}
-                      <Route
-                        path="/settings"
-                        element={
-                          <ProtectedRoute>
-                            <Settings />
                           </ProtectedRoute>
                         }
                       />

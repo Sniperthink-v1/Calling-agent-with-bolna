@@ -20,12 +20,12 @@ export function TimezoneSettings({ onTimezoneUpdate }: TimezoneSettingsProps) {
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
-    // Detect browser timezone
+    // Fetch user's current timezone setting first (DB is source of truth)
+    fetchUserTimezone();
+
+    // Detect browser timezone only for info/mismatch suggestion
     const detected = detectBrowserTimezone();
     setDetectedTimezone(detected);
-
-    // Fetch user's current timezone setting
-    fetchUserTimezone();
   }, []);
 
   const fetchUserTimezone = async () => {
@@ -33,14 +33,16 @@ export function TimezoneSettings({ onTimezoneUpdate }: TimezoneSettingsProps) {
       setLoading(true);
       const response = await apiService.getUserProfile();
       
-      // Handle the actual response format from getUserProfile
-      // It returns User directly, not wrapped in success/data
-      const user = response.data as any;
+      // Backend returns { user: {...} } directly, not wrapped in ApiResponse
+      const user = (response as any).user;
       const userTimezone = user?.timezone || 'UTC';
-      const autoDetected = user?.timezoneAutoDetected !== false;
+      // Check timezone_manually_set field (inverted from auto-detected)
+      const manuallySet = user?.timezone_manually_set === true;
+      
+      console.log('Fetched user profile for timezone:', userTimezone, 'manually set:', manuallySet);
       
       setTimezone(userTimezone);
-      setIsAutoDetected(autoDetected);
+      setIsAutoDetected(!manuallySet);
     } catch (err) {
       console.error('Failed to fetch user timezone:', err);
       toast.error('Failed to load timezone settings');
@@ -68,10 +70,12 @@ export function TimezoneSettings({ onTimezoneUpdate }: TimezoneSettingsProps) {
         timezoneAutoDetected: isAutoDetected
       });
 
-      // Check if response indicates success
-      if (response.success || response.data) {
+      // Backend returns { user: {...}, message: '...' } on success
+      if ((response as any).user) {
         toast.success('Timezone settings saved successfully!');
         onTimezoneUpdate?.(timezone);
+        // Dispatch event to notify other components
+        window.dispatchEvent(new CustomEvent('timezoneUpdated', { detail: { timezone } }));
       } else {
         throw new Error('Failed to update timezone');
       }

@@ -69,7 +69,9 @@ export interface User {
   phone?: string;
   // Timezone fields
   timezone?: string;
-  timezoneAutoDetected?: boolean;
+  timezone_auto_detected?: boolean;
+  timezone_manually_set?: boolean;
+  timezone_updated_at?: string;
 }
 
 export interface UserProfileUpdate {
