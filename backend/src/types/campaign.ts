@@ -46,6 +46,10 @@ export interface CallCampaign {
   first_call_time: string; // HH:MM:SS format
   last_call_time: string;  // HH:MM:SS format
   
+  // Timezone settings (Phase 2)
+  campaign_timezone?: string | null;      // Optional override timezone
+  use_custom_timezone?: boolean;          // Use campaign timezone vs user timezone
+  
   // Status
   status: CampaignStatus;
   
@@ -140,6 +144,10 @@ export interface CreateCampaignRequest {
   start_date: string; // YYYY-MM-DD
   end_date?: string;  // YYYY-MM-DD
   
+  // Timezone override (optional)
+  campaign_timezone?: string | null;  // IANA timezone (e.g., "America/New_York")
+  use_custom_timezone?: boolean;      // If true, use campaign_timezone; else use user timezone
+  
   // Contacts
   contact_ids: string[]; // Array of contact IDs to add to campaign
 }
@@ -205,6 +213,8 @@ export interface UpdateCampaignRequest {
   start_date?: string;
   end_date?: string;
   status?: CampaignStatus;
+  campaign_timezone?: string | null;
+  use_custom_timezone?: boolean;
 }
 
 /**

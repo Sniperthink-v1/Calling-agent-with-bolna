@@ -201,6 +201,7 @@ export class NotificationService {
           return await emailService.sendMeetingBookedNotification({
             userEmail: email,
             userName: data.userName,
+            userTimezone: data.userTimezone, // Pass user timezone for dual timezone formatting
             meetingDetails: data.meetingDetails,
             callContext: data.callContext
           });

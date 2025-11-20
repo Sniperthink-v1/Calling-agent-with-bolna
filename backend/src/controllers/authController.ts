@@ -3,6 +3,7 @@ import { authService } from '../services/authService';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { body, validationResult } from 'express-validator';
 import { configService } from '../services/configService';
+import { getDetectedTimezone, wasTimezoneAutoDetected } from '../middleware/timezoneDetection';
 
 // Authentication controller - handles user registration, login, and session management
 export class AuthController {
@@ -27,8 +28,15 @@ export class AuthController {
 
       const { email, password, name } = req.body;
 
-      // Register user
-      const result = await authService.register(email, password, name);
+      // Detect timezone from IP/browser
+      const detectedTimezone = getDetectedTimezone(req);
+      const autoDetected = wasTimezoneAutoDetected(req);
+
+      // Register user with timezone
+      const result = await authService.register(email, password, name, {
+        timezone: detectedTimezone,
+        timezoneAutoDetected: autoDetected
+      });
 
       if (!result) {
         res.status(400).json({

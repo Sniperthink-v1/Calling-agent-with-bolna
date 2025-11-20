@@ -373,9 +373,9 @@ export class IntegrationController {
       const { notificationService } = await import('../services/notificationService');
       const { pool } = await import('../config/database');
       
-      // Fetch user email for notification
+      // Fetch user email, name, and timezone for notification
       const userResult = await pool.query(
-        'SELECT email, name FROM users WHERE id = $1',
+        'SELECT email, name, timezone FROM users WHERE id = $1',
         [userId]
       );
       
@@ -388,6 +388,7 @@ export class IntegrationController {
           notificationType: 'meeting_booked',
           notificationData: {
             userName: user.name || 'User',
+            userTimezone: user.timezone || 'UTC', // Pass user timezone for dual timezone formatting
             meetingDetails: {
               leadName: leadName || meeting.attendee_name || undefined,
               leadEmail: meeting.attendee_email,
@@ -491,9 +492,9 @@ export class IntegrationController {
           const { notificationService } = await import('../services/notificationService');
           const { pool } = await import('../config/database');
           
-          // Fetch user email and call details
+          // Fetch user email, name, and timezone
           const userResult = await pool.query(
-            'SELECT email, name FROM users WHERE id = $1',
+            'SELECT email, name, timezone FROM users WHERE id = $1',
             [userId]
           );
           
@@ -567,6 +568,7 @@ export class IntegrationController {
             notificationType: 'meeting_booked',
             notificationData: {
               userName: user.name || 'User',
+              userTimezone: user.timezone || 'UTC', // Pass user timezone for dual timezone formatting
               meetingDetails: {
                 leadName: newMeeting.attendee_name || undefined,
                 leadEmail: newMeeting.attendee_email,

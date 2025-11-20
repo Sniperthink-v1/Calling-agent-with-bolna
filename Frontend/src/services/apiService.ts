@@ -4,6 +4,7 @@
 
 import API_ENDPOINTS, { API_URL } from '../config/api';
 import { errorHandler, type ApiError as ErrorHandlerApiError } from '../utils/errorHandler';
+import { detectBrowserTimezone } from '../utils/timezone';
 import type {
   ApiResponse,
   Agent,
@@ -192,6 +193,23 @@ class ApiService {
 
     // Add automatic token refresh interceptor
     this.addRequestInterceptor(this.tokenRefreshInterceptor.bind(this));
+
+    // Add timezone header interceptor
+    this.addRequestInterceptor(this.timezoneHeaderInterceptor.bind(this));
+  }
+
+  // Timezone header interceptor
+  private async timezoneHeaderInterceptor(config: RequestConfig): Promise<RequestConfig> {
+    // Add X-Timezone header with browser-detected timezone
+    const timezone = detectBrowserTimezone();
+    
+    // Add to headers
+    if (!config.headers) {
+      config.headers = {};
+    }
+    config.headers['X-Timezone'] = timezone;
+
+    return config;
   }
 
   // Set the current agent ID for all subsequent requests
@@ -467,6 +485,26 @@ class ApiService {
       } else {
         validatedData.phone = null;
       }
+    }
+
+    // Timezone validation
+    if (userData.timezone !== undefined) {
+      const timezone = userData.timezone.trim();
+      if (timezone.length === 0) {
+        throw createApiError('Timezone cannot be empty', 400, 'VALIDATION_ERROR', { field: 'timezone' });
+      }
+      // Basic IANA timezone format validation
+      if (timezone !== 'UTC' && !timezone.includes('/')) {
+        throw createApiError('Invalid timezone format. Use IANA timezone format (e.g., America/New_York)', 400, 'VALIDATION_ERROR', { field: 'timezone' });
+      }
+      validatedData.timezone = timezone;
+    }
+
+    if (userData.timezoneAutoDetected !== undefined) {
+      if (typeof userData.timezoneAutoDetected !== 'boolean') {
+        throw createApiError('timezoneAutoDetected must be a boolean', 400, 'VALIDATION_ERROR', { field: 'timezoneAutoDetected' });
+      }
+      validatedData.timezoneAutoDetected = userData.timezoneAutoDetected;
     }
 
     return validatedData;
@@ -2042,9 +2080,18 @@ class ApiService {
   }
 
   async register(email: string, password: string, name: string): Promise<AuthResponse> {
+    // Auto-detect timezone on signup
+    const timezone = detectBrowserTimezone();
+    
     const response = await this.request<AuthResponse>(API_ENDPOINTS.AUTH.REGISTER, {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ 
+        email, 
+        password, 
+        name,
+        timezone,
+        timezoneAutoDetected: true
+      }),
       skipAuth: true,
     });
     // Backend returns the response directly, not wrapped in a data property

@@ -67,6 +67,9 @@ export interface User {
   location?: string;
   bio?: string;
   phone?: string;
+  // Timezone fields
+  timezone?: string;
+  timezoneAutoDetected?: boolean;
 }
 
 export interface UserProfileUpdate {
@@ -78,6 +81,9 @@ export interface UserProfileUpdate {
   bio?: string;
   phone?: string;
   password?: string;
+  // Timezone fields
+  timezone?: string;
+  timezoneAutoDetected?: boolean;
 }
 
 export interface UserStats {

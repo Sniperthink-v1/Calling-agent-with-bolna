@@ -1,4 +1,5 @@
 import zeptomailService from './zeptomailService';
+import { formatDualTimezone } from '../utils/timezoneUtils';
 
 interface EmailOptions {
   to: string;
@@ -514,6 +515,7 @@ Campaign Summary: ${campaignName}\n\nContacts: ${stats.totalContacts}\nCompleted
   async sendMeetingBookedNotification(params: {
     userEmail: string;
     userName: string;
+    userTimezone?: string; // User's timezone for dual timezone formatting
     meetingDetails: {
       leadName?: string;
       leadEmail: string;
@@ -532,7 +534,7 @@ Campaign Summary: ${campaignName}\n\nContacts: ${stats.totalContacts}\nCompleted
       smartNotification?: string;
     };
   }): Promise<boolean> {
-    const { userEmail, userName, meetingDetails, callContext } = params;
+    const { userEmail, userName, userTimezone, meetingDetails, callContext } = params;
 
     const getFrontendBaseUrl = (): string => {
       if (!process.env.FRONTEND_URL) {
@@ -543,15 +545,21 @@ Campaign Summary: ${campaignName}\n\nContacts: ${stats.totalContacts}\nCompleted
     };
 
     const appBaseUrl = getFrontendBaseUrl();
-    const meetingTimeFormatted = meetingDetails.meetingTime.toLocaleString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short'
-    });
+    
+    // Format meeting time with dual timezone (user's timezone + UTC)
+    // Example: "2:00 PM PST (22:00 UTC)" or just UTC if no timezone provided
+    const meetingTimeFormatted = userTimezone 
+      ? formatDualTimezone(meetingDetails.meetingTime, userTimezone)
+      : meetingDetails.meetingTime.toLocaleString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: 'UTC',
+          timeZoneName: 'short'
+        });
 
     // Truncate transcript for email if too long (keep first 2000 chars)
     const transcriptPreview = callContext?.transcript 

@@ -116,7 +116,15 @@ class AuthService {
   /**
    * Register new user
    */
-  async register(email: string, password: string, name: string): Promise<{ user: User; token: string; refreshToken: string } | null> {
+  async register(
+    email: string, 
+    password: string, 
+    name: string,
+    options?: {
+      timezone?: string;
+      timezoneAutoDetected?: boolean;
+    }
+  ): Promise<{ user: User; token: string; refreshToken: string } | null> {
     // Check if user already exists
     const existingUser = await this.getUserByEmail(email);
     if (existingUser) {
@@ -126,14 +134,30 @@ class AuthService {
     // Hash password
     const passwordHash = await this.hashPassword(password);
 
-    // Create user without email_verification_token (will be handled by verification service)
+    // Prepare timezone data
+    const timezone = options?.timezone || 'UTC';
+    const timezoneAutoDetected = options?.timezoneAutoDetected ?? false;
+
+    // Create user with timezone
     const query = `
-      INSERT INTO users (email, name, password_hash, credits, is_active, email_verified, auth_provider, role)
-      VALUES ($1, $2, $3, 15, true, false, 'email', 'user')
-      RETURNING id, email, name, credits, is_active, email_verified, role, auth_provider, created_at, updated_at
+      INSERT INTO users (
+        email, name, password_hash, credits, is_active, email_verified, 
+        auth_provider, role, timezone, timezone_auto_detected, 
+        timezone_manually_set, timezone_updated_at
+      )
+      VALUES ($1, $2, $3, 15, true, false, 'email', 'user', $4, $5, $6, NOW())
+      RETURNING id, email, name, credits, is_active, email_verified, role, 
+                auth_provider, timezone, created_at, updated_at
     `;
 
-    const result = await databaseService.query(query, [email, name, passwordHash]);
+    const result = await databaseService.query(query, [
+      email, 
+      name, 
+      passwordHash,
+      timezone,
+      timezoneAutoDetected,
+      !timezoneAutoDetected
+    ]);
     
     if (result.rows.length === 0) {
       throw new Error('Failed to create user');

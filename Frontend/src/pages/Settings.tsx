@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import NotificationPreferences from '@/components/settings/NotificationPreferences';
+import TimezoneSettingsCard from '@/components/settings/TimezoneSettingsCard';
 import { Settings as SettingsIcon, Bell, User, CreditCard, Shield } from 'lucide-react';
 
 const Settings: React.FC = () => {
@@ -46,7 +47,7 @@ const Settings: React.FC = () => {
           <NotificationPreferences />
         </TabsContent>
 
-        {/* Profile Tab (Placeholder) */}
+        {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
@@ -56,11 +57,14 @@ const Settings: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Profile settings coming soon...
+              <p className="text-sm text-muted-foreground mb-4">
+                More profile settings coming soon...
               </p>
             </CardContent>
           </Card>
+          
+          {/* Timezone Settings */}
+          <TimezoneSettingsCard />
         </TabsContent>
 
         {/* Billing Tab (Placeholder) */}

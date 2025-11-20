@@ -974,9 +974,9 @@ class WebhookService {
                   // Send meeting booked notification to dashboard user asynchronously
                   const { notificationService } = await import('./notificationService');
                   
-                  // Fetch user email for notification
+                  // Fetch user email, name, and timezone for notification
                   const userResult = await database.query(
-                    'SELECT email, name FROM users WHERE id = $1',
+                    'SELECT email, name, timezone FROM users WHERE id = $1',
                     [updatedCall.user_id]
                   );
                   
@@ -989,6 +989,7 @@ class WebhookService {
                       notificationType: 'meeting_booked',
                       notificationData: {
                         userName: user.name || 'User',
+                        userTimezone: user.timezone || 'UTC', // Pass user timezone for dual timezone formatting
                         meetingDetails: {
                           leadName: individualData.extraction?.name || undefined,
                           leadEmail: meeting.attendee_email,

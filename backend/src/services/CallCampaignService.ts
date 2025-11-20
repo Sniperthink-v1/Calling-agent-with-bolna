@@ -2,6 +2,7 @@ import { CallCampaignModel } from '../models/CallCampaign';
 import { CallQueueModel } from '../models/CallQueue';
 import { userService } from './userService';
 import { logger } from '../utils/logger';
+import { isValidTimezone } from '../utils/timezoneUtils';
 import { 
   CallCampaign, 
   CreateCampaignRequest,
@@ -30,6 +31,13 @@ export class CallCampaignService {
 
     // Validate time window
     this.validateTimeWindow(data.first_call_time, data.last_call_time);
+
+    // Validate timezone if provided
+    if (data.use_custom_timezone && data.campaign_timezone) {
+      if (!isValidTimezone(data.campaign_timezone)) {
+        throw new Error(`Invalid campaign timezone: ${data.campaign_timezone}. Please provide a valid IANA timezone.`);
+      }
+    }
 
     // Validate dates
     this.validateDates(data.start_date, data.end_date);
@@ -102,6 +110,13 @@ export class CallCampaignService {
       const firstTime = updates.first_call_time || campaign.first_call_time;
       const lastTime = updates.last_call_time || campaign.last_call_time;
       this.validateTimeWindow(firstTime, lastTime);
+    }
+
+    // Validate timezone if provided
+    if (updates.use_custom_timezone && updates.campaign_timezone) {
+      if (!isValidTimezone(updates.campaign_timezone)) {
+        throw new Error(`Invalid campaign timezone: ${updates.campaign_timezone}. Please provide a valid IANA timezone.`);
+      }
     }
 
     // Validate dates if provided

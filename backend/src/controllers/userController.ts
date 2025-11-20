@@ -16,7 +16,7 @@ export class UserController {
     const updates: ProfileUpdateData = {};
 
     // Extract and validate each field with enhanced validation
-    const { name, email, company, website, location, bio, phone } = body;
+    const { name, email, company, website, location, bio, phone, timezone, timezoneAutoDetected } = body;
 
     // Enhanced validation for name
     if (name !== undefined) {
@@ -142,6 +142,36 @@ export class UserController {
       }
     }
 
+    // Enhanced validation for timezone
+    if (timezone !== undefined) {
+      if (typeof timezone !== 'string') {
+        errors.push('Timezone must be a string');
+      } else {
+        const trimmedTimezone = timezone.trim();
+        if (trimmedTimezone.length === 0) {
+          errors.push('Timezone cannot be empty');
+        } else {
+          // Basic IANA timezone validation: UTC or contains /
+          if (trimmedTimezone !== 'UTC' && !trimmedTimezone.includes('/')) {
+            errors.push('Timezone must be a valid IANA timezone (e.g., America/New_York, UTC)');
+          } else {
+            updates.timezone = trimmedTimezone;
+          }
+        }
+      }
+    }
+
+    // Enhanced validation for timezoneAutoDetected
+    if (timezoneAutoDetected !== undefined) {
+      if (typeof timezoneAutoDetected !== 'boolean') {
+        errors.push('timezoneAutoDetected must be a boolean');
+      } else {
+        // Map frontend's timezoneAutoDetected to backend's timezone_manually_set
+        // timezoneAutoDetected = true means timezone_manually_set = false
+        updates.timezone_manually_set = !timezoneAutoDetected;
+      }
+    }
+
     // Check if at least one field is provided
     if (Object.keys(updates).length === 0) {
       errors.push('At least one field is required for update');
@@ -239,6 +269,8 @@ export class UserController {
         hasLocation: !!validation.updates.location,
         hasBio: !!validation.updates.bio,
         hasPhone: !!validation.updates.phone,
+        hasTimezone: !!validation.updates.timezone,
+        hasTimezoneManuallySet: validation.updates.timezone_manually_set !== undefined,
         updateCount: Object.keys(validation.updates).length,
         timestamp: new Date().toISOString(),
       });

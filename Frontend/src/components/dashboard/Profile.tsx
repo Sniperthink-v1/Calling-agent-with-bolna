@@ -27,6 +27,7 @@ import { apiService } from "@/services/apiService";
 import { User as UserType, CreditBalance, CreditStats } from "@/types/api";
 import { toast } from "sonner";
 import SettingsCard from "./SettingsCard";
+import TimezoneSettingsCard from "@/components/settings/TimezoneSettingsCard";
 import { OpenAIPromptsConfig } from "./OpenAIPromptsConfig";
 
 const Profile = () => {
@@ -221,6 +222,13 @@ const Profile = () => {
             }}
             onSave={handleProfileSave}
           />
+        </div>
+      )}
+
+      {/* Timezone Settings */}
+      {userProfile && (
+        <div className="max-w-4xl">
+          <TimezoneSettingsCard />
         </div>
       )}
 

@@ -205,6 +205,10 @@ app.use(sanitizeRequest);
 // Input validation and sanitization for security
 app.use(inputSanitization());
 
+// Timezone detection middleware (detects from IP/browser)
+import { timezoneDetectionMiddleware } from './middleware/timezoneDetection';
+app.use(timezoneDetectionMiddleware);
+
 // Request logging middleware
 app.use(requestLogger);
 

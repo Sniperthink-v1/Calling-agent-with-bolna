@@ -5,6 +5,7 @@ import { emailService } from './emailService';
 import { notificationService } from './notificationService';
 import * as Sentry from '@sentry/node';
 import { hashUserId } from '../utils/sentryHelpers';
+import { isValidTimezone } from '../utils/timezoneUtils';
 
 interface UserProfile {
   id: string;
@@ -24,6 +25,11 @@ interface UserProfile {
   location?: string | null;
   bio?: string | null;
   phone?: string | null;
+  // Timezone fields
+  timezone?: string;
+  timezone_auto_detected?: boolean;
+  timezone_manually_set?: boolean;
+  timezone_updated_at?: Date | null;
 }
 
 interface UserStats {
@@ -38,6 +44,8 @@ interface ProfileUpdateData {
   email?: string;
   company?: string | null;
   website?: string | null;
+  timezone?: string;
+  timezone_manually_set?: boolean;
   location?: string | null;
   bio?: string | null;
   phone?: string | null;
@@ -123,6 +131,16 @@ class UserService {
       }
     }
 
+    // Validate timezone if provided
+    if (data.timezone !== undefined && data.timezone !== null && data.timezone.trim() !== '') {
+      if (!isValidTimezone(data.timezone)) {
+        errors.push({
+          field: 'timezone',
+          message: 'Please provide a valid IANA timezone (e.g., "America/New_York", "Asia/Kolkata")'
+        });
+      }
+    }
+
     return errors;
   }
 
@@ -146,6 +164,10 @@ class UserService {
     if (data.location !== undefined) sanitized.location = sanitizeString(data.location);
     if (data.bio !== undefined) sanitized.bio = sanitizeString(data.bio);
     if (data.phone !== undefined) sanitized.phone = sanitizeString(data.phone);
+    
+    // Timezone fields
+    if (data.timezone !== undefined) sanitized.timezone = sanitizeString(data.timezone);
+    if (data.timezone_manually_set !== undefined) sanitized.timezone_manually_set = data.timezone_manually_set;
 
     return sanitized;
   }
@@ -247,6 +269,11 @@ class UserService {
         location: user.location,
         bio: user.bio,
         phone: user.phone,
+        // Timezone fields
+        timezone: user.timezone,
+        timezone_auto_detected: user.timezone_auto_detected,
+        timezone_manually_set: user.timezone_manually_set,
+        timezone_updated_at: user.timezone_updated_at,
       };
     } catch (error) {
       console.error('Error getting user profile:', error);

@@ -22,6 +22,13 @@ export class DashboardController {
       logger.info(`Fetching dashboard overview with cache-first strategy for user ${userId}`);
       const startTime = Date.now();
 
+      // Fetch user timezone for frontend date formatting
+      const userResult = await database.query(
+        'SELECT timezone FROM users WHERE id = $1',
+        [userId]
+      );
+      const userTimezone = userResult.rows[0]?.timezone || 'UTC';
+
       // Check if materialized view needs refresh (background check)
       DashboardKpiService.checkAndRefreshIfNeeded().catch(error => {
         logger.error('Background refresh check failed:', error);
@@ -37,7 +44,10 @@ export class DashboardController {
 
       res.json({
         success: true,
-        data: overviewData,
+        data: {
+          ...overviewData,
+          userTimezone // Include user timezone for frontend formatting
+        },
         performance: {
           queryTime: duration,
           source: 'cache_first_strategy',
@@ -67,6 +77,13 @@ export class DashboardController {
    */
   private async getOverviewFallback(req: AuthenticatedRequest, res: Response): Promise<void> {
     const userId = req.user!.id;
+
+    // Fetch user timezone for frontend date formatting
+    const userTimezoneResult = await database.query(
+      'SELECT timezone FROM users WHERE id = $1',
+      [userId]
+    );
+    const userTimezone = userTimezoneResult.rows[0]?.timezone || 'UTC';
 
     // Get user's credit balance
     const creditBalance = await BillingService.getUserCredits(userId);
@@ -250,6 +267,7 @@ export class DashboardController {
           agentName: 'System',
         },
       ],
+      userTimezone // Include user timezone for frontend formatting
     };
 
     res.json({

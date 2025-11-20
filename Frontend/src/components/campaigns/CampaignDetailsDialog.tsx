@@ -27,6 +27,9 @@ interface Campaign {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  // Timezone fields
+  campaign_timezone?: string;
+  use_custom_timezone?: boolean;
 }
 
 interface CampaignDetailsDialogProps {

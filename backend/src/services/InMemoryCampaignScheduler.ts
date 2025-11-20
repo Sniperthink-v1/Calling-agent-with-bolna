@@ -1,6 +1,7 @@
 import database from '../config/database';
 import { QueueProcessorService } from './QueueProcessorService';
 import { logger } from '../middleware';
+import { convertTimeWindowToTimezone } from '../utils/timezoneUtils';
 
 interface CampaignWindow {
   campaignId: string;
@@ -100,7 +101,10 @@ export class InMemoryCampaignScheduler {
           cc.user_id,
           cc.first_call_time,
           cc.last_call_time,
+          cc.campaign_timezone,
+          cc.use_custom_timezone,
           cc.status,
+          u.timezone as user_timezone,
           (
             SELECT COUNT(*) 
             FROM call_queue cq 
@@ -108,6 +112,7 @@ export class InMemoryCampaignScheduler {
               AND cq.status = 'queued'
           ) as queued_count
         FROM call_campaigns cc
+        JOIN users u ON u.id = cc.user_id
         WHERE cc.status = 'active'
           AND cc.first_call_time IS NOT NULL
           AND cc.last_call_time IS NOT NULL
@@ -121,13 +126,40 @@ export class InMemoryCampaignScheduler {
       for (const row of result.rows) {
         loadedCampaignIds.add(row.campaign_id);
         
+        // Determine effective timezone (campaign override OR user timezone OR UTC)
+        const effectiveTimezone = (row.use_custom_timezone && row.campaign_timezone) 
+          ? row.campaign_timezone 
+          : (row.user_timezone || 'UTC');
+
+        // Convert time windows from effective timezone to UTC for internal scheduling
+        const firstCallTimeUTC = convertTimeWindowToTimezone(
+          row.first_call_time,
+          effectiveTimezone,
+          'UTC'
+        );
+
+        const lastCallTimeUTC = convertTimeWindowToTimezone(
+          row.last_call_time,
+          effectiveTimezone,
+          'UTC'
+        );
+
+        logger.debug('Campaign timezone conversion', {
+          campaignId: row.campaign_id,
+          effectiveTimezone,
+          originalFirst: row.first_call_time,
+          originalLast: row.last_call_time,
+          convertedFirst: firstCallTimeUTC,
+          convertedLast: lastCallTimeUTC
+        });
+        
         // Always update/add campaigns with queued calls
         if (row.queued_count > 0) {
           this.campaignWindows.set(row.campaign_id, {
             campaignId: row.campaign_id,
             userId: row.user_id,
-            firstCallTime: row.first_call_time,
-            lastCallTime: row.last_call_time,
+            firstCallTime: firstCallTimeUTC,  // Now in UTC
+            lastCallTime: lastCallTimeUTC,    // Now in UTC
             queuedCount: row.queued_count,
             status: row.status
           });

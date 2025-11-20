@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import {
@@ -31,6 +31,8 @@ import {
 import { authenticatedFetch, getAuthHeaders } from '@/utils/auth';
 import { CampaignCreditEstimator } from '@/components/campaigns/CampaignCreditEstimator';
 import { useCreditToasts } from '@/components/ui/ToastProvider';
+import CampaignTimezoneSelectorCard from '@/components/campaigns/CampaignTimezoneSelectorCard';
+import { detectBrowserTimezone } from '@/utils/timezone';
 import * as XLSX from 'xlsx';
 
 interface CreateCampaignModalProps {
@@ -74,6 +76,11 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [parsedContactCount, setParsedContactCount] = useState(0);
   
+  // Timezone states
+  const [useCustomTimezone, setUseCustomTimezone] = useState(false);
+  const [campaignTimezone, setCampaignTimezone] = useState<string>('');
+  const [userTimezone, setUserTimezone] = useState<string>('');
+  
   // Credit estimation states
   const [showEstimator, setShowEstimator] = useState(false);
   const [estimatedContactCount, setEstimatedContactCount] = useState(0);
@@ -108,6 +115,29 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
 
   const userConcurrencyLimit = concurrencySettings?.settings?.user_concurrent_calls_limit || 10;
   const availableSlots = concurrencySettings?.settings?.user_available_slots || 10;
+
+  // Fetch user profile for timezone
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const response = await authenticatedFetch('/api/users/profile');
+        if (response.ok) {
+          const data = await response.json();
+          const profileTimezone = data.user?.timezone || detectBrowserTimezone();
+          setUserTimezone(profileTimezone);
+        } else {
+          setUserTimezone(detectBrowserTimezone());
+        }
+      } catch (error) {
+        console.error('Failed to fetch user profile:', error);
+        setUserTimezone(detectBrowserTimezone());
+      }
+    };
+    
+    if (isOpen) {
+      fetchUserProfile();
+    }
+  }, [isOpen]);
 
   // Create campaign mutation (for contact-based campaigns)
   const createMutation = useMutation({
@@ -372,7 +402,9 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         start_date: startDate,
         end_date: endDate || undefined,
         next_action: nextAction,
-        csvFile
+        csvFile,
+        use_custom_timezone: useCustomTimezone,
+        campaign_timezone: useCustomTimezone ? campaignTimezone : undefined,
       };
     } else if (preSelectedContacts.length > 0) {
       contactCount = preSelectedContacts.length;
@@ -387,6 +419,8 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         start_date: startDate,
         end_date: endDate || undefined,
         next_action: nextAction,
+        use_custom_timezone: useCustomTimezone,
+        campaign_timezone: useCustomTimezone ? campaignTimezone : undefined,
       };
     } else {
       toast({
@@ -423,6 +457,10 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         formData.append('next_action', pendingCampaignData.next_action);
         if (pendingCampaignData.end_date) {
           formData.append('end_date', pendingCampaignData.end_date);
+        }
+        if (pendingCampaignData.use_custom_timezone) {
+          formData.append('use_custom_timezone', 'true');
+          formData.append('campaign_timezone', pendingCampaignData.campaign_timezone);
         }
         
         uploadCsvMutation.mutate(formData);
@@ -602,6 +640,17 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Timezone Settings */}
+          <CampaignTimezoneSelectorCard
+            userTimezone={userTimezone}
+            campaignTimezone={campaignTimezone}
+            useCustomTimezone={useCustomTimezone}
+            onChange={({ useCustomTimezone, campaignTimezone }) => {
+              setUseCustomTimezone(useCustomTimezone);
+              setCampaignTimezone(campaignTimezone || '');
+            }}
+          />
 
           {/* File Upload Section */}
           {preSelectedContacts.length === 0 && (

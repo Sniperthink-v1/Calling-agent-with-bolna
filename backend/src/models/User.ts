@@ -35,6 +35,11 @@ export interface UserInterface extends BaseModelInterface {
   google_email?: string | null;
   // Concurrency control
   concurrent_calls_limit?: number;
+  // Timezone settings
+  timezone?: string;
+  timezone_auto_detected?: boolean;
+  timezone_manually_set?: boolean;
+  timezone_updated_at?: Date | null;
 }
 
 export class UserModel extends BaseModel<UserInterface> {
@@ -453,6 +458,45 @@ export class UserModel extends BaseModel<UserInterface> {
     return await this.update(userId, {
       password_reset_token: null,
       password_reset_expires: null,
+    });
+  }
+
+  /**
+   * Update user timezone
+   */
+  async updateTimezone(
+    userId: string, 
+    timezone: string, 
+    manuallySet: boolean = true
+  ): Promise<UserInterface | null> {
+    return await this.update(userId, { 
+      timezone,
+      timezone_manually_set: manuallySet,
+      timezone_auto_detected: !manuallySet,
+      timezone_updated_at: new Date()
+    });
+  }
+
+  /**
+   * Get user timezone (fallback to UTC if not set)
+   */
+  async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.findById(userId);
+    return user?.timezone || 'UTC';
+  }
+
+  /**
+   * Set timezone from auto-detection (during registration)
+   */
+  async setAutoDetectedTimezone(
+    userId: string,
+    timezone: string
+  ): Promise<UserInterface | null> {
+    return await this.update(userId, {
+      timezone,
+      timezone_auto_detected: true,
+      timezone_manually_set: false,
+      timezone_updated_at: new Date()
     });
   }
 }
