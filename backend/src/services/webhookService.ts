@@ -788,29 +788,68 @@ class WebhookService {
             const previousCalls = await Call.findByPhoneNumberAllUsers(updatedCall.phone_number);
             const previousCallsCount = previousCalls.filter(c => c.id !== updatedCall.id).length;
 
-            // Get previous individual analyses for complete analysis context
-            // This provides historical context from all previous calls for this contact
-            const previousAnalyses = await leadAnalyticsService.getIndividualAnalysesByContact(
-              updatedCall.user_id,
-              updatedCall.phone_number
-            );
+            let completeData;
 
-            logger.info('📊 Fetched previous analyses for complete analysis', {
-              execution_id: executionId,
-              user_id: updatedCall.user_id,
-              phone_number: updatedCall.phone_number,
-              previous_analyses_count: previousAnalyses.length,
-              previous_calls_count: previousCallsCount
-            });
+            // If no previous calls, skip API call and duplicate individual analysis for complete
+            if (previousCallsCount === 0) {
+              logger.info('📊 No previous calls - using individual analysis for complete analysis', {
+                execution_id: executionId,
+                user_id: updatedCall.user_id,
+                phone_number: updatedCall.phone_number
+              });
 
-            // Extract complete analysis (with user's custom prompt or system default)
-            const completeData = await openaiExtractionService.extractCompleteAnalysis(
-              transcript.content,
-              previousAnalyses,
-              updatedCall.user_id,
-              updatedCall.phone_number,
-              user?.openai_complete_prompt_id
-            );
+              // Duplicate individual data for complete (no API call needed)
+              completeData = {
+                ...individualData,
+                // Remove smart_notification from complete analysis to avoid duplicate notifications
+                extraction: {
+                  ...individualData.extraction,
+                  smartnotification: null
+                }
+              };
+            } else {
+              // Get previous transcripts for complete analysis context
+              const previousAnalyses = await leadAnalyticsService.getIndividualAnalysesByContact(
+                updatedCall.user_id,
+                updatedCall.phone_number
+              );
+
+              // Get previous call transcripts
+              const previousTranscripts: string[] = [];
+              for (const prevCall of previousCalls.filter(c => c.id !== updatedCall.id)) {
+                if (prevCall.transcript_id) {
+                  const prevTranscript = await Transcript.findById(prevCall.transcript_id);
+                  if (prevTranscript) {
+                    previousTranscripts.push(prevTranscript.content);
+                  }
+                }
+              }
+
+              logger.info('📊 Fetched previous data for complete analysis', {
+                execution_id: executionId,
+                user_id: updatedCall.user_id,
+                phone_number: updatedCall.phone_number,
+                previous_analyses_count: previousAnalyses.length,
+                previous_transcripts_count: previousTranscripts.length,
+                previous_calls_count: previousCallsCount
+              });
+
+              // Extract complete analysis (with user's custom prompt or system default)
+              // Pass current transcript + previous transcripts for full context
+              completeData = await openaiExtractionService.extractCompleteAnalysis(
+                transcript.content,
+                previousTranscripts,
+                previousAnalyses,
+                updatedCall.user_id,
+                updatedCall.phone_number,
+                user?.openai_complete_prompt_id
+              );
+
+              // Remove smart_notification from complete analysis to avoid duplicate notifications
+              if (completeData.extraction) {
+                completeData.extraction.smartnotification = null;
+              }
+            }
 
             // Process dual analysis
             await leadAnalyticsService.processDualAnalysis(

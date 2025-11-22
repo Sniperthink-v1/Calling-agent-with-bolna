@@ -333,6 +333,7 @@ ${transcript}`,
    */
   async extractCompleteAnalysis(
     currentTranscript: string,
+    previousTranscripts: string[],
     previousAnalyses: IndividualAnalysis[],
     userId: string,
     phoneNumber: string,
@@ -358,19 +359,16 @@ ${transcript}`,
       userId,
       phoneNumber,
       previousCallsCount: previousAnalyses.length,
+      previousTranscriptsCount: previousTranscripts.length,
       usingUserPrompt: !!userPromptId,
       promptId: promptId.substring(0, 20) + '...',
       currentDateTime,
     });
 
-    // Build context from previous analyses with call numbers
-    const previousCallsSummary = previousAnalyses.map((analysis, index) => `
-=== CALL ${index + 1} ===
-Lead Status: ${analysis.lead_status_tag}
-Total Score: ${analysis.total_score}
-Intent: ${analysis.reasoning?.intent}
-Urgency: ${analysis.reasoning?.urgency}
-Engagement: ${analysis.reasoning?.engagement}
+    // Build full transcript history with call numbers
+    const transcriptHistory = previousTranscripts.map((transcript, index) => `
+=== CALL ${index + 1} TRANSCRIPT ===
+${transcript}
 `).join('\n');
 
     const contextMessage = `
@@ -380,12 +378,12 @@ Use this date and time information to calculate relative meeting times when anal
 
 Analyze the complete call history and return the results in JSON format.
 
-${previousAnalyses.length > 0 ? `
-PREVIOUS CALLS SUMMARY (${previousAnalyses.length} calls):
-${previousCallsSummary}
+${previousTranscripts.length > 0 ? `
+PREVIOUS CALL TRANSCRIPTS (${previousTranscripts.length} calls):
+${transcriptHistory}
 ` : 'No previous calls.'}
 
-=== CURRENT CALL (Call ${previousAnalyses.length + 1}) ===
+=== CURRENT CALL (Call ${previousTranscripts.length + 1}) TRANSCRIPT ===
 ${currentTranscript}
 `;
 
