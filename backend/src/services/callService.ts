@@ -574,7 +574,24 @@ export class CallService {
             // Add from_phone_number if a phone number is available
             if (callerPhoneNumber && callerPhoneNumber.phone_number) {
               bolnaCallData.from_phone_number = callerPhoneNumber.phone_number;
+              logger.info(`Call will use from_phone_number: ${callerPhoneNumber.phone_number} (${callerPhoneNumber.name})`);
+            } else {
+              logger.warn(`No phone number available for call - Bolna will use default or fail`, {
+                userId: callRequest.userId,
+                agentId: callRequest.agentId,
+                requestedPhoneNumberId: callRequest.callerPhoneNumberId
+              });
             }
+            
+            Sentry.addBreadcrumb({
+              category: 'call',
+              message: callerPhoneNumber ? 'Phone number configured' : 'No phone number - using Bolna default',
+              level: callerPhoneNumber ? 'info' : 'warning',
+              data: {
+                hasPhoneNumber: !!callerPhoneNumber,
+                phoneNumberId: callerPhoneNumber?.id
+              }
+            });
             
             Sentry.addBreadcrumb({
               category: 'call',
@@ -761,6 +778,13 @@ export class CallService {
       // Add from_phone_number if a phone number is available
       if (callerPhoneNumber && callerPhoneNumber.phone_number) {
         bolnaCallData.from_phone_number = callerPhoneNumber.phone_number;
+        logger.info(`Campaign call will use from_phone_number: ${callerPhoneNumber.phone_number} (${callerPhoneNumber.name})`);
+      } else {
+        logger.warn(`No phone number available for campaign call - Bolna will use default or fail`, {
+          userId: callRequest.userId,
+          agentId: callRequest.agentId,
+          campaignId: callRequest.metadata?.campaign_id
+        });
       }
       
       // Make the call via Bolna.ai

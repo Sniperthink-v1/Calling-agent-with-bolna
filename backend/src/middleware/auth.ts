@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService';
 import { AuthUser, AuthenticatedRequest } from '../types/auth';
+import { TimezoneCacheService } from '../services/timezoneCacheService';
 
 // Extend Express Request interface to include user
 declare global {
@@ -54,6 +55,16 @@ export const authenticateToken = async (
     req.user = user;
     req.userId = user.id;
     
+    // Cache user timezone for subsequent requests
+    if (user.timezone) {
+      TimezoneCacheService.cacheUserTimezone(
+        user.id,
+        user.timezone,
+        user.timezone_auto_detected || false,
+        user.timezone_manually_set || false
+      );
+    }
+    
     next();
   } catch (error) {
     console.error('Authentication middleware error:', error);
@@ -84,6 +95,16 @@ export const optionalAuth = async (
       if (user) {
         req.user = user;
         req.userId = user.id;
+        
+        // Cache user timezone for subsequent requests
+        if (user.timezone) {
+          TimezoneCacheService.cacheUserTimezone(
+            user.id,
+            user.timezone,
+            user.timezone_auto_detected || false,
+            user.timezone_manually_set || false
+          );
+        }
       }
     }
     

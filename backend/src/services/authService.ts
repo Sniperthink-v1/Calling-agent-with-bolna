@@ -15,6 +15,9 @@ export interface User {
   emailVerified: boolean;
   role: string;
   authProvider: string;
+  timezone?: string;
+  timezone_auto_detected?: boolean;
+  timezone_manually_set?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -277,7 +280,8 @@ class AuthService {
   async getUserByEmail(email: string): Promise<User | null> {
     try {
       const query = `
-        SELECT id, email, name, credits, is_active, email_verified, role, auth_provider, created_at, updated_at
+        SELECT id, email, name, credits, is_active, email_verified, role, auth_provider, 
+               timezone, timezone_auto_detected, timezone_manually_set, created_at, updated_at
         FROM users 
         WHERE email = $1
       `;
@@ -298,6 +302,9 @@ class AuthService {
         emailVerified: userData.email_verified,
         role: userData.role,
         authProvider: userData.auth_provider,
+        timezone: userData.timezone,
+        timezone_auto_detected: userData.timezone_auto_detected,
+        timezone_manually_set: userData.timezone_manually_set,
         createdAt: userData.created_at,
         updatedAt: userData.updated_at,
       };
@@ -313,7 +320,8 @@ class AuthService {
   async getUserById(userId: string): Promise<User | null> {
     try {
       const query = `
-        SELECT id, email, name, credits, is_active, email_verified, role, auth_provider, created_at, updated_at
+        SELECT id, email, name, credits, is_active, email_verified, role, auth_provider, 
+               timezone, timezone_auto_detected, timezone_manually_set, created_at, updated_at
         FROM users 
         WHERE id = $1
       `;
@@ -334,6 +342,9 @@ class AuthService {
         emailVerified: userData.email_verified,
         role: userData.role,
         authProvider: userData.auth_provider,
+        timezone: userData.timezone,
+        timezone_auto_detected: userData.timezone_auto_detected,
+        timezone_manually_set: userData.timezone_manually_set,
         createdAt: userData.created_at,
         updatedAt: userData.updated_at,
       };

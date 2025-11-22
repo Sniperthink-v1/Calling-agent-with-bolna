@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { userService, ProfileUpdateData, ValidationError } from '../services/userService';
 import { authService } from '../services/authService';
+import { TimezoneCacheService } from '../services/timezoneCacheService';
 
 export class UserController {
   /**
@@ -286,6 +287,12 @@ export class UserController {
           },
         });
         return;
+      }
+
+      // Invalidate timezone cache if timezone was updated
+      if (validation.updates.timezone !== undefined || validation.updates.timezone_manually_set !== undefined) {
+        TimezoneCacheService.invalidateUserTimezone(req.userId);
+        console.log(`Timezone cache invalidated for user ${req.userId}`);
       }
 
       // Log successful update

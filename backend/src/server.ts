@@ -37,10 +37,11 @@ import { configService } from './services/configService';
 // Set timezone for the Node.js process - critical for Vercel deployment
 // This ensures all Date operations use IST instead of UTC
 // Use APP_TIMEZONE for Vercel (TZ is reserved), fallback to TZ for local development
+// NOTE: This is the SERVER default timezone. User-specific timezones are cached and used per-request.
 const timezone = process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
 process.env.TZ = timezone;
-logger.info(`Application timezone set to: ${timezone}`);
-console.log(`🌍 Application timezone set to: ${timezone}`);
+logger.info(`Server default timezone set to: ${timezone} (user-specific timezones are cached per-request)`);
+console.log(`🌍 Server default timezone: ${timezone} (users can have their own timezones)`);
 
 const app = express();
 const PORT = process.env.PORT || 3000;

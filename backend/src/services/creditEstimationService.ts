@@ -1,6 +1,7 @@
 import { DatabaseService } from './databaseService';
 import { userService } from './userService';
 import { logger } from '../utils/logger';
+import { getUserTimezoneForQuery } from './timezoneCacheService';
 
 export interface CreditEstimate {
   contactCount: number;
@@ -90,6 +91,7 @@ export class CreditEstimationService {
     const client = await DatabaseService.getClient();
     
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
           COUNT(*) as total_calls,
@@ -99,10 +101,10 @@ export class CreditEstimationService {
         WHERE user_id = $1 
         AND status = 'completed'
         AND credits_used > 0
-        AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 days')
+        AND created_at >= (NOW() AT TIME ZONE $2 - INTERVAL '90 days')
       `;
       
-      const result = await client.query(query, [userId]);
+      const result = await client.query(query, [userId, userTimezone]);
       const data = result.rows[0];
       
       const callCount = parseInt(data.total_calls) || 0;
@@ -166,10 +168,11 @@ export class CreditEstimationService {
     const client = await DatabaseService.getClient();
     
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
           COUNT(*) as total_calls,
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days') as recent_calls,
+          COUNT(*) FILTER (WHERE created_at >= NOW() AT TIME ZONE $2 - INTERVAL '30 days') as recent_calls,
           AVG(duration_minutes) as avg_duration,
           AVG(credits_used) as avg_credits,
           MAX(created_at) as most_recent_call
@@ -179,7 +182,7 @@ export class CreditEstimationService {
         AND credits_used > 0
       `;
       
-      const result = await client.query(query, [userId]);
+      const result = await client.query(query, [userId, userTimezone]);
       const data = result.rows[0];
       
       return {

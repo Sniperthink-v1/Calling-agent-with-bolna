@@ -7,6 +7,9 @@ export interface AuthUser {
   name: string;
   credits: number;
   isAdmin?: boolean;
+  timezone?: string;
+  timezone_auto_detected?: boolean;
+  timezone_manually_set?: boolean;
 }
 
 export interface AuthenticatedRequest extends Omit<Request, 'user'> {

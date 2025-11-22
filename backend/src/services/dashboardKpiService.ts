@@ -1,5 +1,6 @@
 import database from '../config/database';
 import { logger } from '../utils/logger';
+import { getUserTimezoneForQuery } from './timezoneCacheService';
 import { queryCache, QueryCache } from './queryCache';
 
 export interface UserKPISummary {
@@ -485,6 +486,7 @@ export class DashboardKpiService {
    */
   private static async getEnhancedLeadMetrics(userId: string): Promise<any> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
           COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
@@ -496,10 +498,10 @@ export class DashboardKpiService {
         FROM lead_analytics la
         JOIN calls c ON la.call_id = c.id
         WHERE c.user_id = $1 
-          AND c.created_at >= CURRENT_DATE - INTERVAL '30 days'
+          AND c.created_at >= (NOW() AT TIME ZONE $2 - INTERVAL '30 days')
       `;
 
-      const result = await database.query(query, [userId]);
+      const result = await database.query(query, [userId, userTimezone]);
       const row = result.rows[0] || {};
 
       return {

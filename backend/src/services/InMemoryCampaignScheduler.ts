@@ -306,21 +306,67 @@ export class InMemoryCampaignScheduler {
 
   /**
    * Get a specific time today or tomorrow in a given timezone
+   * Returns a UTC Date object representing that local time in the specified timezone
    */
   private getTimeInTimezone(timezone: string, timeString: string, referenceDate: Date, tomorrow: boolean): Date {
     const [hours, minutes, seconds = '00'] = timeString.split(':').map(Number);
     
-    // Create date in the target timezone
-    const dateInTZ = new Date(referenceDate.toLocaleString('en-US', { timeZone: timezone }));
+    // Get the current date components in the target timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour12: false
+    });
+    
+    const parts = formatter.formatToParts(referenceDate);
+    let year = parseInt(parts.find(p => p.type === 'year')?.value || '0');
+    let month = parseInt(parts.find(p => p.type === 'month')?.value || '1');
+    let day = parseInt(parts.find(p => p.type === 'day')?.value || '1');
+    
     if (tomorrow) {
-      dateInTZ.setDate(dateInTZ.getDate() + 1);
+      day += 1;
     }
-    dateInTZ.setHours(hours, minutes, parseInt(seconds.toString()), 0);
     
-    // Convert back to UTC for scheduling
-    const utcTimestamp = Date.parse(dateInTZ.toLocaleString('en-US', { timeZone: 'UTC' }));
+    // Construct the date-time string in ISO format (this is timezone-naive)
+    const isoString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     
-    return new Date(utcTimestamp);
+    // Parse as local time, then calculate what the UTC equivalent would be
+    // by using a known reference point to find the offset
+    const testDate = new Date();
+    const testFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    
+    // Get offset between UTC and target timezone using the test date
+    const testParts = testFormatter.formatToParts(testDate);
+    const testYear = parseInt(testParts.find(p => p.type === 'year')?.value || '0');
+    const testMonth = parseInt(testParts.find(p => p.type === 'month')?.value || '1') - 1;
+    const testDay = parseInt(testParts.find(p => p.type === 'day')?.value || '1');
+    const testHour = parseInt(testParts.find(p => p.type === 'hour')?.value || '0');
+    const testMinute = parseInt(testParts.find(p => p.type === 'minute')?.value || '0');
+    const testSecond = parseInt(testParts.find(p => p.type === 'second')?.value || '0');
+    
+    // Create dates using Date.UTC to ensure they're in UTC
+    const testInTZ = Date.UTC(testYear, testMonth, testDay, testHour, testMinute, testSecond);
+    const testInUTC = testDate.getTime();
+    const offsetMs = testInUTC - testInTZ;
+    
+    // Now construct our target date in the timezone and apply the offset
+    const targetInTZ = Date.UTC(year, month - 1, day, hours, minutes, parseInt(seconds.toString()));
+    const targetInUTC = new Date(targetInTZ + offsetMs);
+    
+    console.log(`[Scheduler] getTimeInTimezone: ${timeString} in ${timezone} (tomorrow=${tomorrow}) = ${targetInUTC.toISOString()} UTC (offset=${offsetMs}ms)`);
+    
+    return targetInUTC;
   }
 
   /**

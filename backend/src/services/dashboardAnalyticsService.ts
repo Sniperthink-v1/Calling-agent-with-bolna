@@ -1,5 +1,6 @@
 import database from '../config/database';
 import { logger } from '../utils/logger';
+import { getUserTimezoneForQuery } from './timezoneCacheService';
 
 export interface AnalyticsTimeSeriesData {
   date: string;
@@ -187,11 +188,12 @@ export class DashboardAnalyticsService {
    */
   private static async getOptimizedLeadsOverTime(userId: string): Promise<AnalyticsTimeSeriesData[]> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         WITH series AS (
           SELECT generate_series(
-            (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '6 days')::date, 
-            (NOW() AT TIME ZONE 'Asia/Kolkata')::date, 
+            (NOW() AT TIME ZONE $2 - INTERVAL '6 days')::date, 
+            (NOW() AT TIME ZONE $2)::date, 
             interval '1 day'
           ) AS day
         )
@@ -201,14 +203,14 @@ export class DashboardAnalyticsService {
         FROM series s
         LEFT JOIN calls c
           ON c.user_id = $1
-         AND DATE(c.created_at AT TIME ZONE 'Asia/Kolkata') = s.day
+         AND DATE(c.created_at AT TIME ZONE $2) = s.day
         LEFT JOIN lead_analytics la
           ON la.call_id = c.id AND la.analysis_type = 'individual'
         GROUP BY s.day
         ORDER BY s.day ASC
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId], this.QUERY_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.QUERY_TIMEOUT);
 
       // Map exactly 7 rows from SQL series; build labels consistently
       return result.rows.map((row: any) => ({
@@ -235,11 +237,12 @@ export class DashboardAnalyticsService {
    */
   private static async getOptimizedInteractionsOverTime(userId: string): Promise<AnalyticsInteractionData[]> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         WITH series AS (
           SELECT generate_series(
-            (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '6 days')::date, 
-            (NOW() AT TIME ZONE 'Asia/Kolkata')::date, 
+            (NOW() AT TIME ZONE $2 - INTERVAL '6 days')::date, 
+            (NOW() AT TIME ZONE $2)::date, 
             interval '1 day'
           ) AS day
         )
@@ -249,12 +252,12 @@ export class DashboardAnalyticsService {
         FROM series s
         LEFT JOIN calls c
           ON c.user_id = $1
-         AND DATE(c.created_at AT TIME ZONE 'Asia/Kolkata') = s.day
+         AND DATE(c.created_at AT TIME ZONE $2) = s.day
         GROUP BY s.day
         ORDER BY s.day ASC
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId], this.QUERY_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.QUERY_TIMEOUT);
 
       return result.rows.map((row: any) => ({
         date: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -351,8 +354,8 @@ export class DashboardAnalyticsService {
    */
   private static async getOptimizedAgentPerformance(userId: string): Promise<AgentPerformanceData[]> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       // Use pre-aggregated data from agent_analytics table for better performance
-      // Using timezone-aware date filtering for consistent IST results
       const query = `
         SELECT 
           a.name,
@@ -369,7 +372,7 @@ export class DashboardAnalyticsService {
           FROM agent_analytics
           WHERE user_id = $1 
             AND hour IS NULL
-            AND date >= (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '30 days')::date
+            AND date >= (NOW() AT TIME ZONE $2 - INTERVAL '30 days')::date
           GROUP BY agent_id
         ) aa ON a.id = aa.agent_id
         WHERE a.user_id = $1
@@ -378,7 +381,7 @@ export class DashboardAnalyticsService {
         LIMIT 5
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId], this.QUERY_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.QUERY_TIMEOUT);
 
       return result.rows.map((row: any) => ({
         name: row.name,
@@ -398,6 +401,7 @@ export class DashboardAnalyticsService {
    */
   private static async getAggregatedStats(userId: string): Promise<any> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
           COUNT(DISTINCT c.id) as total_calls,
@@ -407,10 +411,10 @@ export class DashboardAnalyticsService {
         FROM calls c
         LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.analysis_type = 'individual'
         WHERE c.user_id = $1
-          AND c.created_at >= (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '30 days')
+          AND c.created_at >= (NOW() AT TIME ZONE $2 - INTERVAL '30 days')
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId], this.QUERY_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.QUERY_TIMEOUT);
       const row = result.rows[0] || {};
       return {
         total_calls: parseInt(String(row.total_calls)) || 0,
@@ -598,19 +602,20 @@ export class DashboardAnalyticsService {
    */
   private static async getWeeklySuccessRates(userId: string): Promise<number[]> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
-          EXTRACT(WEEK FROM created_at AT TIME ZONE 'Asia/Kolkata') as week,
+          EXTRACT(WEEK FROM created_at AT TIME ZONE $2) as week,
           COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / COUNT(*) as success_rate
         FROM calls
         WHERE user_id = $1 
-          AND created_at >= (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '4 weeks')
-        GROUP BY EXTRACT(WEEK FROM created_at AT TIME ZONE 'Asia/Kolkata')
+          AND created_at >= (NOW() AT TIME ZONE $2 - INTERVAL '4 weeks')
+        GROUP BY EXTRACT(WEEK FROM created_at AT TIME ZONE $2)
         ORDER BY week DESC
         LIMIT 4
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId], this.FALLBACK_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.FALLBACK_TIMEOUT);
       const rates = result.rows.map((row: any) => Math.round(parseFloat(String(row.success_rate)) || 0));
       
       // Pad with default values if needed
@@ -632,6 +637,7 @@ export class DashboardAnalyticsService {
    */
   static async getEnhancedCTAMetrics(userId: string): Promise<any> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
           COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
@@ -644,10 +650,10 @@ export class DashboardAnalyticsService {
         FROM lead_analytics la
         JOIN calls c ON la.call_id = c.id
         WHERE c.user_id = $1 
-          AND c.created_at >= (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '30 days')
+          AND c.created_at >= (NOW() AT TIME ZONE $2 - INTERVAL '30 days')
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId], this.QUERY_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.QUERY_TIMEOUT);
       const row = result.rows[0] || {};
 
       return {
@@ -680,6 +686,7 @@ export class DashboardAnalyticsService {
    */
   static async getCompanyLeadBreakdown(userId: string): Promise<any[]> {
     try {
+      const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
           la.company_name,
@@ -691,13 +698,13 @@ export class DashboardAnalyticsService {
         WHERE c.user_id = $1 
           AND la.company_name IS NOT NULL 
           AND la.company_name != ''
-          AND c.created_at >= (NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '30 days')
+          AND c.created_at >= (NOW() AT TIME ZONE $2 - INTERVAL '30 days')
         GROUP BY la.company_name
         ORDER BY lead_count DESC
         LIMIT 10
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId], this.QUERY_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.QUERY_TIMEOUT);
 
       return result.rows.map((row: any) => ({
         companyName: row.company_name,
