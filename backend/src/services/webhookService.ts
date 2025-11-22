@@ -2,6 +2,7 @@ import Call from '../models/Call';
 import Agent from '../models/Agent';
 import Transcript from '../models/Transcript';
 import CallQueue from '../models/CallQueue';
+import ContactModel from '../models/Contact';
 import { BillingService } from './billingService';
 import { ContactAutoCreationService } from './contactAutoCreationService';
 import { openaiExtractionService } from './openaiExtractionService';
@@ -197,14 +198,37 @@ class WebhookService {
       throw new Error(`Phone number not found in ${callType} call payload`);
     }
 
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    
+    // Check if contact exists for this phone number
+    let contactId: string | undefined = undefined;
     try {
-      // Create call record
+      const existingContact = await ContactModel.query(
+        'SELECT id FROM contacts WHERE user_id = $1 AND phone_number = $2',
+        [agent.user_id, normalizedPhone]
+      );
+      
+      if (existingContact.rows.length > 0) {
+        contactId = existingContact.rows[0].id;
+        logger.info('Found existing contact for call', { 
+          execution_id: executionId, 
+          contact_id: contactId,
+          phone_number: normalizedPhone 
+        });
+      }
+    } catch (error) {
+      logger.warn('Error checking for existing contact', { error });
+    }
+
+    try {
+      // Create call record with contact_id if found
       await Call.create({
         agent_id: agent.id,
         user_id: agent.user_id,
         bolna_conversation_id: executionId,
         bolna_execution_id: executionId,
-        phone_number: normalizePhoneNumber(phoneNumber),
+        phone_number: normalizedPhone,
+        contact_id: contactId,
         call_source: 'phone',
         status: 'in_progress',
         call_lifecycle_status: 'initiated',
