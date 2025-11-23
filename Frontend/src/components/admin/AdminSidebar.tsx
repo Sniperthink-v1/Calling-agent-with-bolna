@@ -170,8 +170,8 @@ export function AdminSidebar() {
             ${touchTargetSize}
             ${
               isActive
-                ? 'bg-teal-100 text-teal-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-teal-100 dark:bg-teal-900/20 text-teal-900 dark:text-teal-100'
+                : 'text-foreground/80 hover:bg-secondary/50 dark:hover:bg-secondary/20'
             }
             focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2
           `}
@@ -209,8 +209,8 @@ export function AdminSidebar() {
     <>
       {/* Mobile menu button */}
       <div className="lg:hidden">
-        <div className="flex items-center justify-between bg-white px-4 py-2 border-b border-gray-200">
-          <h1 className="text-lg font-semibold text-gray-900">Admin Panel</h1>
+        <div className="flex items-center justify-between bg-card px-4 py-2 border-b border-border">
+          <h1 className="text-lg font-semibold text-foreground">Admin Panel</h1>
           <button
             type="button"
             className={`inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500 ${touchTargetSize}`}
@@ -232,7 +232,7 @@ export function AdminSidebar() {
             aria-hidden="true"
           />
           <div 
-            className="relative flex-1 flex flex-col max-w-xs w-full bg-white"
+            className="relative flex-1 flex flex-col max-w-xs w-full bg-card"
             ref={focusTrapRef as React.RefObject<HTMLDivElement>}
           >
             <div className="absolute top-0 right-0 -mr-12 pt-2">
@@ -249,7 +249,7 @@ export function AdminSidebar() {
             <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
               <div className="flex-shrink-0 flex items-center px-4">
                 <Shield className="h-8 w-8 text-teal-600" aria-hidden="true" />
-                <span className="ml-2 text-xl font-bold text-gray-900">Admin Panel</span>
+                <span className="ml-2 text-xl font-bold text-foreground">Admin Panel</span>
               </div>
               <nav 
                 className="mt-5 px-2 space-y-1" 
@@ -260,7 +260,7 @@ export function AdminSidebar() {
                 {filteredMenuItems.map(item => renderMenuItem(item))}
               </nav>
             </div>
-            <div className="flex-shrink-0 border-t border-gray-200 p-4">
+            <div className="flex-shrink-0 border-t border-border p-4">
               <Button
                 onClick={() => {
                   setIsImpersonationDialogOpen(true);
@@ -281,11 +281,11 @@ export function AdminSidebar() {
         className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0"
         aria-label="Admin navigation"
       >
-        <div className="flex-1 flex flex-col min-h-0 bg-white border-r border-gray-200">
+        <div className="flex-1 flex flex-col min-h-0 bg-card border-r border-border">
           <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
             <div className="flex items-center flex-shrink-0 px-4">
               <Shield className="h-8 w-8 text-teal-600" aria-hidden="true" />
-              <span className="ml-2 text-xl font-bold text-gray-900">Admin Panel</span>
+              <span className="ml-2 text-xl font-bold text-foreground">Admin Panel</span>
             </div>
             <nav 
               className="mt-5 flex-1 px-2 space-y-1" 
@@ -296,7 +296,7 @@ export function AdminSidebar() {
               {filteredMenuItems.map(item => renderMenuItem(item))}
             </nav>
           </div>
-          <div className="flex-shrink-0 border-t border-gray-200">
+          <div className="flex-shrink-0 border-t border-border">
             <div className="p-4">
               <Button
                 onClick={() => setIsImpersonationDialogOpen(true)}
@@ -313,7 +313,7 @@ export function AdminSidebar() {
                 </div>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-700">Admin Mode</p>
+                <p className="text-sm font-medium text-foreground/90">Admin Mode</p>
                 <p className="text-xs text-gray-500">Elevated privileges</p>
               </div>
             </div>
@@ -330,3 +330,4 @@ export function AdminSidebar() {
 }
 
 export default AdminSidebar;
+

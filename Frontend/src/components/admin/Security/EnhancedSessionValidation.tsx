@@ -244,23 +244,23 @@ export const EnhancedSessionValidation: React.FC<SessionValidationProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Session ID</label>
-                  <div className="text-sm font-mono bg-gray-50 p-2 rounded">
+                  <label className="text-sm font-medium text-foreground/90">Session ID</label>
+                  <div className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 p-2 rounded">
                     {sessionInfo.sessionId.substring(0, 8)}...
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">User ID</label>
+                  <label className="text-sm font-medium text-foreground/90">User ID</label>
                   <div className="text-sm">{sessionInfo.userId}</div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Role</label>
+                  <label className="text-sm font-medium text-foreground/90">Role</label>
                   <div className="text-sm">
                     <Badge variant="outline">{sessionInfo.role}</Badge>
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Status</label>
+                  <label className="text-sm font-medium text-foreground/90">Status</label>
                   <div className="text-sm">
                     <Badge variant={sessionInfo.isValid ? 'default' : 'destructive'}>
                       {sessionInfo.isValid ? 'Valid' : 'Invalid'}
@@ -271,28 +271,28 @@ export const EnhancedSessionValidation: React.FC<SessionValidationProps> = ({
               
               <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">IP Address</label>
-                  <div className="text-sm font-mono bg-gray-50 p-2 rounded flex items-center gap-2">
+                  <label className="text-sm font-medium text-foreground/90">IP Address</label>
+                  <div className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 p-2 rounded flex items-center gap-2">
                     <MapPin className="h-3 w-3" />
                     {maskIpAddress(sessionInfo.ipAddress)}
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Last Activity</label>
+                  <label className="text-sm font-medium text-foreground/90">Last Activity</label>
                   <div className="text-sm flex items-center gap-2">
                     <Clock className="h-3 w-3" />
                     {new Date(sessionInfo.lastActivity).toLocaleString()}
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Expires At</label>
+                  <label className="text-sm font-medium text-foreground/90">Expires At</label>
                   <div className="text-sm flex items-center gap-2">
                     <Clock className="h-3 w-3" />
                     {new Date(sessionInfo.expiresAt).toLocaleString()}
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Time Remaining</label>
+                  <label className="text-sm font-medium text-foreground/90">Time Remaining</label>
                   <div className="text-sm font-medium">
                     {getTimeUntilExpiry()}
                   </div>
@@ -302,8 +302,8 @@ export const EnhancedSessionValidation: React.FC<SessionValidationProps> = ({
 
             {/* User Agent */}
             <div className="mt-4">
-              <label className="text-sm font-medium text-gray-700">Browser</label>
-              <div className="text-sm font-mono bg-gray-50 p-2 rounded flex items-center gap-2">
+              <label className="text-sm font-medium text-foreground/90">Browser</label>
+              <div className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 p-2 rounded flex items-center gap-2">
                 <Monitor className="h-3 w-3" />
                 {sessionInfo.userAgent.substring(0, 100)}
                 {sessionInfo.userAgent.length > 100 && '...'}
@@ -313,7 +313,7 @@ export const EnhancedSessionValidation: React.FC<SessionValidationProps> = ({
             {/* Last Validation */}
             {lastValidation && (
               <div className="mt-4">
-                <label className="text-sm font-medium text-gray-700">Last Validation</label>
+                <label className="text-sm font-medium text-foreground/90">Last Validation</label>
                 <div className="text-sm text-gray-600">
                   {lastValidation.toLocaleString()}
                 </div>
@@ -356,3 +356,4 @@ export const EnhancedSessionValidation: React.FC<SessionValidationProps> = ({
     </div>
   );
 };
+

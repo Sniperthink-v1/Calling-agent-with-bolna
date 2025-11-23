@@ -67,7 +67,7 @@ export const ResponsiveSidebar: React.FC<ResponsiveSidebarProps> = ({
   // Desktop sidebar
   const DesktopSidebar = () => (
     <aside
-      className={`hidden md:flex flex-col bg-white border-r transition-all duration-300 ${
+      className={`hidden md:flex flex-col bg-card border-r transition-all duration-300 ${
         isCollapsed ? 'w-16' : 'w-64'
       } ${className}`}
       aria-label="Admin navigation"

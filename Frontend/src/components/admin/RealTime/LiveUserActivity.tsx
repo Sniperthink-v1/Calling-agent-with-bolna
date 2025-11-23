@@ -171,7 +171,7 @@ export const LiveUserActivity: React.FC<LiveUserActivityProps> = ({
                 {filteredActivities.map((activity, index) => (
                   <div
                     key={`${activity.userId}-${activity.timestamp}-${index}`}
-                    className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex items-start gap-3 p-3 border rounded-lg hover:bg-secondary/50 dark:hover:bg-secondary/20 transition-colors"
                   >
                     <div className="text-lg flex-shrink-0 mt-0.5">
                       {getActivityIcon(activity.action)}

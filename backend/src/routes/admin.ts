@@ -3,6 +3,7 @@ import { AdminController } from '../controllers/adminController';
 import { authenticateToken } from '../middleware/auth';
 import { requireAdmin, requireSuperAdmin, logAdminAction } from '../middleware/adminAuth';
 import phoneNumberRoutes from './phoneNumbers';
+import failureLogsRoutes from './admin/failureLogsRoutes';
 
 const router = Router();
 
@@ -371,5 +372,15 @@ router.post(
   logAdminAction('IMPERSONATE_USER', 'user'),
   AdminController.impersonateUser
 );
+
+// Security endpoints (admin access required)
+router.get(
+  '/security/csrf-token',
+  requireAdmin,
+  AdminController.getCSRFToken
+);
+
+// Failure logs routes
+router.use('/failure-logs', failureLogsRoutes);
 
 export default router;

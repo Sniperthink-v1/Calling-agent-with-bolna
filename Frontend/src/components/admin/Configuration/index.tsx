@@ -105,7 +105,7 @@ export const Configuration: React.FC<ConfigurationProps> = ({ className }) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Configuration Management</h1>
+          <h1 className="text-3xl font-bold text-foreground">Configuration Management</h1>
           <p className="text-gray-600 mt-2">
             Manage system configuration, API keys, feature flags, and user tiers
           </p>

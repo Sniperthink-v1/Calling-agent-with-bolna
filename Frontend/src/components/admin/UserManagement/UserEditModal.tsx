@@ -149,11 +149,11 @@ export function UserEditModal({
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose} />
         
-        <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="relative bg-card rounded-lg shadow-xl max-w-md w-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 Edit User
               </h2>
               <p className="text-sm text-gray-500">
@@ -282,19 +282,19 @@ export function UserEditModal({
             </div>
 
             {/* User Statistics (Read-only) */}
-            <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="p-3 bg-secondary/50 dark:bg-secondary/20 rounded-lg">
               <Label className="text-sm font-medium mb-2 block">User Statistics</Label>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">{user.agentCount || (user as any).agent_count || 0}</p>
+                  <p className="text-lg font-semibold text-foreground">{user.agentCount || (user as any).agent_count || 0}</p>
                   <p className="text-xs text-gray-500">Agents</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">{user.callCount || (user as any).call_count || 0}</p>
+                  <p className="text-lg font-semibold text-foreground">{user.callCount || (user as any).call_count || 0}</p>
                   <p className="text-xs text-gray-500">Calls</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-foreground">
                     ${(user.creditsUsed || (user as any).credits_used || user.credits || 0).toFixed(2)}
                   </p>
                   <p className="text-xs text-gray-500">Credits Used</p>

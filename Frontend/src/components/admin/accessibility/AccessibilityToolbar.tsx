@@ -28,7 +28,7 @@ export const AccessibilityToolbar: React.FC<AccessibilityToolbarProps> = ({
 
   return (
     <div
-      className={`flex items-center space-x-2 p-2 bg-gray-50 border-b ${className}`}
+      className={`flex items-center space-x-2 p-2 bg-secondary/50 dark:bg-secondary/20 border-b ${className}`}
       role="toolbar"
       aria-label="Accessibility tools"
     >

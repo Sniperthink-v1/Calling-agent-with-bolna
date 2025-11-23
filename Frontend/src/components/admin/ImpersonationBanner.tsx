@@ -45,7 +45,7 @@ export function ImpersonationBanner() {
           onClick={handleExitImpersonation}
           variant="outline"
           size="sm"
-          className="bg-white text-orange-600 border-white hover:bg-orange-50 font-semibold"
+          className="bg-card text-orange-600 border-card hover:bg-orange-50 dark:hover:bg-orange-900/20 font-semibold"
         >
           <X className="h-4 w-4 mr-2" />
           Exit to Admin

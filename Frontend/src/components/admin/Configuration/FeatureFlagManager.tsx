@@ -325,7 +325,7 @@ const BulkFeatureModal: React.FC<BulkFeatureModalProps> = ({
               {mockFlags.map((flag) => (
                 <div
                   key={flag.flagId}
-                  className="flex items-center space-x-2 p-3 hover:bg-gray-50"
+                  className="flex items-center space-x-2 p-3 hover:bg-secondary/50 dark:bg-secondary/20"
                 >
                   <input
                     type="checkbox"
@@ -686,7 +686,7 @@ export const FeatureFlagManager: React.FC<FeatureFlagManagerProps> = ({ classNam
     return (
       <div className="text-center py-8">
         <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Feature Flags</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-2">Error Loading Feature Flags</h3>
         <p className="text-gray-600">Failed to load feature flag configuration</p>
       </div>
     );
@@ -697,7 +697,7 @@ export const FeatureFlagManager: React.FC<FeatureFlagManagerProps> = ({ classNam
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Feature Flag Management</h2>
+          <h2 className="text-2xl font-bold text-foreground">Feature Flag Management</h2>
           <p className="text-gray-600">Control proprietary features and user access</p>
         </div>
         <div className="flex space-x-2">
@@ -1079,3 +1079,4 @@ export const FeatureFlagManager: React.FC<FeatureFlagManagerProps> = ({ classNam
 };
 
 export default FeatureFlagManager;
+

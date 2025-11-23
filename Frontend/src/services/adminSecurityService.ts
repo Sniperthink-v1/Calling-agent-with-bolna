@@ -1,4 +1,5 @@
 import { apiService } from './apiService';
+import { API_URL } from '../config/api';
 
 export interface AdminSessionInfo {
   sessionId: string;
@@ -39,8 +40,8 @@ class AdminSecurityService {
    */
   async validateAdminSession(): Promise<AdminSessionInfo> {
     try {
-      const response = await apiService['request']<AdminSessionInfo>('/admin/security/session/validate');
-      return response as AdminSessionInfo;
+      const response = await apiService['request']<AdminSessionInfo>(`${API_URL}/admin/security/session/validate`);
+      return (response as any).data || response;
     } catch (error) {
       console.error('Admin session validation failed:', error);
       throw new Error('Session validation failed');
@@ -86,8 +87,8 @@ class AdminSecurityService {
         return this.csrfToken;
       }
 
-      const response = await apiService['request']<{ token: string; expiresIn: number }>('/admin/security/csrf-token');
-      const data = response as { token: string; expiresIn: number };
+      const response = await apiService['request']<{ token: string; expiresIn: number }>(`${API_URL}/admin/security/csrf-token`);
+      const data = (response as any).data || response;
       this.csrfToken = data.token;
       
       // Auto-refresh token before expiry
@@ -139,7 +140,7 @@ class AdminSecurityService {
     details?: Record<string, any>
   ): Promise<void> {
     try {
-      await this.secureAdminRequest('POST', '/admin/security/audit-log', {
+      await this.secureAdminRequest('POST', `${API_URL}/admin/security/audit-log`, {
         action,
         resource,
         resourceId,
@@ -163,7 +164,7 @@ class AdminSecurityService {
     limit?: number;
   }): Promise<AdminActionLog[]> {
     try {
-      let url = '/admin/security/access-logs';
+      let url = `${API_URL}/admin/security/access-logs`;
       if (filters) {
         const params = new URLSearchParams();
         if (filters.adminUserId) params.append('adminUserId', filters.adminUserId);
@@ -197,7 +198,7 @@ class AdminSecurityService {
       await this.logAdminAction('logout', 'session');
 
       // Call backend logout endpoint
-      await this.secureAdminRequest('POST', '/admin/security/logout');
+      await this.secureAdminRequest('POST', `${API_URL}/admin/security/logout`);
 
       // Clear all local data
       localStorage.clear();
@@ -236,7 +237,7 @@ class AdminSecurityService {
     }>;
   }> {
     try {
-      const response = await this.secureAdminRequest('GET', '/admin/security/suspicious-activity');
+      const response = await this.secureAdminRequest('GET', `${API_URL}/admin/security/suspicious-activity`);
       return response || {
         hasSuspiciousActivity: false,
         alerts: []

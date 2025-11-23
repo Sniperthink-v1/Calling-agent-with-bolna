@@ -199,7 +199,7 @@ export function UserList({
             </span>
           </div>
           <div className="ml-3">
-            <div className="text-sm font-medium text-gray-900">
+            <div className="text-sm font-medium text-foreground">
               {user.name || 'Unknown User'}
             </div>
             <div className="text-sm text-gray-500">{user.email}</div>
@@ -376,11 +376,11 @@ export function UserList({
       </div>
 
       {/* Users table */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-card rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-gray-900">
+              <h3 className="text-lg font-medium text-foreground">
                 Users ({totalUsers})
               </h3>
               <p className="text-sm text-gray-500">
@@ -405,7 +405,7 @@ export function UserList({
           </div>
         ) : users.length === 0 ? (
           <div className="p-8 text-center">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">No users found</h3>
             <p className="text-sm text-gray-500 mb-4">No users match your current search and filter criteria.</p>
             <Button onClick={() => {
               setSearchQuery('');

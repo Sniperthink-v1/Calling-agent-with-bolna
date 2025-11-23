@@ -169,19 +169,19 @@ export function UserStatusToggle({
             )}
 
             {/* User Stats */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-900 mb-2">User Statistics:</p>
+            <div className="p-3 bg-secondary/50 dark:bg-secondary/20 rounded-lg">
+              <p className="text-sm font-medium text-foreground mb-2">User Statistics:</p>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">{user.agentCount}</p>
+                  <p className="text-lg font-semibold text-foreground">{user.agentCount}</p>
                   <p className="text-xs text-gray-500">Agents</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">{user.callCount}</p>
+                  <p className="text-lg font-semibold text-foreground">{user.callCount}</p>
                   <p className="text-xs text-gray-500">Calls</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-foreground">
                     ${user.creditsUsed.toFixed(2)}
                   </p>
                   <p className="text-xs text-gray-500">Credits Used</p>

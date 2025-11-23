@@ -172,7 +172,7 @@ Please describe what you were doing when this error occurred:
       const isPermissionError = error?.message?.includes('403') || error?.message?.includes('unauthorized');
 
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
           <Card className="w-full max-w-2xl">
             <CardHeader className="text-center">
               <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
@@ -244,7 +244,7 @@ Please describe what you were doing when this error occurred:
               {/* Technical details for developers */}
               {showDetails && error && (
                 <details className="mt-6">
-                  <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
+                  <summary className="cursor-pointer text-sm font-medium text-foreground/90 hover:text-foreground">
                     Technical Details (for developers)
                   </summary>
                   <div className="mt-2 p-4 bg-gray-100 rounded-md">
@@ -297,3 +297,4 @@ Please describe what you were doing when this error occurred:
 }
 
 export default AdminErrorBoundary;
+

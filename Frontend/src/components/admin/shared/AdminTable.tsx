@@ -39,10 +39,10 @@ export function AdminTable({
 
   if (loading) {
     return (
-      <div className={`bg-white shadow overflow-hidden sm:rounded-md ${className}`}>
+      <div className={`bg-card shadow overflow-hidden sm:rounded-md ${className}`}>
         <div className="px-4 py-8 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading...</p>
+          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
@@ -53,25 +53,25 @@ export function AdminTable({
 
   if (safeData.length === 0) {
     return (
-      <div className={`bg-white shadow overflow-hidden sm:rounded-md ${className}`}>
+      <div className={`bg-card shadow overflow-hidden sm:rounded-md ${className}`}>
         <div className="px-4 py-8 text-center">
-          <p className="text-sm text-gray-500">{emptyMessage}</p>
+          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`bg-white shadow overflow-hidden sm:rounded-md ${className}`}>
+    <div className={`bg-card shadow overflow-hidden sm:rounded-md ${className}`}>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-border">
+        <thead className="bg-secondary/50 dark:bg-secondary/20">
           <tr>
             {columns.map((column) => (
               <th
                 key={column.key}
-                className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                  column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
+                className={`px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider ${
+                  column.sortable ? 'cursor-pointer hover:bg-secondary/70 dark:hover:bg-secondary/30' : ''
                 } ${column.className || ''}`}
                 onClick={() => handleSort(column)}
                 style={{ minWidth: column.key === 'actions' ? '120px' : column.key === 'name' ? '200px' : 'auto' }}
@@ -83,7 +83,7 @@ export function AdminTable({
                       <svg
                         className={`h-3 w-3 ${
                           sortColumn === column.key && sortDirection === 'ASC'
-                            ? 'text-gray-900'
+                            ? 'text-foreground'
                             : 'text-gray-400'
                         }`}
                         fill="currentColor"
@@ -98,7 +98,7 @@ export function AdminTable({
                       <svg
                         className={`h-3 w-3 -mt-1 ${
                           sortColumn === column.key && sortDirection === 'DESC'
-                            ? 'text-gray-900'
+                            ? 'text-foreground'
                             : 'text-gray-400'
                         }`}
                         fill="currentColor"
@@ -117,13 +117,13 @@ export function AdminTable({
             ))}
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-card divide-y divide-border">
           {safeData.map((row, rowIndex) => (
-            <tr key={rowIndex} className="hover:bg-gray-50">
+            <tr key={rowIndex} className="hover:bg-secondary/50 dark:hover:bg-secondary/20">
               {columns.map((column) => (
                 <td
                   key={column.key}
-                  className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${
+                  className={`px-6 py-4 whitespace-nowrap text-sm text-foreground ${
                     column.className || ''
                   }`}
                   style={{ minWidth: column.key === 'actions' ? '120px' : 'auto' }}

@@ -99,11 +99,11 @@ export function UserManagement() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-card rounded-lg shadow p-6">
         <div className="flex items-center">
           <Users className="h-8 w-8 text-teal-600 mr-3" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+            <h1 className="text-2xl font-bold text-foreground">User Management</h1>
             <p className="text-sm text-gray-500">
               Manage platform users, their access, and account settings
             </p>

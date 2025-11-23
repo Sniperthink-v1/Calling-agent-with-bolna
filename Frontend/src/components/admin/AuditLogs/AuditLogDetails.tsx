@@ -84,7 +84,7 @@ export const AuditLogDetails: React.FC<AuditLogDetailsProps> = ({ log, onClose }
         </span>
         <div className="text-sm text-right max-w-xs">
           {typeof value === 'object' && value !== null ? (
-            <pre className="text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+            <pre className="text-xs bg-secondary/50 dark:bg-secondary/20 p-2 rounded border overflow-x-auto">
               {JSON.stringify(value, null, 2)}
             </pre>
           ) : (
@@ -124,7 +124,7 @@ export const AuditLogDetails: React.FC<AuditLogDetailsProps> = ({ log, onClose }
                 <div>
                   <label className="text-sm font-medium text-gray-600">Log ID</label>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded">
+                    <span className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 px-2 py-1 rounded">
                       {log.id}
                     </span>
                     <Button
@@ -177,7 +177,7 @@ export const AuditLogDetails: React.FC<AuditLogDetailsProps> = ({ log, onClose }
                 <div>
                   <label className="text-sm font-medium text-gray-600">User ID</label>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded">
+                    <span className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 px-2 py-1 rounded">
                       {log.adminUserId}
                     </span>
                     <Button
@@ -213,7 +213,7 @@ export const AuditLogDetails: React.FC<AuditLogDetailsProps> = ({ log, onClose }
                   <div>
                     <label className="text-sm font-medium text-gray-600">Resource ID</label>
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded">
+                      <span className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 px-2 py-1 rounded">
                         {log.resourceId}
                       </span>
                       <Button
@@ -256,7 +256,7 @@ export const AuditLogDetails: React.FC<AuditLogDetailsProps> = ({ log, onClose }
                         <div>
                           <label className="text-xs text-gray-500">User ID</label>
                           <div className="flex items-center space-x-2">
-                            <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded">
+                            <span className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 px-2 py-1 rounded">
                               {log.targetUserId}
                             </span>
                             <Button
@@ -290,7 +290,7 @@ export const AuditLogDetails: React.FC<AuditLogDetailsProps> = ({ log, onClose }
                 <div>
                   <label className="text-sm font-medium text-gray-600">IP Address</label>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded">
+                    <span className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 px-2 py-1 rounded">
                       {log.ipAddress}
                     </span>
                     <Button
@@ -311,7 +311,7 @@ export const AuditLogDetails: React.FC<AuditLogDetailsProps> = ({ log, onClose }
               
               <div>
                 <label className="text-sm font-medium text-gray-600">User Agent</label>
-                <div className="text-sm bg-gray-50 p-2 rounded border break-all">
+                <div className="text-sm bg-secondary/50 dark:bg-secondary/20 p-2 rounded border break-all">
                   {log.userAgent}
                 </div>
               </div>

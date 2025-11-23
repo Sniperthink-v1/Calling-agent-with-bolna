@@ -160,7 +160,7 @@ function getSeverityColor(severity: string): string {
     case 'medium': return 'border-orange-200 bg-orange-50';
     case 'high': return 'border-red-200 bg-red-50';
     case 'critical': return 'border-red-300 bg-red-100';
-    default: return 'border-gray-200 bg-gray-50';
+    default: return 'border-gray-200 bg-secondary/50 dark:bg-secondary/20';
   }
 }
 
@@ -201,8 +201,8 @@ export function AdminErrorMessage({
 
         {/* Recovery suggestions */}
         <div>
-          <h4 className="font-medium text-sm text-gray-900 mb-2">What you can do:</h4>
-          <ul className="text-sm text-gray-700 space-y-1">
+          <h4 className="font-medium text-sm text-foreground mb-2">What you can do:</h4>
+          <ul className="text-sm text-foreground/90 space-y-1">
             {config.suggestions.map((suggestion, index) => (
               <li key={index} className="flex items-start">
                 <span className="text-gray-400 mr-2">•</span>
@@ -239,7 +239,7 @@ export function AdminErrorMessage({
         {/* Technical details */}
         {showDetails && 'code' in error && (
           <details className="mt-4">
-            <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
+            <summary className="cursor-pointer text-sm font-medium text-foreground/90 hover:text-foreground">
               Technical Details
             </summary>
             <div className="mt-2 p-3 bg-white rounded border text-xs">
@@ -255,7 +255,7 @@ export function AdminErrorMessage({
                 {error.context && (
                   <div>
                     <span className="font-medium">Context:</span>
-                    <pre className="mt-1 text-xs bg-gray-50 p-2 rounded overflow-auto">
+                    <pre className="mt-1 text-xs bg-secondary/50 dark:bg-secondary/20 p-2 rounded overflow-auto">
                       {JSON.stringify(error.context, null, 2)}
                     </pre>
                   </div>
@@ -301,3 +301,5 @@ export function AdminInlineError({
 }
 
 export default AdminErrorMessage;
+
+

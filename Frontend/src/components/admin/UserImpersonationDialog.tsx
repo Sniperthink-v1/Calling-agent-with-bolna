@@ -124,12 +124,12 @@ export function UserImpersonationDialog({ open, onOpenChange }: UserImpersonatio
             <div className="border rounded-lg">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead className="font-semibold text-black">Name</TableHead>
-                    <TableHead className="font-semibold text-black">Email</TableHead>
-                    <TableHead className="font-semibold text-black">Role</TableHead>
-                    <TableHead className="font-semibold text-black">Member Since</TableHead>
-                    <TableHead className="font-semibold text-black text-right">Action</TableHead>
+                  <TableRow className="bg-secondary/50 dark:bg-secondary/20">
+                    <TableHead className="font-semibold text-foreground">Name</TableHead>
+                    <TableHead className="font-semibold text-foreground">Email</TableHead>
+                    <TableHead className="font-semibold text-foreground">Role</TableHead>
+                    <TableHead className="font-semibold text-foreground">Member Since</TableHead>
+                    <TableHead className="font-semibold text-foreground text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -141,11 +141,11 @@ export function UserImpersonationDialog({ open, onOpenChange }: UserImpersonatio
                     </TableRow>
                   ) : (
                     filteredUsers.map((user) => (
-                      <TableRow key={user.id} className="hover:bg-gray-50">
-                        <TableCell className="font-medium text-black">{user.name}</TableCell>
-                        <TableCell className="text-black">{user.email}</TableCell>
-                        <TableCell className="text-black capitalize">{user.role}</TableCell>
-                        <TableCell className="text-black">
+                      <TableRow key={user.id} className="hover:bg-secondary/50 dark:hover:bg-secondary/20">
+                        <TableCell className="font-medium text-foreground">{user.name}</TableCell>
+                        <TableCell className="text-foreground">{user.email}</TableCell>
+                        <TableCell className="text-foreground capitalize">{user.role}</TableCell>
+                        <TableCell className="text-foreground">
                           {new Date(user.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
@@ -170,3 +170,4 @@ export function UserImpersonationDialog({ open, onOpenChange }: UserImpersonatio
     </Dialog>
   );
 }
+

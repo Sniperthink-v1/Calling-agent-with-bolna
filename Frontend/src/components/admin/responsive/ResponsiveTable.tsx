@@ -60,7 +60,7 @@ export const ResponsiveTable: React.FC<ResponsiveTableProps> = ({
             <TableRow
               key={row.id || index}
               onClick={() => onRowClick?.(row)}
-              className={`${onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''} ${
+              className={`${onRowClick ? 'cursor-pointer hover:bg-secondary/50 dark:hover:bg-secondary/20' : ''} ${
                 isTouchDevice ? touchTargetSize : ''
               }`}
               tabIndex={onRowClick ? 0 : undefined}

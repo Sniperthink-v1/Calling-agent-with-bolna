@@ -148,7 +148,7 @@ const UserConcurrency: React.FC = () => {
   const selectedUser = users.find((u: User) => u.id.toString() === selectedUserId);
 
   return (
-    <div className={`h-full p-6 ${theme === 'dark' ? 'bg-black text-white' : 'bg-gray-50 text-gray-900'}`}>
+    <div className={`h-full p-6 ${theme === 'dark' ? 'bg-black text-white' : 'bg-gray-50 text-foreground'}`}>
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
@@ -344,3 +344,4 @@ const UserConcurrency: React.FC = () => {
 };
 
 export default UserConcurrency;
+

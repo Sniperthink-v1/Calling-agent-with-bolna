@@ -204,7 +204,7 @@ export const UserTierManager: React.FC<UserTierManagerProps> = ({ className }) =
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">User Tier Management</h2>
+          <h2 className="text-2xl font-bold text-foreground">User Tier Management</h2>
           <p className="text-gray-600">Manage subscription tiers and feature access</p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>

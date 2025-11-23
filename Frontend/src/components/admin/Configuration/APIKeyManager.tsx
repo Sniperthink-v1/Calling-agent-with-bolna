@@ -136,7 +136,7 @@ const UserAssignmentModal: React.FC<UserAssignmentModalProps> = ({
             {filteredUsers.map((user) => (
               <div
                 key={user.id}
-                className="flex items-center space-x-2 p-3 hover:bg-gray-50"
+                className="flex items-center space-x-2 p-3 hover:bg-secondary/50 dark:bg-secondary/20"
               >
                 <input
                   type="checkbox"
@@ -378,7 +378,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ className }) => {
     return (
       <div className="text-center py-8">
         <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading API Keys</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-2">Error Loading API Keys</h3>
         <p className="text-gray-600">Failed to load API key configuration</p>
       </div>
     );
@@ -389,7 +389,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ className }) => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">API Key Management</h2>
+          <h2 className="text-2xl font-bold text-foreground">API Key Management</h2>
           <p className="text-gray-600">Manage ElevenLabs API keys and user assignments</p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
@@ -663,3 +663,4 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ className }) => {
 };
 
 export default APIKeyManager;
+

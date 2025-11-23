@@ -155,8 +155,8 @@ export const AdminConfirmationDialog: React.FC<AdminConfirmationDialogProps> = (
         <div className="space-y-4">
           {/* Resource Details */}
           {resourceDetails && (
-            <div className="bg-gray-50 p-3 rounded-md">
-              <div className="text-sm font-medium text-gray-700">Target Resource:</div>
+            <div className="bg-secondary/50 dark:bg-secondary/20 p-3 rounded-md">
+              <div className="text-sm font-medium text-foreground/90">Target Resource:</div>
               <div className="text-sm text-gray-600">
                 <div>Type: {resourceDetails.type}</div>
                 <div>Name: {resourceDetails.name}</div>
@@ -309,3 +309,4 @@ export const useAdminConfirmation = () => {
     ConfirmationDialog
   };
 };
+

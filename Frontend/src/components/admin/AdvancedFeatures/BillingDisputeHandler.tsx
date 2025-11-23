@@ -557,7 +557,7 @@ const DisputeDetailsModal: React.FC<{
                 <Label>Internal Notes</Label>
                 <div className="space-y-2 mt-1">
                   {dispute.internalNotes.map((note, index) => (
-                    <div key={index} className="p-2 bg-gray-50 rounded text-sm">
+                    <div key={index} className="p-2 bg-secondary/50 dark:bg-secondary/20 rounded text-sm">
                       {note}
                     </div>
                   ))}

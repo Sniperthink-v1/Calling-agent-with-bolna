@@ -100,7 +100,7 @@ export function UserDetails({
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose} />
         
-        <div className="relative bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <div className="relative bg-card rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center space-x-4">
@@ -110,7 +110,7 @@ export function UserDetails({
                 </span>
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className="text-xl font-semibold text-foreground">
                   {user.name || 'Unknown User'}
                 </h2>
                 <p className="text-sm text-gray-500">{user.email}</p>
@@ -143,7 +143,7 @@ export function UserDetails({
             ) : error ? (
               <div className="text-center py-12">
                 <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-foreground mb-2">
                   Error Loading Details
                 </h3>
                 <p className="text-sm text-gray-500 mb-4">{error}</p>
@@ -173,11 +173,11 @@ export function UserDetails({
                     <CardContent className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium text-gray-500">Full Name</label>
-                        <p className="text-sm text-gray-900">{userDetails.user.name || 'Not provided'}</p>
+                        <p className="text-sm text-foreground">{userDetails.user.name || 'Not provided'}</p>
                       </div>
                       <div>
                         <label className="text-sm font-medium text-gray-500">Email</label>
-                        <p className="text-sm text-gray-900">{userDetails.user.email}</p>
+                        <p className="text-sm text-foreground">{userDetails.user.email}</p>
                       </div>
                       <div>
                         <label className="text-sm font-medium text-gray-500">Role</label>
@@ -193,13 +193,13 @@ export function UserDetails({
                       </div>
                       <div>
                         <label className="text-sm font-medium text-gray-500">Registration Date</label>
-                        <p className="text-sm text-gray-900">
+                        <p className="text-sm text-foreground">
                           {formatDate(user.registrationDate)}
                         </p>
                       </div>
                       <div>
                         <label className="text-sm font-medium text-gray-500">Last Login</label>
-                        <p className="text-sm text-gray-900">
+                        <p className="text-sm text-foreground">
                           {user.lastLogin ? formatDate(user.lastLogin) : 'Never'}
                         </p>
                       </div>
@@ -238,13 +238,13 @@ export function UserDetails({
                     <CardContent className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium text-gray-500">Average Call Duration</label>
-                        <p className="text-sm text-gray-900">
+                        <p className="text-sm text-foreground">
                           {formatDuration(userDetails.statistics?.averageCallDuration || 0)}
                         </p>
                       </div>
                       <div>
                         <label className="text-sm font-medium text-gray-500">Credits Remaining</label>
-                        <p className="text-sm text-gray-900">
+                        <p className="text-sm text-foreground">
                           {formatCurrency(userDetails.user.credits || 0)}
                         </p>
                       </div>
@@ -262,7 +262,7 @@ export function UserDetails({
                       {userDetails.agents.length === 0 ? (
                         <div className="text-center py-8">
                           <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <h3 className="text-lg font-medium text-gray-900 mb-2">
+                          <h3 className="text-lg font-medium text-foreground mb-2">
                             No Agents
                           </h3>
                           <p className="text-sm text-gray-500">
@@ -281,7 +281,7 @@ export function UserDetails({
                                   <Activity className="h-4 w-4 text-blue-600" />
                                 </div>
                                 <div>
-                                  <h4 className="text-sm font-medium text-gray-900">
+                                  <h4 className="text-sm font-medium text-foreground">
                                     {agent.name}
                                   </h4>
                                   <p className="text-xs text-gray-500">
@@ -320,7 +320,7 @@ export function UserDetails({
                       {userDetails.recentActivity.length === 0 ? (
                         <div className="text-center py-8">
                           <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <h3 className="text-lg font-medium text-gray-900 mb-2">
+                          <h3 className="text-lg font-medium text-foreground mb-2">
                             No Recent Activity
                           </h3>
                           <p className="text-sm text-gray-500">
@@ -338,7 +338,7 @@ export function UserDetails({
                                 <CheckCircle className="h-5 w-5 text-green-500" />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-gray-900">
+                                <p className="text-sm text-foreground">
                                   {activity.description}
                                 </p>
                                 <p className="text-xs text-gray-500">
@@ -385,7 +385,7 @@ export function UserDetails({
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="text-sm font-medium text-gray-500">Subscription Tier</label>
-                          <p className="text-sm text-gray-900">
+                          <p className="text-sm text-foreground">
                             {userDetails.user.subscriptionTier || 'Free'}
                           </p>
                         </div>

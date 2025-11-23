@@ -151,15 +151,15 @@ export function SystemAnalyticsFallback({ onRetry, onNavigateHome, className = '
           {/* Cached metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-lg border">
-              <div className="text-2xl font-bold text-gray-900">{cachedData.totalUsers}</div>
+              <div className="text-2xl font-bold text-foreground">{cachedData.totalUsers}</div>
               <div className="text-sm text-gray-600">Total Users</div>
             </div>
             <div className="bg-white p-4 rounded-lg border">
-              <div className="text-2xl font-bold text-gray-900">{cachedData.activeAgents}</div>
+              <div className="text-2xl font-bold text-foreground">{cachedData.activeAgents}</div>
               <div className="text-sm text-gray-600">Active Agents</div>
             </div>
             <div className="bg-white p-4 rounded-lg border">
-              <div className="text-2xl font-bold text-gray-900">{cachedData.systemUptime}</div>
+              <div className="text-2xl font-bold text-foreground">{cachedData.systemUptime}</div>
               <div className="text-sm text-gray-600">System Uptime</div>
             </div>
           </div>

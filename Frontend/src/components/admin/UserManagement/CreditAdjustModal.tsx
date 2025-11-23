@@ -193,11 +193,11 @@ export function CreditAdjustModal({
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose} />
         
-        <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="relative bg-card rounded-lg shadow-xl max-w-md w-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 Adjust Credits
               </h2>
               <p className="text-sm text-gray-500">
@@ -230,11 +230,11 @@ export function CreditAdjustModal({
             )}
 
             {/* Current Balance */}
-            <div className="p-4 bg-gray-50 rounded-lg">
+            <div className="p-4 bg-secondary/50 dark:bg-secondary/20 rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">Current Balance</Label>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-2xl font-bold text-foreground">
                     {formatCurrency(user.credits || (user as any).credit_balance || 0)}
                   </p>
                 </div>

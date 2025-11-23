@@ -9,3 +9,4 @@ export * from './LeadAnalytics';
 export * from './Contact';
 export * from './CreditTransaction';
 export * from './AdminAuditLog';
+export * from './FailureLog';

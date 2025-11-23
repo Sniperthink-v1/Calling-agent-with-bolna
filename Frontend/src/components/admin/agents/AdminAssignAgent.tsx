@@ -341,7 +341,7 @@ export default function AdminAssignAgent({ onAssignmentComplete }: AdminAssignAg
           {/* Assignment Queue */}
           {assignments.length > 0 && (
             <div className="border-t pt-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">
+              <h3 className="text-sm font-medium text-foreground mb-3">
                 Queued Assignments ({assignments.length})
               </h3>
               <div className="space-y-2 mb-4">
@@ -355,7 +355,7 @@ export default function AdminAssignAgent({ onAssignmentComplete }: AdminAssignAg
                   return (
                     <div
                       key={assignment.agentId}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      className="flex items-center justify-between p-3 bg-secondary/50 dark:bg-secondary/20 rounded-lg"
                     >
                       <div className="flex items-center gap-4 text-sm">
                         <Bot className="h-4 w-4 text-gray-500" />
@@ -444,3 +444,5 @@ export default function AdminAssignAgent({ onAssignmentComplete }: AdminAssignAg
     </div>
   );
 }
+
+

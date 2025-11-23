@@ -335,7 +335,7 @@ export default function AdminManageAgents() {
             {filteredAgents.length === 0 ? (
               <div className="p-8 text-center">
                 <Bot className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No agents found</h3>
+                <h3 className="text-lg font-medium text-foreground mb-2">No agents found</h3>
                 <p className="text-gray-600">
                   {filters.search || filters.status !== 'all' || filters.type !== 'all' || filters.assigned !== 'all'
                     ? 'Try adjusting your filters to see more results.'
@@ -344,7 +344,7 @@ export default function AdminManageAgents() {
               </div>
             ) : (
               filteredAgents.map((agent) => (
-                <div key={agent.id} className="p-6 hover:bg-gray-50">
+                <div key={agent.id} className="p-6 hover:bg-secondary/50 dark:bg-secondary/20">
                   <div className="flex items-center justify-between">
                     <div className="flex items-start gap-4">
                       <div className="bg-blue-100 rounded-lg p-2">
@@ -353,7 +353,7 @@ export default function AdminManageAgents() {
                       
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
+                          <h3 className="text-lg font-semibold text-foreground">
                             {agent.name}
                           </h3>
                           {getStatusBadge(agent.status)}
@@ -475,3 +475,5 @@ export default function AdminManageAgents() {
     </div>
   );
 }
+
+

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Users, Phone, AlertTriangle, Clock, TrendingUp, Wifi, WifiOff, Cpu, HardDrive, Database, Zap } from 'lucide-react';
+import { Activity, Users, Phone, AlertTriangle, Clock, TrendingUp, Wifi, WifiOff, Cpu, HardDrive, Database, Zap, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { Progress } from '../../ui/progress';
@@ -305,23 +305,29 @@ export const RealTimeMetrics: React.FC<RealTimeMetricsProps> = ({ className }) =
             <CardTitle className="text-sm font-medium">Response Status Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <span className="text-sm font-medium text-green-800">2xx Success</span>
-                <span className="text-lg font-bold text-green-600">
-                  {healthData.metrics.insights.statusBreakdown['2xx']}%
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="flex flex-col items-center justify-center p-3 bg-green-50 rounded-lg">
+                <span className="text-xs font-medium text-green-800 mb-1">2xx Success</span>
+                <span className="text-xl font-bold text-green-600">
+                  {healthData.metrics.insights.statusBreakdown['2xx']}
                 </span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                <span className="text-sm font-medium text-yellow-800">4xx Client</span>
-                <span className="text-lg font-bold text-yellow-600">
-                  {healthData.metrics.insights.statusBreakdown['4xx']}%
+              <div className="flex flex-col items-center justify-center p-3 bg-blue-50 rounded-lg">
+                <span className="text-xs font-medium text-blue-800 mb-1">3xx Redirect</span>
+                <span className="text-xl font-bold text-blue-600">
+                  {healthData.metrics.insights.statusBreakdown['3xx']}
                 </span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                <span className="text-sm font-medium text-red-800">5xx Server</span>
-                <span className="text-lg font-bold text-red-600">
-                  {healthData.metrics.insights.statusBreakdown['5xx']}%
+              <div className="flex flex-col items-center justify-center p-3 bg-yellow-50 rounded-lg">
+                <span className="text-xs font-medium text-yellow-800 mb-1">4xx Client</span>
+                <span className="text-xl font-bold text-yellow-600">
+                  {healthData.metrics.insights.statusBreakdown['4xx']}
+                </span>
+              </div>
+              <div className="flex flex-col items-center justify-center p-3 bg-red-50 rounded-lg">
+                <span className="text-xs font-medium text-red-800 mb-1">5xx Server</span>
+                <span className="text-xl font-bold text-red-600">
+                  {healthData.metrics.insights.statusBreakdown['5xx']}
                 </span>
               </div>
             </div>
@@ -387,14 +393,111 @@ export const RealTimeMetrics: React.FC<RealTimeMetricsProps> = ({ className }) =
           <CardContent>
             <div className="space-y-2">
               {healthData.metrics.insights.slowestEndpoints.slice(0, 5).map((endpoint, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <div key={index} className="flex items-center justify-between p-2 bg-secondary/50 dark:bg-secondary/20 rounded">
                   <div className="flex-1">
                     <p className="text-sm font-medium font-mono">{endpoint.path}</p>
-                    <p className="text-xs text-gray-500">{endpoint.count} requests</p>
+                    <p className="text-xs text-muted-foreground">{endpoint.count} requests</p>
                   </div>
-                  <span className={`text-sm font-bold ${endpoint.avgDuration > 1000 ? 'text-red-600' : endpoint.avgDuration > 500 ? 'text-yellow-600' : 'text-green-600'}`}>
+                  <span className={`text-sm font-bold ${endpoint.avgDuration > 1000 ? 'text-red-600 dark:text-red-400' : endpoint.avgDuration > 500 ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'}`}>
                     {endpoint.avgDuration}ms
                   </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Failed API Calls Table */}
+      {healthData?.metrics.insights?.failedRequests && healthData.metrics.insights.failedRequests.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-red-500" />
+              Failed API Calls
+            </CardTitle>
+            <Badge variant="destructive">
+              {healthData.metrics.insights.failedRequests.length} errors
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Time</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Method</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Endpoint</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Status</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Error Message</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Duration</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">IP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {healthData.metrics.insights.failedRequests.slice(0, 20).map((request) => (
+                    <tr key={request.id} className="border-b hover:bg-secondary/30 dark:hover:bg-secondary/10">
+                      <td className="py-2 px-2 text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(request.timestamp), { addSuffix: true })}
+                      </td>
+                      <td className="py-2 px-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {request.method}
+                        </Badge>
+                      </td>
+                      <td className="py-2 px-2 font-mono text-xs max-w-xs truncate" title={request.path}>
+                        {request.path}
+                      </td>
+                      <td className="py-2 px-2">
+                        <Badge 
+                          variant={request.statusCode >= 500 ? 'destructive' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {request.statusCode}
+                        </Badge>
+                      </td>
+                      <td className="py-2 px-2 text-xs text-foreground max-w-sm truncate" title={request.errorMessage}>
+                        {request.errorMessage || 'No message'}
+                      </td>
+                      <td className="py-2 px-2 text-xs text-muted-foreground">
+                        {request.duration}ms
+                      </td>
+                      <td className="py-2 px-2 text-xs text-muted-foreground font-mono">
+                        {request.ipAddress}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {healthData.metrics.insights.failedRequests.length > 20 && (
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Showing 20 of {healthData.metrics.insights.failedRequests.length} failed requests
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Failed Requests by Endpoint */}
+      {healthData?.metrics.insights?.failedRequestsByEndpoint && healthData.metrics.insights.failedRequestsByEndpoint.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Most Problematic Endpoints</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {healthData.metrics.insights.failedRequestsByEndpoint.slice(0, 10).map((endpoint, index) => (
+                <div key={index} className="flex items-start justify-between p-3 bg-secondary/50 dark:bg-secondary/20 rounded border-l-4 border-red-500 dark:border-red-400">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium font-mono truncate">{endpoint.endpoint}</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate" title={endpoint.lastError}>
+                      Last error: {endpoint.lastError}
+                    </p>
+                  </div>
+                  <Badge variant="destructive" className="ml-2 shrink-0">
+                    {endpoint.count} failures
+                  </Badge>
                 </div>
               ))}
             </div>

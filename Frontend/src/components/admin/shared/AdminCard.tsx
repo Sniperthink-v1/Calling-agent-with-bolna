@@ -24,7 +24,7 @@ export function AdminCard({
   trend,
 }: AdminCardProps) {
   return (
-    <div className={`bg-white overflow-hidden shadow rounded-lg ${className}`}>
+    <div className={`bg-card overflow-hidden shadow rounded-lg ${className}`}>
       <div className="p-5">
         <div className="flex items-center">
           <div className="flex-shrink-0">
@@ -39,7 +39,7 @@ export function AdminCard({
               </dt>
               {value !== undefined && (
                 <dd className="flex items-baseline">
-                  <div className="text-2xl font-semibold text-gray-900">
+                  <div className="text-2xl font-semibold text-foreground">
                     {value}
                   </div>
                   {trend && (

@@ -30,7 +30,7 @@ export function AdminHeader({ title, breadcrumbs, actions, onAnnounce }: AdminHe
 
   return (
     <header 
-      className="bg-white shadow-sm border-b border-gray-200"
+      className="bg-card shadow-sm border-b border-border"
       role="banner"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -48,12 +48,12 @@ export function AdminHeader({ title, breadcrumbs, actions, onAnnounce }: AdminHe
                       {item.href ? (
                         <Link
                           to={item.href}
-                          className="text-sm font-medium text-gray-500 hover:text-gray-700"
+                          className="text-sm font-medium text-gray-500 hover:text-foreground/90"
                         >
                           {item.label}
                         </Link>
                       ) : (
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-foreground">
                           {item.label}
                         </span>
                       )}
@@ -62,11 +62,11 @@ export function AdminHeader({ title, breadcrumbs, actions, onAnnounce }: AdminHe
                 </ol>
               </nav>
             ) : title ? (
-              <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{title}</h1>
             ) : (
               <Link
                 to="/dashboard"
-                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                className="inline-flex items-center px-3 py-2 border border-border shadow-sm text-sm leading-4 font-medium rounded-md text-foreground bg-card hover:bg-secondary/50 dark:hover:bg-secondary/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
               >
                 <Home className="h-4 w-4 mr-2" />
                 Back to Dashboard
@@ -109,7 +109,7 @@ export function AdminHeader({ title, breadcrumbs, actions, onAnnounce }: AdminHe
                 setShowNotifications(true);
                 onAnnounce?.(`Opening notifications. ${unreadNotificationCount} unread notifications.`);
               }}
-              className="relative bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="relative bg-card p-1 rounded-full text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label={`View notifications. ${unreadNotificationCount} unread notifications.`}
               aria-describedby={unreadNotificationCount > 0 ? 'notification-count' : undefined}
             >
@@ -134,7 +134,7 @@ export function AdminHeader({ title, breadcrumbs, actions, onAnnounce }: AdminHe
                 </div>
               </div>
               <div className="min-w-0 flex-1 hidden sm:block">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-medium text-foreground truncate">
                   {user?.name || user?.email}
                 </p>
                 <p className="text-xs text-gray-500">
@@ -169,3 +169,4 @@ export function AdminHeader({ title, breadcrumbs, actions, onAnnounce }: AdminHe
 }
 
 export default AdminHeader;
+

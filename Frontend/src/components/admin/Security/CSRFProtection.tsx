@@ -194,8 +194,8 @@ export const CSRFStatus: React.FC<CSRFStatusProps> = ({ showDetails = false }) =
           {/* Token Information */}
           {token && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Token Preview</label>
-              <div className="text-sm font-mono bg-gray-50 p-2 rounded">
+              <label className="text-sm font-medium text-foreground/90">Token Preview</label>
+              <div className="text-sm font-mono bg-secondary/50 dark:bg-secondary/20 p-2 rounded">
                 {token.substring(0, 16)}...{token.substring(token.length - 8)}
               </div>
             </div>
@@ -222,7 +222,7 @@ export const CSRFStatus: React.FC<CSRFStatusProps> = ({ showDetails = false }) =
           {/* Validation History */}
           {validationHistory.length > 0 && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Recent Activity</label>
+              <label className="text-sm font-medium text-foreground/90">Recent Activity</label>
               <div className="space-y-1">
                 {validationHistory.slice(0, 5).map((validation, index) => (
                   <div key={index} className="flex items-center justify-between py-1 text-sm">

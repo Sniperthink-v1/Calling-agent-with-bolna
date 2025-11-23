@@ -1,6 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApiService } from '../services/adminApiService';
 
+export interface FailedRequest {
+  id: string;
+  timestamp: number;
+  path: string;
+  method: string;
+  statusCode: number;
+  duration: number;
+  errorMessage?: string;
+  userId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
 export interface SystemHealthData {
   overall: 'healthy' | 'warning' | 'critical';
   components: {
@@ -39,6 +52,7 @@ export interface SystemHealthData {
     insights?: {
       statusBreakdown: {
         '2xx': number;
+        '3xx': number;
         '4xx': number;
         '5xx': number;
       };
@@ -46,6 +60,12 @@ export interface SystemHealthData {
         path: string;
         avgDuration: number;
         count: number;
+      }>;
+      failedRequests?: FailedRequest[];
+      failedRequestsByEndpoint?: Array<{
+        endpoint: string;
+        count: number;
+        lastError: string;
       }>;
     };
   };

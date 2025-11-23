@@ -72,7 +72,7 @@ export function AdminDashboard() {
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+                        <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
                         <p className="mt-1 text-sm text-gray-500">
                             Authentication required
                         </p>
@@ -157,14 +157,14 @@ export function AdminDashboard() {
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+                        <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
                         <p className="mt-1 text-sm text-gray-500">
                             Overview of system metrics and platform health
                         </p>
                     </div>
                     <button
                         onClick={handleRefresh}
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                        className="inline-flex items-center px-3 py-2 border border-border shadow-sm text-sm leading-4 font-medium rounded-md text-foreground bg-card hover:bg-secondary/50 dark:hover:bg-secondary/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                     >
                         <RefreshCw className="h-4 w-4 mr-2" />
                         Retry
@@ -195,7 +195,7 @@ export function AdminDashboard() {
             {/* Page header with real-time status and notifications */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+                    <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
                     <p className="mt-1 text-sm text-gray-500">
                         Overview of system metrics and platform health
                     </p>
@@ -230,7 +230,7 @@ export function AdminDashboard() {
                     <button
                         onClick={handleRefresh}
                         disabled={isLoading}
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50"
+                        className="inline-flex items-center px-3 py-2 border border-border shadow-sm text-sm leading-4 font-medium rounded-md text-foreground bg-card hover:bg-secondary/50 dark:hover:bg-secondary/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50"
                     >
                         <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Refresh
@@ -423,7 +423,7 @@ export function AdminDashboard() {
                                                 </div>
                                                 <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
                                                     <div>
-                                                        <p className="text-sm text-gray-900">
+                                                        <p className="text-sm text-foreground">
                                                             {activity.message}
                                                         </p>
                                                     </div>

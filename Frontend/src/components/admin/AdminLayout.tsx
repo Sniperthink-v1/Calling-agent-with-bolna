@@ -29,7 +29,7 @@ export function AdminLayout({ children, title, breadcrumbs, actions }: AdminLayo
 
   return (
     <CSRFProvider>
-      <div className={`min-h-screen bg-gray-50 ${isKeyboardUser ? 'keyboard-user' : ''}`}>
+      <div className={`min-h-screen bg-background ${isKeyboardUser ? 'keyboard-user' : ''}`}>
         <SkipLinks />
         <AriaLiveRegion message={message} politeness={politeness} />
         
