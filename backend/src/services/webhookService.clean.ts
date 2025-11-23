@@ -377,6 +377,7 @@ class WebhookService {
             // Extract individual analysis
             const individualData = await openaiExtractionService.extractIndividualCallData(
               transcript.content,
+              executionId,
               call.phone_number
             );
 
@@ -384,12 +385,24 @@ class WebhookService {
             const previousCalls = await Call.findByPhoneNumberAllUsers(call.phone_number);
             const previousCallsCount = previousCalls.filter(c => c.id !== call.id).length;
 
+            // Get previous transcripts for complete analysis
+            const previousTranscripts: string[] = [];
+            for (const prevCall of previousCalls) {
+              if (prevCall.id !== call.id && prevCall.transcript_id) {
+                const prevTranscript = await Transcript.findById(prevCall.transcript_id);
+                if (prevTranscript) {
+                  previousTranscripts.push(prevTranscript.content);
+                }
+              }
+            }
+
             // Get previous analyses for complete analysis
             const previousAnalyses: any[] = []; // TODO: Implement fetching previous analyses
 
             // Extract complete analysis
             const completeData = await openaiExtractionService.extractCompleteAnalysis(
               transcript.content,
+              previousTranscripts,
               previousAnalyses,
               call.user_id,
               call.phone_number
