@@ -92,14 +92,14 @@ router.get('/by-status/:range', authenticateToken, requireAdmin, async (req: Req
 
     const logs = await failureLogModel.getFailuresByStatusRange(minStatus, maxStatus, limit);
 
-    res.json({
+    return res.json({
       success: true,
       data: logs,
       range: range
     });
   } catch (error) {
     console.error('Error fetching failures by status:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch failures by status',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -126,14 +126,14 @@ router.get('/by-endpoint', authenticateToken, requireAdmin, async (req: Request,
 
     const logs = await failureLogModel.getFailuresByEndpoint(endpoint, limit);
 
-    res.json({
+    return res.json({
       success: true,
       data: logs,
       endpoint
     });
   } catch (error) {
     console.error('Error fetching failures by endpoint:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch failures by endpoint',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -159,13 +159,13 @@ router.get('/:id', authenticateToken, requireAdmin, async (req: Request, res: Re
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: log
     });
   } catch (error) {
     console.error('Error fetching failure log details:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch failure log details',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -218,7 +218,7 @@ router.get('/search/message', authenticateToken, requireAdmin, async (req: Reque
 
     const logs = await failureLogModel.searchByErrorMessage(searchTerm, limit);
 
-    res.json({
+    return res.json({
       success: true,
       data: logs,
       searchTerm,
@@ -226,7 +226,7 @@ router.get('/search/message', authenticateToken, requireAdmin, async (req: Reque
     });
   } catch (error) {
     console.error('Error searching failure logs:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to search failure logs',
       error: error instanceof Error ? error.message : 'Unknown error'
