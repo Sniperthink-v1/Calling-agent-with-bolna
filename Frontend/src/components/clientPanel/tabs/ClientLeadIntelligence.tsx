@@ -108,13 +108,25 @@ const ClientLeadIntelligence: React.FC<ClientLeadIntelligenceProps> = ({ userId 
     <div className="space-y-4">
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-max">
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="font-semibold text-black">Contact</TableHead>
+                <TableHead
+                  className="font-semibold text-black bg-white sticky left-0 z-20 pl-4 pr-6 whitespace-nowrap"
+                >
+                  Contact
+                </TableHead>
                 <TableHead className="font-semibold text-black">User</TableHead>
-                <TableHead className="font-semibold text-black">Lead Type</TableHead>
-                <TableHead className="font-semibold text-black">Recent Lead Tag</TableHead>
+                <TableHead
+                  className="font-semibold text-black bg-white sticky left-[220px] z-20 pr-4 whitespace-nowrap"
+                >
+                  Lead Type
+                </TableHead>
+                <TableHead
+                  className="font-semibold text-black bg-white sticky left-[340px] z-20 pr-4 whitespace-nowrap"
+                >
+                  Recent Lead Tag
+                </TableHead>
                 <TableHead className="font-semibold text-black">Engagement</TableHead>
                 <TableHead className="font-semibold text-black">Intent</TableHead>
                 <TableHead className="font-semibold text-black">Budget Constraint</TableHead>
@@ -139,7 +151,7 @@ const ClientLeadIntelligence: React.FC<ClientLeadIntelligenceProps> = ({ userId 
               ) : (
                 leads.map((lead: GroupedLead, index: number) => (
                   <TableRow key={`${lead.group_key}-${index}`} className="hover:bg-gray-50">
-                    <TableCell>
+                    <TableCell className="bg-white sticky left-0 z-10 pl-4 pr-6">
                       <div>
                         <div className="font-medium text-black">{lead.name || 'Anonymous'}</div>
                         {lead.email && <div className="text-sm text-gray-600">{lead.email}</div>}
@@ -153,8 +165,12 @@ const ClientLeadIntelligence: React.FC<ClientLeadIntelligenceProps> = ({ userId 
                         <div className="text-sm text-gray-600">{lead.user_email}</div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-black capitalize">{lead.lead_type || 'N/A'}</TableCell>
-                    <TableCell>{getLeadStatusBadge(lead.recent_lead_tag)}</TableCell>
+                    <TableCell className="text-black capitalize bg-white sticky left-[220px] z-10 pr-4 whitespace-nowrap">
+                      {lead.lead_type || 'N/A'}
+                    </TableCell>
+                    <TableCell className="bg-white sticky left-[340px] z-10 pr-4 whitespace-nowrap">
+                      {getLeadStatusBadge(lead.recent_lead_tag)}
+                    </TableCell>
                     <TableCell>{getMetricBadge(lead.recent_engagement_level)}</TableCell>
                     <TableCell>{getMetricBadge(lead.recent_intent_level)}</TableCell>
                     <TableCell>{getMetricBadge(lead.recent_budget_constraint)}</TableCell>

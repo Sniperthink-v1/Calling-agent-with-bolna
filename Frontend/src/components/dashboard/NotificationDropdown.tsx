@@ -149,14 +149,38 @@ const NotificationDropdown = ({ onNavigateToLeadIntelligence }: NotificationDrop
             <div className="p-4 border-b border-gray-200 dark:border-slate-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Smart Notifications</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 h-8 w-8"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await apiService.markAllNotificationsAsRead();
+                          // Update local state
+                          setNotifications(prev => 
+                            prev.map(notif => ({ ...notif, isRead: true }))
+                          );
+                          setUnreadCount(0);
+                        } catch (error) {
+                          console.error('Error marking all as read:', error);
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      Mark all as read
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsOpen(false)}
+                    className="p-1 h-8 w-8"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 

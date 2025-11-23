@@ -2324,6 +2324,12 @@ class ApiService {
     });
   }
 
+  async markAllNotificationsAsRead(): Promise<ApiResponse<{ message: string; markedCount: number }>> {
+    return this.request<{ message: string; markedCount: number }>(API_ENDPOINTS.NOTIFICATIONS.MARK_ALL_READ, {
+      method: 'PATCH',
+    });
+  }
+
   // Method to get the streamable URL for call audio
   getCallAudioUrl(callId: string): string {
     return API_ENDPOINTS.CALLS.AUDIO(callId);

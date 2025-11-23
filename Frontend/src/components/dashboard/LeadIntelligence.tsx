@@ -1249,20 +1249,22 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
       </div>
 
       {/* Table */}
-      <div className="border rounded-lg overflow-x-auto invisible-scrollbar flex-1 min-h-0">
-        <Table className="min-w-[1600px]">
+      <div className="border rounded-lg overflow-x-auto invisible-scrollbar flex-1 min-h-0 bg-background">
+        <Table className="min-w-[1400px]">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={
-                    selectedContacts.length === filteredContacts.length &&
-                    filteredContacts.length > 0
-                  }
-                  onCheckedChange={handleSelectAll}
-                />
+              <TableHead className="sticky left-0 z-20 bg-background pl-4 pr-6 whitespace-nowrap">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    checked={
+                      selectedContacts.length === filteredContacts.length &&
+                      filteredContacts.length > 0
+                    }
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <span>Contact</span>
+                </div>
               </TableHead>
-              <TableHead className="min-w-[200px]">Contact</TableHead>
               <TableHead>Lead Type</TableHead>
               <TableHead>Recent Lead Tag</TableHead>
               <TableHead>Engagement</TableHead>
@@ -1288,19 +1290,22 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 className="cursor-pointer hover:bg-muted/50 transition-all"
                 onClick={() => handleContactClick(contact)}
               >
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={selectedContacts.includes(contact.id)}
-                    onCheckedChange={(checked) =>
-                      handleSelectContact(contact.id, checked as boolean)
-                    }
-                  />
-                </TableCell>
-                <TableCell>
-                  <div className="font-medium text-foreground underline cursor-pointer">
-                    {contact.name}
-                  </div>
-                  <div className="space-y-1 mt-1">
+                <TableCell
+                  onClick={(e) => e.stopPropagation()}
+                  className="sticky left-0 z-10 bg-background pl-4 pr-6"
+                >
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedContacts.includes(contact.id)}
+                      onCheckedChange={(checked) =>
+                        handleSelectContact(contact.id, checked as boolean)
+                      }
+                    />
+                    <div className="py-1">
+                      <div className="font-medium text-foreground underline cursor-pointer">
+                        {contact.name}
+                      </div>
+                      <div className="space-y-1 mt-1">
                     {contact.email && (
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Mail className="w-3 h-3" />
@@ -1319,6 +1324,8 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         {contact.company}
                       </div>
                     )}
+                      </div>
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>

@@ -32,6 +32,7 @@ import {
   PhoneCall,
   Loader2,
   PhoneIncoming,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -82,7 +83,6 @@ export const ContactList: React.FC<ContactListProps> = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [allLoadedContacts, setAllLoadedContacts] = useState<Contact[]>([]);
-  const [filterType, setFilterType] = useState<'all' | 'auto_created' | 'linked_to_calls'>('all');
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -148,14 +148,38 @@ export const ContactList: React.FC<ContactListProps> = ({
   const hasMore = pagination?.hasMore ?? false;
   const totalContacts = pagination?.total ?? 0;
 
+  // Reset pagination when total count changes (new contact added/deleted)
+  const prevTotalRef = useRef<number>(totalContacts);
+  useEffect(() => {
+    if (prevTotalRef.current !== totalContacts && prevTotalRef.current > 0) {
+      console.log('📊 Total contacts changed, resetting pagination:', {
+        previous: prevTotalRef.current,
+        current: totalContacts
+      });
+      setCurrentOffset(0);
+      setAllLoadedContacts([]);
+      lastLoadedOffsetRef.current = -1;
+    }
+    prevTotalRef.current = totalContacts;
+  }, [totalContacts]);
+
   // Handle infinite scroll vs traditional pagination
   const displayContacts = enableInfiniteScroll ? allLoadedContacts : contacts;
 
+  // Debug: Log first contact to check field names
+  useEffect(() => {
+    if (displayContacts.length > 0) {
+      console.log('🔍 First contact sample:', {
+        fullContact: displayContacts[0],
+        autoCreationSource: displayContacts[0].autoCreationSource,
+        hasAutoCreationSource: 'autoCreationSource' in displayContacts[0],
+        keys: Object.keys(displayContacts[0])
+      });
+    }
+  }, [displayContacts]);
+
   // Apply filter
   const filteredContacts = displayContacts.filter(contact => {
-    if (filterType === 'auto_created' && !contact.isAutoCreated) return false;
-    if (filterType === 'linked_to_calls' && contact.linkedCallId == null) return false;
-    
     // Tag filter
     if (selectedTags.length > 0) {
       const contactTags = contact.tags || [];
@@ -356,14 +380,24 @@ export const ContactList: React.FC<ContactListProps> = ({
       setSortBy(newSortBy);
       setSortOrder('asc');
     }
+    // Reset pagination and loaded contacts to trigger fresh API call
+    setCurrentOffset(0);
+    setAllLoadedContacts([]);
+    lastLoadedOffsetRef.current = -1;
   };
 
   // Helper: Map source to display name
-  const getSourceLabel = (source?: string) => {
-    if (source === 'webhook') return 'Inbound Call';
-    if (source === 'manual') return 'Manual Entry';
-    if (source === 'bulk_upload') return 'Excel Upload';
-    return '-';
+  const getSourceLabel = (contact: Contact) => {
+    // If auto_creation_source is explicitly set, use it
+    if (contact.autoCreationSource === 'webhook') return 'Inbound Call';
+    if (contact.autoCreationSource === 'bulk_upload') return 'Excel Upload';
+    if (contact.autoCreationSource === 'manual') return 'Manual Entry';
+    
+    // If contact was auto-created (from inbound call) but source is null
+    if (contact.isAutoCreated) return 'Inbound Call';
+    
+    // Otherwise, it was manually added through the UI
+    return 'Manual Entry';
   };
 
   // Helper: Get all unique tags from contacts
@@ -380,6 +414,15 @@ export const ContactList: React.FC<ContactListProps> = ({
     const statusSet = new Set<string>();
     displayContacts.forEach(contact => {
       if (contact.lastCallStatus) statusSet.add(contact.lastCallStatus);
+    });
+    return Array.from(statusSet).sort();
+  }, [displayContacts]);
+
+  // Helper: Get all unique original statuses
+  const allUniqueOriginalStatuses = React.useMemo(() => {
+    const statusSet = new Set<string>();
+    displayContacts.forEach(contact => {
+      if (contact.originalStatus) statusSet.add(contact.originalStatus);
     });
     return Array.from(statusSet).sort();
   }, [displayContacts]);
@@ -424,60 +467,39 @@ export const ContactList: React.FC<ContactListProps> = ({
 
           {/* Search and Filters */}
           <div className="space-y-3">
-            <div className="flex gap-4">
-              <div className="flex-1 relative">
+            {/* Search and Filters in One Row */}
+            <div className="flex gap-2 flex-wrap items-center">
+              {/* Search Input */}
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
                   placeholder="Search contacts..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-9"
                 />
               </div>
-              <Select
-                value={filterType}
-                onValueChange={(value: any) => setFilterType(value)}
-              >
-                <SelectTrigger className="w-48">
-                  <Filter className="w-4 h-4 mr-2" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Contacts</SelectItem>
-                  <SelectItem value="auto_created">Auto Created</SelectItem>
-                  <SelectItem value="linked_to_calls">Linked to Calls</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
 
-            {/* Additional Filters Row */}
-            <div className="flex gap-2 flex-wrap">
               {/* Tags Filter */}
               <Select
-                value={selectedTags.length > 0 ? 'custom' : 'all'}
+                value={selectedTags.length > 0 ? selectedTags[0] : 'all'}
                 onValueChange={(value) => {
-                  if (value === 'all') setSelectedTags([]);
+                  if (value === 'all') {
+                    setSelectedTags([]);
+                  } else {
+                    setSelectedTags([value]);
+                  }
                 }}
               >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="All Tags" />
+                <SelectTrigger className="w-36 h-9">
+                  <SelectValue placeholder="Tags" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Tags</SelectItem>
                   {allUniqueTags.map((tag) => (
-                    <div key={tag} className="px-2 py-1.5 hover:bg-gray-100 cursor-pointer flex items-center gap-2">
-                      <Checkbox
-                        checked={selectedTags.includes(tag)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedTags([...selectedTags, tag]);
-                          } else {
-                            setSelectedTags(selectedTags.filter(t => t !== tag));
-                          }
-                        }}
-                      />
-                      <span className="text-sm">#{tag}</span>
-                    </div>
+                    <SelectItem key={tag} value={tag}>
+                      #{tag}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -487,8 +509,8 @@ export const ContactList: React.FC<ContactListProps> = ({
                 value={selectedLastStatus}
                 onValueChange={setSelectedLastStatus}
               >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="All Status" />
+                <SelectTrigger className="w-36 h-9">
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -505,8 +527,8 @@ export const ContactList: React.FC<ContactListProps> = ({
                 value={selectedSource}
                 onValueChange={setSelectedSource}
               >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="All Sources" />
+                <SelectTrigger className="w-36 h-9">
+                  <SelectValue placeholder="Source" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Sources</SelectItem>
@@ -521,15 +543,16 @@ export const ContactList: React.FC<ContactListProps> = ({
                 value={selectedOriginalStatus}
                 onValueChange={setSelectedOriginalStatus}
               >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Original Status" />
+                <SelectTrigger className="w-40 h-9">
+                  <SelectValue placeholder="Original" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Original Status</SelectItem>
-                  <SelectItem value="outbound">Outbound</SelectItem>
-                  <SelectItem value="inbound">Inbound</SelectItem>
-                  <SelectItem value="callback_received">Callback Received</SelectItem>
-                  <SelectItem value="not_contacted">Not Contacted</SelectItem>
+                  {allUniqueOriginalStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
 
@@ -580,19 +603,34 @@ export const ContactList: React.FC<ContactListProps> = ({
 
           {/* Contacts Table with Scrollable Body */}
           <div className="h-full overflow-auto">
-            <table className="w-full">
+            <table className="w-full min-w-max">
               <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr className="border-b" style={{ backgroundColor: 'hsl(var(--background))' }}>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-12" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                  <th
+                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-12 bg-background"
+                    style={{ position: 'sticky', left: 0, zIndex: 20 }}
+                  >
                     <Checkbox
                       checked={selectedContactIds.size === filteredContacts.length && filteredContacts.length > 0}
                       onCheckedChange={handleSelectAll}
                     />
                   </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
-                    Name
+                  <th
+                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[220px]"
+                    style={{ position: 'sticky', left: 48, zIndex: 20 }}
+                  >
+                    <button
+                      onClick={() => handleSortChange('name')}
+                      className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      Name
+                      <ArrowUpDown className="w-4 h-4" />
+                    </button>
                   </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                  <th
+                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[160px]"
+                    style={{ position: 'sticky', left: 48 + 220, zIndex: 20 }}
+                  >
                     Phone
                   </th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Email</th>
@@ -617,13 +655,19 @@ export const ContactList: React.FC<ContactListProps> = ({
                   return (
                     <React.Fragment key={contact.id}>
                       <tr className="border-b transition-colors hover:bg-muted/50">
-                        <td className="p-4 align-middle">
+                        <td
+                          className="p-4 align-middle bg-background"
+                          style={{ position: 'sticky', left: 0, zIndex: 10 }}
+                        >
                           <Checkbox
                             checked={selectedContactIds.has(contact.id)}
                             onCheckedChange={(checked) => handleSelectContact(contact.id, checked as boolean)}
                           />
                         </td>
-                        <td className="p-4 align-middle">
+                        <td
+                          className="p-4 align-middle bg-background min-w-[220px]"
+                          style={{ position: 'sticky', left: 48, zIndex: 10 }}
+                        >
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{contact.name}</span>
                             {contact.isAutoCreated && contact.autoCreationSource === 'webhook' && (
@@ -634,11 +678,18 @@ export const ContactList: React.FC<ContactListProps> = ({
                             )}
                           </div>
                         </td>
-                        <td className="p-4 align-middle">{contact.phoneNumber}</td>
+                        <td
+                          className="p-4 align-middle bg-background min-w-[160px]"
+                          style={{ position: 'sticky', left: 48 + 220, zIndex: 10 }}
+                        >
+                          {contact.phoneNumber}
+                        </td>
                         <td className="p-4 align-middle">{contact.email || '-'}</td>
                         <td className="p-4 align-middle">{contact.company || '-'}</td>
                         <td className="p-4 align-middle">
-                          <span className="text-sm">{getSourceLabel(contact.autoCreationSource)}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {getSourceLabel(contact)}
+                          </Badge>
                         </td>
                         <td className="p-4 align-middle">
                           {contact.tags && contact.tags.length > 0 ? (

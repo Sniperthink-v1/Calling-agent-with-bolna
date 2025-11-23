@@ -129,3 +129,45 @@ export const markNotificationAsRead = async (req: Request, res: Response): Promi
     });
   }
 };
+
+// Mark all notifications as read
+export const markAllNotificationsAsRead = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'User not authenticated' });
+      return;
+    }
+
+    // Update all unread notifications as read
+    const query = `
+      UPDATE lead_analytics 
+      SET is_read = true
+      WHERE is_read = false
+        AND call_id IN (
+          SELECT id FROM calls WHERE user_id = $1
+        )
+        AND smart_notification IS NOT NULL
+        AND smart_notification != ''
+      RETURNING id
+    `;
+
+    const result = await pool.query(query, [userId]);
+
+    res.json({
+      success: true,
+      message: 'All notifications marked as read',
+      data: {
+        markedCount: result.rows.length
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error marking all notifications as read:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to mark all notifications as read' 
+    });
+  }
+};

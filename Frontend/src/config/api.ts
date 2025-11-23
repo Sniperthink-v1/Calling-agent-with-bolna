@@ -134,6 +134,7 @@ export const API_ENDPOINTS = {
   NOTIFICATIONS: {
     LIST: `${API_URL}/notifications`,
     MARK_READ: (id: string) => `${API_URL}/notifications/${id}/read`,
+    MARK_ALL_READ: `${API_URL}/notifications/read-all`,
   },
 
   // Transcripts
