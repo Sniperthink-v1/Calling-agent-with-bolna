@@ -91,7 +91,8 @@ export const ContactList: React.FC<ContactListProps> = ({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedLastStatus, setSelectedLastStatus] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<string>('all');
-  const [selectedOriginalStatus, setSelectedOriginalStatus] = useState<string>('all');
+  const [selectedCallType, setSelectedCallType] = useState<string>('all');
+  const [editingNotes, setEditingNotes] = useState<{ contactId: string; notes: string } | null>(null);
   
   // Bulk selection state
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
@@ -141,6 +142,7 @@ export const ContactList: React.FC<ContactListProps> = ({
     deleting,
     refreshContacts,
     deleteContact,
+    updateContact,
     clearError,
   } = useContacts(contactsOptions);
 
@@ -192,15 +194,8 @@ export const ContactList: React.FC<ContactListProps> = ({
       return false;
     }
     
-    // Source filter
-    if (selectedSource !== 'all') {
-      if (selectedSource === 'webhook' && contact.autoCreationSource !== 'webhook') return false;
-      if (selectedSource === 'manual' && contact.autoCreationSource !== 'manual') return false;
-      if (selectedSource === 'bulk_upload' && contact.autoCreationSource !== 'bulk_upload') return false;
-    }
-    
-    // Original Status filter
-    if (selectedOriginalStatus !== 'all' && contact.originalStatus !== selectedOriginalStatus) {
+    // Call Type filter
+    if (selectedCallType !== 'all' && contact.callType !== selectedCallType) {
       return false;
     }
     
@@ -356,6 +351,43 @@ export const ContactList: React.FC<ContactListProps> = ({
     setSelectedContactIds(newSet);
   };
 
+  const handleNotesClick = (contact: Contact) => {
+    setEditingNotes({ contactId: contact.id, notes: contact.notes || '' });
+  };
+
+  const handleNotesSave = async (contactId: string, notes: string) => {
+    try {
+      await updateContact(contactId, { notes });
+      
+      // Update local state immediately for infinite scroll
+      if (enableInfiniteScroll) {
+        setAllLoadedContacts(prev => 
+          prev.map(contact => 
+            contact.id === contactId 
+              ? { ...contact, notes, updatedAt: new Date().toISOString() }
+              : contact
+          )
+        );
+      }
+      
+      setEditingNotes(null);
+      toast({
+        title: 'Success',
+        description: 'Notes updated successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update notes',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleNotesCancel = () => {
+    setEditingNotes(null);
+  };
+
   const handleCreateCampaign = () => {
     console.log('🎯 Create Campaign clicked');
     const selected = Array.from(selectedContactIds);
@@ -418,13 +450,13 @@ export const ContactList: React.FC<ContactListProps> = ({
     return Array.from(statusSet).sort();
   }, [displayContacts]);
 
-  // Helper: Get all unique original statuses
-  const allUniqueOriginalStatuses = React.useMemo(() => {
-    const statusSet = new Set<string>();
+  // Helper: Get all unique call types
+  const allUniqueCallTypes = React.useMemo(() => {
+    const typeSet = new Set<string>();
     displayContacts.forEach(contact => {
-      if (contact.originalStatus) statusSet.add(contact.originalStatus);
+      if (contact.callType) typeSet.add(contact.callType);
     });
-    return Array.from(statusSet).sort();
+    return Array.from(typeSet).sort();
   }, [displayContacts]);
 
   // Calculate trigger position (10 items before end)
@@ -538,26 +570,26 @@ export const ContactList: React.FC<ContactListProps> = ({
                 </SelectContent>
               </Select>
 
-              {/* Original Status Filter */}
+              {/* Call Type Filter */}
               <Select
-                value={selectedOriginalStatus}
-                onValueChange={setSelectedOriginalStatus}
+                value={selectedCallType}
+                onValueChange={setSelectedCallType}
               >
-                <SelectTrigger className="w-40 h-9">
-                  <SelectValue placeholder="Original" />
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by Call Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Original Status</SelectItem>
-                  {allUniqueOriginalStatuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
+                  <SelectItem value="all">All Call Types</SelectItem>
+                  {allUniqueCallTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
               {/* Clear Filters Button */}
-              {(selectedTags.length > 0 || selectedLastStatus !== 'all' || selectedSource !== 'all' || selectedOriginalStatus !== 'all') && (
+              {(selectedTags.length > 0 || selectedLastStatus !== 'all' || selectedSource !== 'all' || selectedCallType !== 'all') && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -565,7 +597,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                     setSelectedTags([]);
                     setSelectedLastStatus('all');
                     setSelectedSource('all');
-                    setSelectedOriginalStatus('all');
+                    setSelectedCallType('all');
                   }}
                 >
                   Clear Filters
@@ -623,24 +655,23 @@ export const ContactList: React.FC<ContactListProps> = ({
                       onClick={() => handleSortChange('name')}
                       className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
                     >
-                      Name
+                      Lead
                       <ArrowUpDown className="w-4 h-4" />
                     </button>
                   </th>
                   <th
-                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[160px]"
+                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[180px]"
                     style={{ position: 'sticky', left: 48 + 220, zIndex: 20 }}
                   >
-                    Phone
+                    Contact Details
                   </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Email</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Company</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Call Type</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Last Status</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[200px]" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Notes</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Source</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Tags</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Last Contact</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Call Attempted</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Last Status</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Original Status</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
                     Created
                   </th>
@@ -668,24 +699,86 @@ export const ContactList: React.FC<ContactListProps> = ({
                           className="p-4 align-middle bg-background min-w-[220px]"
                           style={{ position: 'sticky', left: 48, zIndex: 10 }}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{contact.name}</span>
-                            {contact.isAutoCreated && contact.autoCreationSource === 'webhook' && (
-                              <Badge variant="secondary" className="text-xs flex items-center gap-1">
-                                <PhoneIncoming className="w-3 h-3" />
-                                Inbound Call
-                              </Badge>
+                          <div>
+                            <div className="font-medium text-foreground">{contact.name}</div>
+                            {contact.company && (
+                              <div className="text-xs text-muted-foreground mt-0.5">{contact.company}</div>
                             )}
                           </div>
                         </td>
                         <td
-                          className="p-4 align-middle bg-background min-w-[160px]"
+                          className="p-4 align-middle bg-background min-w-[180px]"
                           style={{ position: 'sticky', left: 48 + 220, zIndex: 10 }}
                         >
-                          {contact.phoneNumber}
+                          <div>
+                            <div className="text-sm">{contact.phoneNumber}</div>
+                            {contact.email && (
+                              <div className="text-xs text-muted-foreground mt-0.5">{contact.email}</div>
+                            )}
+                          </div>
                         </td>
-                        <td className="p-4 align-middle">{contact.email || '-'}</td>
-                        <td className="p-4 align-middle">{contact.company || '-'}</td>
+                        <td className="p-4 align-middle">
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {contact.callType}
+                          </Badge>
+                        </td>
+                        <td className="p-4 align-middle">
+                          {contact.lastCallStatus ? (
+                            <Badge 
+                              variant="outline" 
+                              className={
+                                contact.lastCallStatus.toLowerCase() === 'completed' ? 'bg-green-50 text-green-700 border-green-500' :
+                                contact.lastCallStatus.toLowerCase() === 'callback received' ? 'bg-purple-50 text-purple-700 border-purple-500' :
+                                contact.lastCallStatus.toLowerCase().includes('not') || contact.lastCallStatus.toLowerCase().includes('answer') ? 'bg-yellow-50 text-yellow-700 border-yellow-500' :
+                                contact.lastCallStatus.toLowerCase() === 'busy' ? 'bg-red-50 text-red-700 border-red-500' :
+                                'bg-gray-50 text-gray-700 border-gray-200'
+                              }
+                            >
+                              {contact.lastCallStatus}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-slate-50 text-slate-400 border-slate-200">
+                              Not contacted
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="p-4 align-middle min-w-[200px]">
+                          {editingNotes?.contactId === contact.id ? (
+                            <div className="flex gap-1">
+                              <Input
+                                value={editingNotes.notes}
+                                onChange={(e) => setEditingNotes({ contactId: contact.id, notes: e.target.value })}
+                                className="text-sm h-8"
+                                placeholder="Add notes..."
+                                autoFocus
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={() => handleNotesSave(contact.id, editingNotes.notes)}
+                              >
+                                ✓
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={handleNotesCancel}
+                              >
+                                ✕
+                              </Button>
+                            </div>
+                          ) : (
+                            <div
+                              className="text-sm cursor-pointer hover:text-blue-600 transition-colors"
+                              onClick={() => handleNotesClick(contact)}
+                              title="Click to edit notes"
+                            >
+                              {contact.notes || <span className="text-gray-400">Click to add notes...</span>}
+                            </div>
+                          )}
+                        </td>
                         <td className="p-4 align-middle">
                           <Badge variant="outline" className="text-xs">
                             {getSourceLabel(contact)}
@@ -723,36 +816,6 @@ export const ContactList: React.FC<ContactListProps> = ({
                             <span className="text-sm">
                               Busy: {contact.callAttemptedBusy || 0}, No Answer: {contact.callAttemptedNoAnswer || 0}
                             </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          {contact.lastCallStatus ? (
-                            <Badge 
-                              variant="outline" 
-                              className={
-                                contact.lastCallStatus === 'completed' ? 'bg-green-50 text-green-700 border-green-500 border-2' :
-                                contact.lastCallStatus.toLowerCase().includes('not') || contact.lastCallStatus.toLowerCase().includes('answer') ? 'bg-yellow-50 text-yellow-700 border-yellow-500 border-2' :
-                                contact.lastCallStatus === 'busy' ? 'bg-red-50 text-red-700 border-red-500 border-2' :
-                                contact.lastCallStatus === 'in-progress' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                contact.lastCallStatus === 'ringing' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                contact.lastCallStatus === 'call-disconnected' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                                contact.lastCallStatus === 'initiated' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                'bg-gray-50 text-gray-700 border-gray-200'
-                              }
-                            >
-                              {contact.lastCallStatus}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-slate-50 text-slate-400 border-slate-200">
-                              Not contacted
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          {contact.originalStatus ? (
-                            <span className="text-sm capitalize">{contact.originalStatus}</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
@@ -798,7 +861,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                       {/* Trigger element for loading more */}
                       {isTriggerPosition && enableInfiniteScroll && (
                         <tr>
-                          <td colSpan={13}>
+                          <td colSpan={11}>
                             <div ref={triggerElementRef} className="h-1" />
                           </td>
                         </tr>

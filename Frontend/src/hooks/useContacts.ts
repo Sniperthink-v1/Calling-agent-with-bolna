@@ -211,8 +211,19 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
         queryClient.setQueryData([...queryKeys.contacts(user?.id), initialOptions], context.previousData);
       }
     },
-    onSuccess: () => {
-      cacheUtils.invalidateContacts();
+    onSuccess: (updatedContact, { id }) => {
+      // Update the cache with the server response instead of invalidating
+      const currentData = queryClient.getQueryData([...queryKeys.contacts(user?.id), initialOptions]) as { contacts: Contact[]; pagination: any } | undefined;
+      
+      if (currentData && 'contacts' in currentData) {
+        const updatedContacts = currentData.contacts.map((contact: Contact) =>
+          contact.id === id ? updatedContact : contact
+        );
+        queryClient.setQueryData([...queryKeys.contacts(user?.id), initialOptions], {
+          ...currentData,
+          contacts: updatedContacts
+        });
+      }
     },
   });
 

@@ -250,7 +250,7 @@ export interface Contact {
   lastContactAt?: string;
   callAttemptedBusy: number;
   callAttemptedNoAnswer: number;
-  originalStatus?: string;
+  callType: 'inbound' | 'outbound';
   createdAt: string;
   updatedAt: string;
 }

@@ -27,6 +27,7 @@ export class ContactService {
 
       if (search) {
         // Enhanced search with auto-creation info
+        // Universal search across Name, Company, Phone, Email, Notes, Tags
         const query = `
           SELECT c.*, 
             calls.bolna_execution_id as linked_call_id,
@@ -35,16 +36,17 @@ export class ContactService {
               WHEN EXISTS(SELECT 1 FROM calls WHERE contact_id = c.id) THEN 'manually_linked'
               ELSE 'not_linked'
             END as call_link_type,
-            COALESCE(last_call.call_lifecycle_status, 'Not contacted') as last_call_status,
             CASE 
-              WHEN (SELECT COUNT(*) FROM calls WHERE contact_id = c.id) = 0 THEN 'Not Contacted'
+              WHEN (SELECT COUNT(*) FROM calls WHERE contact_id = c.id) = 0 THEN 'Not contacted'
               WHEN (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1) = 'inbound'
                 AND (c.call_attempted_busy > 0 OR c.call_attempted_no_answer > 0)
                 THEN 'Callback Received'
-              WHEN (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1) = 'inbound'
-                THEN 'Inbound'
-              ELSE 'Outbound'
-            END as original_status
+              ELSE COALESCE(last_call.call_lifecycle_status, 'Not contacted')
+            END as last_call_status,
+            COALESCE(
+              (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
+              'outbound'
+            ) as call_type
           FROM contacts c
           LEFT JOIN calls ON c.auto_created_from_call_id = calls.id
           LEFT JOIN LATERAL (
@@ -55,7 +57,14 @@ export class ContactService {
             LIMIT 1
           ) last_call ON true
           WHERE c.user_id = $1 
-          AND (c.name ILIKE $2 OR c.phone_number LIKE $3 OR c.email ILIKE $2 OR c.company ILIKE $2)
+          AND (
+            c.name ILIKE $2 
+            OR c.phone_number LIKE $3 
+            OR c.email ILIKE $2 
+            OR c.company ILIKE $2
+            OR c.notes ILIKE $2
+            OR EXISTS (SELECT 1 FROM unnest(c.tags) tag WHERE tag ILIKE $2)
+          )
           ORDER BY c.created_at DESC
         `;
         const result = await ContactModel.query(query, [userId, `%${search}%`, `%${search}%`]);
@@ -83,16 +92,17 @@ export class ContactService {
               WHEN EXISTS(SELECT 1 FROM calls WHERE contact_id = c.id) THEN 'manually_linked'
               ELSE 'not_linked'
             END as call_link_type,
-            COALESCE(last_call.call_lifecycle_status, 'Not contacted') as last_call_status,
             CASE 
-              WHEN (SELECT COUNT(*) FROM calls WHERE contact_id = c.id) = 0 THEN 'Not Contacted'
+              WHEN (SELECT COUNT(*) FROM calls WHERE contact_id = c.id) = 0 THEN 'Not contacted'
               WHEN (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1) = 'inbound'
                 AND (c.call_attempted_busy > 0 OR c.call_attempted_no_answer > 0)
                 THEN 'Callback Received'
-              WHEN (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1) = 'inbound'
-                THEN 'Inbound'
-              ELSE 'Outbound'
-            END as original_status
+              ELSE COALESCE(last_call.call_lifecycle_status, 'Not contacted')
+            END as last_call_status,
+            COALESCE(
+              (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
+              'outbound'
+            ) as call_type
           FROM contacts c
           LEFT JOIN calls ON c.auto_created_from_call_id = calls.id
           LEFT JOIN LATERAL (
