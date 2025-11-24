@@ -8,25 +8,7 @@ import { Plus, Play, Pause, StopCircle, RotateCcw, Trash2, BarChart3 } from 'luc
 import CreateCampaignModal from '@/components/campaigns/CreateCampaignModal.tsx';
 import CampaignDetailsDialog from '@/components/campaigns/CampaignDetailsDialog.tsx';
 import { authenticatedFetch } from '@/utils/auth';
-
-interface Campaign {
-  id: string;
-  name: string;
-  agent_id: string;
-  status: 'pending' | 'active' | 'paused' | 'completed' | 'cancelled';
-  priority: number;
-  max_concurrent_calls: number;
-  total_contacts: number;
-  completed_calls: number;
-  successful_calls: number;
-  failed_calls: number;
-  created_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  // Timezone fields
-  campaign_timezone?: string;
-  use_custom_timezone?: boolean;
-}
+import type { Campaign, CampaignAnalytics } from '@/types/api';
 
 const Campaigns: React.FC = () => {
   const { theme } = useTheme();
@@ -54,7 +36,35 @@ const Campaigns: React.FC = () => {
   });
 
   const campaigns = campaignsData?.campaigns || [];
-  const totalCampaigns = campaignsData?.total || 0;
+
+  // Fetch analytics for all campaigns
+  const { data: analyticsData } = useQuery({
+    queryKey: ['campaigns-analytics', campaigns.map((c: Campaign) => c.id)],
+    queryFn: async () => {
+      if (campaigns.length === 0) return {};
+      
+      const analyticsPromises = campaigns.map(async (campaign: Campaign) => {
+        try {
+          const response = await authenticatedFetch(`/api/campaigns/${campaign.id}/analytics`);
+          if (!response.ok) return null;
+          const data = await response.json();
+          return { campaignId: campaign.id, analytics: data.analytics };
+        } catch (error) {
+          console.error(`Failed to fetch analytics for campaign ${campaign.id}:`, error);
+          return null;
+        }
+      });
+      
+      const results = await Promise.all(analyticsPromises);
+      return results.reduce((acc, result) => {
+        if (result && result.analytics) {
+          acc[result.campaignId] = result.analytics;
+        }
+        return acc;
+      }, {} as Record<string, CampaignAnalytics>);
+    },
+    enabled: campaigns.length > 0,
+  });
 
   // Start campaign mutation
   const startMutation = useMutation({
@@ -195,14 +205,15 @@ const Campaigns: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', color: string }> = {
-      pending: { variant: 'secondary', color: 'text-gray-600' },
+      draft: { variant: 'secondary', color: 'text-gray-600' },
+      scheduled: { variant: 'outline', color: 'text-blue-600' },
       active: { variant: 'default', color: 'text-green-600' },
       paused: { variant: 'outline', color: 'text-yellow-600' },
       completed: { variant: 'secondary', color: 'text-blue-600' },
       cancelled: { variant: 'destructive', color: 'text-red-600' },
     };
     
-    const config = variants[status] || variants.pending;
+    const config = variants[status] || variants.draft;
     
     return (
       <Badge variant={config.variant} className={config.color}>
@@ -214,7 +225,7 @@ const Campaigns: React.FC = () => {
   const getActionButtons = (campaign: Campaign) => {
     const buttons = [];
     
-    if (campaign.status === 'pending') {
+    if (campaign.status === 'draft' || campaign.status === 'scheduled') {
       buttons.push(
         <Button
           key="start"
@@ -261,7 +272,7 @@ const Campaigns: React.FC = () => {
       );
     }
     
-    if (['pending', 'active', 'paused'].includes(campaign.status)) {
+    if (['draft', 'scheduled', 'active', 'paused'].includes(campaign.status)) {
       buttons.push(
         <Button
           key="cancel"
@@ -306,11 +317,6 @@ const Campaigns: React.FC = () => {
     return buttons;
   };
 
-  const calculateProgress = (campaign: Campaign) => {
-    if (campaign.total_contacts === 0) return 0;
-    return Math.round((campaign.completed_calls / campaign.total_contacts) * 100);
-  };
-
   return (
     <div className={`h-full p-6 ${theme === 'dark' ? 'bg-black text-white' : 'bg-gray-50 text-gray-900'}`}>
       {/* Header */}
@@ -333,7 +339,7 @@ const Campaigns: React.FC = () => {
 
       {/* Filters */}
       <div className="mb-6 flex gap-2">
-        {['all', 'pending', 'active', 'paused', 'completed', 'cancelled'].map((filter) => (
+        {['all', 'draft', 'scheduled', 'active', 'paused', 'completed', 'cancelled'].map((filter) => (
           <Button
             key={filter}
             size="sm"
@@ -367,30 +373,45 @@ const Campaigns: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Progress</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Success Rate</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Priority</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Connection Rate</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Attempts</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Created</th>
                   <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className={`divide-y ${theme === 'dark' ? 'divide-gray-700' : 'divide-gray-200'}`}>
                 {campaigns.map((campaign: Campaign) => {
-                  const progress = calculateProgress(campaign);
-                  const successRate = campaign.completed_calls > 0 
-                    ? Math.round((campaign.successful_calls / campaign.completed_calls) * 100) 
-                    : 0;
+                  const analytics = analyticsData?.[campaign.id];
+                  
+                  // Use analytics data if available, otherwise fall back to campaign data
+                  const handledCalls = analytics?.handled_calls || 0;
+                  const totalContacts = analytics?.total_contacts || campaign.total_contacts;
+                  const progressPercentage = Number((analytics?.progress_percentage || 0).toFixed(2));
+                  const connectionRate = Number((analytics?.call_connection_rate || 0).toFixed(2));
+                  const attemptDist = analytics?.attempt_distribution || {
+                    busy: 0,
+                    no_answer: 0,
+                    contacted: 0,
+                    failed: 0,
+                    not_attempted: 0,
+                  };
                   
                   return (
                     <tr key={campaign.id} className={`${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}>
+                      {/* Name Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="font-medium">{campaign.name}</div>
                         <div className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {campaign.total_contacts} contacts
+                          {totalContacts} contacts
                         </div>
                       </td>
+                      
+                      {/* Status Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(campaign.status)}
                       </td>
+                      
+                      {/* Progress Column - Handled / Total */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-1 mr-2">
@@ -399,29 +420,50 @@ const Campaigns: React.FC = () => {
                                 className="h-2 rounded-full"
                                 style={{ 
                                   backgroundColor: '#1A6262',
-                                  width: `${progress}%`
+                                  width: `${progressPercentage}%`
                                 }}
                               />
                             </div>
                           </div>
-                          <span className="text-sm font-medium">{progress}%</span>
+                          <span className="text-sm font-medium">{progressPercentage}%</span>
                         </div>
                         <div className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {campaign.completed_calls} / {campaign.total_contacts}
+                          {handledCalls} / {totalContacts}
                         </div>
                       </td>
+                      
+                      {/* Connection Rate Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium">{successRate}%</div>
+                        <div className="text-sm font-medium">{connectionRate}%</div>
                         <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {campaign.successful_calls} / {campaign.completed_calls}
+                          {attemptDist.contacted} contacted
                         </div>
                       </td>
+                      
+                      {/* Attempt Distribution Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge variant="outline">{campaign.priority}</Badge>
+                        <div className="text-xs space-y-0.5">
+                          <div className={theme === 'dark' ? 'text-green-400' : 'text-green-600'}>
+                            Contacted: {attemptDist.contacted}
+                          </div>
+                          <div className={theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}>
+                            No Answer: {attemptDist.no_answer}
+                          </div>
+                          <div className={theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}>
+                            Busy: {attemptDist.busy}
+                          </div>
+                          <div className={theme === 'dark' ? 'text-red-400' : 'text-red-600'}>
+                            Failed: {attemptDist.failed}
+                          </div>
+                        </div>
                       </td>
+                      
+                      {/* Created Date Column */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {new Date(campaign.created_at).toLocaleDateString()}
                       </td>
+                      
+                      {/* Actions Column */}
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
                         {getActionButtons(campaign)}
                       </td>

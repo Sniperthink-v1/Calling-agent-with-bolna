@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Globe, Info } from 'lucide-react';
-import { COMMON_TIMEZONES } from '@/utils/timezone';
+import { TimezoneSelector } from '@/components/common/TimezoneSelector';
 
 interface CampaignTimezoneSelectorProps {
   userTimezone?: string;
@@ -93,22 +92,12 @@ export function CampaignTimezoneSelector({
       {useCustom && (
         <div className="space-y-2 pl-6">
           <Label className="text-sm text-muted-foreground">Campaign Timezone</Label>
-          <Select
+          <TimezoneSelector
             value={selectedTimezone}
-            onValueChange={handleTimezoneChange}
+            onChange={handleTimezoneChange}
             disabled={disabled}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select timezone" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[300px]">
-              {COMMON_TIMEZONES.map((tz) => (
-                <SelectItem key={tz.value} value={tz.value}>
-                  {tz.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder="Select timezone"
+          />
         </div>
       )}
 

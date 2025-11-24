@@ -634,6 +634,7 @@ export class CallModel extends BaseModel<CallInterface> {
         FROM calls c
         LEFT JOIN agents a ON c.agent_id = a.id
         LEFT JOIN contacts ct ON c.contact_id = ct.id
+        LEFT JOIN call_campaigns camp ON c.campaign_id = camp.id
         LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.analysis_type = 'individual'
         WHERE c.user_id = $1
       `;
@@ -654,7 +655,13 @@ export class CallModel extends BaseModel<CallInterface> {
       }
 
       if (filters.status) {
-        baseQuery += ` AND c.status = $${paramIndex}`;
+        // Status can be either a call status (completed, failed, etc.) or lifecycle status (busy, no-answer, etc.)
+        const lifecycleStatuses = ['busy', 'no-answer', 'ringing', 'initiated', 'call-disconnected', 'in-progress'];
+        if (lifecycleStatuses.includes(filters.status)) {
+          baseQuery += ` AND c.call_lifecycle_status = $${paramIndex}`;
+        } else {
+          baseQuery += ` AND c.status = $${paramIndex}`;
+        }
         params.push(filters.status);
         paramIndex++;
       }
@@ -668,6 +675,12 @@ export class CallModel extends BaseModel<CallInterface> {
       if (filters.agentName) {
         baseQuery += ` AND LOWER(a.name) = LOWER($${paramIndex})`;
         params.push(filters.agentName);
+        paramIndex++;
+      }
+
+      if (filters.campaignId) {
+        baseQuery += ` AND c.campaign_id = $${paramIndex}`;
+        params.push(filters.campaignId);
         paramIndex++;
       }
 
@@ -752,6 +765,18 @@ export class CallModel extends BaseModel<CallInterface> {
         }
       }
 
+      if (filters.leadType) {
+        baseQuery += ` AND c.lead_type = $${paramIndex}`;
+        params.push(filters.leadType);
+        paramIndex++;
+      }
+
+      if (filters.callLifecycleStatus) {
+        baseQuery += ` AND c.call_lifecycle_status = $${paramIndex}`;
+        params.push(filters.callLifecycleStatus);
+        paramIndex++;
+      }
+
       // Get total count
       const countQuery = `SELECT COUNT(c.id) as total ${baseQuery}`;
       const countResult = await this.query(countQuery, params);
@@ -800,6 +825,7 @@ export class CallModel extends BaseModel<CallInterface> {
           c.agent_id,
           c.user_id,
           c.contact_id,
+          c.campaign_id,
           c.phone_number,
           c.duration_minutes,
           c.duration_seconds,
@@ -827,6 +853,7 @@ export class CallModel extends BaseModel<CallInterface> {
           ct.name as contact_name,
           ct.email as contact_email,
           ct.company as contact_company,
+          camp.name as campaign_name,
           la.total_score,
           la.intent_level,
           la.urgency_level,

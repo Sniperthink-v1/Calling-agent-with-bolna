@@ -390,4 +390,39 @@ export class CallCampaignService {
   static async getCampaignsSummary(userId: string) {
     return await CallCampaignModel.countByStatus(userId);
   }
+
+  /**
+   * Check and auto-update campaign status to completed if all contacts are handled
+   */
+  static async checkAndUpdateCampaignStatus(campaignId: string, userId: string): Promise<void> {
+    try {
+      const { pool } = await import('../config/database');
+      
+      // Check if any remaining queue items exist for this campaign
+      const remainingResult = await pool.query(`
+        SELECT COUNT(*) as remaining
+        FROM call_queue
+        WHERE campaign_id = $1 AND status IN ('queued', 'processing')
+      `, [campaignId]);
+
+      const remaining = parseInt(remainingResult.rows[0]?.remaining || '0');
+
+      // If no more queued/processing items, mark campaign as completed
+      if (remaining === 0) {
+        const updateResult = await pool.query(`
+          UPDATE call_campaigns
+          SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+          WHERE id = $1 AND user_id = $2 AND status = 'active'
+          RETURNING id
+        `, [campaignId, userId]);
+
+        if (updateResult.rows.length > 0) {
+          logger.info(`Campaign ${campaignId} auto-completed - all contacts processed`);
+        }
+      }
+    } catch (error) {
+      logger.error('Error checking campaign completion:', error);
+      // Don't throw - this is a background check
+    }
+  }
 }

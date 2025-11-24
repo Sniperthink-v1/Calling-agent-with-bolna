@@ -1,34 +1,49 @@
 import { useState, useEffect } from "react";
-import { useTheme } from "@/components/theme/ThemeProvider";
+import { useQuery } from "@tanstack/react-query";
 import { useAgents } from "@/hooks/useAgents";
 import CallLogs from "@/components/call/CallLogs";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-  DropdownMenuSeparator,
-  DropdownMenuLabel
-} from "@/components/ui/dropdown-menu";
-import { ChevronDown, X } from "lucide-react";
+import type { Campaign } from "@/types/api";
 import type { Lead } from "@/pages/Dashboard";
+import { authenticatedFetch } from "@/utils/auth";
 
 interface UnifiedCallLogsProps {
   activeTab: string;
   activeSubTab: string;
   onOpenProfile?: (lead: Lead) => void;
+  initialCampaignId?: string; // Allow passing a campaign ID to pre-filter
 }
 
-const UnifiedCallLogs = ({ activeTab, activeSubTab, onOpenProfile }: UnifiedCallLogsProps) => {
-  const { theme } = useTheme();
+const UnifiedCallLogs = ({ activeTab, activeSubTab, onOpenProfile, initialCampaignId }: UnifiedCallLogsProps) => {
   const { agents } = useAgents();
   // Filter to get only call agents
   const callAgents = agents.filter(agent => agent.type === "CallAgent");
   
   // Multi-select for call logs (keeping existing functionality)
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  
+  // Single-select for campaign filter (NEW)
+  // Check sessionStorage for campaign filter on mount
+  const [selectedCampaign, setSelectedCampaign] = useState<string | null>(() => {
+    if (initialCampaignId) return initialCampaignId;
+    const stored = sessionStorage.getItem('filterCampaignId');
+    if (stored) {
+      sessionStorage.removeItem('filterCampaignId'); // Clear after reading
+      return stored;
+    }
+    return null;
+  });
+  
+  // Fetch campaigns list for filter dropdown
+  const { data: campaignsData } = useQuery({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
+      const response = await authenticatedFetch('/api/campaigns');
+      if (!response.ok) throw new Error('Failed to fetch campaigns');
+      return response.json();
+    },
+  });
+  
+  const campaigns: Campaign[] = campaignsData?.campaigns || [];
   
   // Handle agent selection/deselection
   const handleAgentToggle = (agentId: string) => {
@@ -84,97 +99,7 @@ const UnifiedCallLogs = ({ activeTab, activeSubTab, onOpenProfile }: UnifiedCall
 
   return (
     <div className="space-y-4">
-      {/* Agent Filter Section */}
-      <div className="flex items-center gap-4 p-4 border rounded-lg">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">Filter by Agent:</span>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="justify-between min-w-[200px]">
-                {selectedAgents.length === 0 
-                  ? "All Agents" 
-                  : selectedAgents.length === 1
-                  ? getSelectedAgentNames()[0]
-                  : `${selectedAgents.length} agents selected`
-                }
-                <ChevronDown className="h-4 w-4 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
-              <DropdownMenuLabel>Select Agents</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              
-              {/* Select All / Clear All */}
-              <div className="flex justify-between p-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={selectAllAgents}
-                  className="text-xs h-auto p-1"
-                >
-                  Select All
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={clearAllAgents}
-                  className="text-xs h-auto p-1"
-                >
-                  Clear All
-                </Button>
-              </div>
-              
-              <DropdownMenuSeparator />
-              
-              {callAgents.map((agent) => (
-                <DropdownMenuCheckboxItem
-                  key={agent.id}
-                  checked={selectedAgents.includes(agent.id)}
-                  onCheckedChange={() => handleAgentToggle(agent.id)}
-                >
-                  {agent.name}
-                </DropdownMenuCheckboxItem>
-              ))}
-              
-              {callAgents.length === 0 && (
-                <div className="p-2 text-sm text-gray-500 text-center">
-                  No call agents found
-                </div>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {/* Selected Agents Display */}
-        {selectedAgents.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-500">Selected:</span>
-            {getSelectedAgentNames().map((name) => (
-              <Badge key={name} variant="secondary" className="text-xs">
-                {name}
-                <X 
-                  className="h-3 w-3 ml-1 cursor-pointer" 
-                  onClick={() => {
-                    const agent = callAgents.find(a => a.name === name);
-                    if (agent) handleAgentToggle(agent.id);
-                  }}
-                />
-              </Badge>
-            ))}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearAllAgents}
-              className="text-xs h-auto p-1 text-gray-500"
-            >
-              Clear All
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Call Logs Component with Agent Filter */}
+      {/* Call Logs Component with Filter Controls */}
       <div className="min-h-[400px]">
         <CallLogs 
           activeTab={activeTab}
@@ -196,9 +121,23 @@ const UnifiedCallLogs = ({ activeTab, activeSubTab, onOpenProfile }: UnifiedCall
             
             return mapped;
           })()}
+          selectedCampaign={selectedCampaign}
           onOpenProfile={onOpenProfile}
           useLazyLoading={true}
           initialPageSize={30}
+          agents={callAgents.map(a => ({ id: a.id, name: a.name }))}
+          campaigns={campaigns}
+          onAgentFilterChange={(agentNames) => {
+            if (agentNames.length === 0) {
+              setSelectedAgents([]);
+            } else {
+              const ids = callAgents
+                .filter(a => agentNames.includes(a.name))
+                .map(a => a.id);
+              setSelectedAgents(ids);
+            }
+          }}
+          onCampaignFilterChange={setSelectedCampaign}
         />
       </div>
     </div>

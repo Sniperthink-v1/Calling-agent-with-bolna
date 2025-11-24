@@ -342,6 +342,103 @@ export interface BatchContactLookupResult {
 }
 
 // ============================================================================
+// CAMPAIGN INTERFACES
+// ============================================================================
+
+export type CampaignStatus = 
+  | 'draft'      // Campaign created but not started
+  | 'scheduled'  // Campaign scheduled for future
+  | 'active'     // Campaign currently running
+  | 'paused'     // Campaign temporarily paused by user
+  | 'completed'  // All calls completed
+  | 'cancelled'; // Campaign cancelled by user
+
+export interface Campaign {
+  id: string;
+  user_id: string;
+  
+  // Campaign details
+  name: string;
+  description?: string;
+  agent_id: string;
+  
+  // Configuration
+  next_action: string;
+  
+  // Time window (daily recurring)
+  first_call_time: string; // HH:MM:SS format
+  last_call_time: string;  // HH:MM:SS format
+  
+  // Timezone settings
+  campaign_timezone?: string | null;
+  use_custom_timezone?: boolean;
+  
+  // Status
+  status: CampaignStatus;
+  priority: number;
+  max_concurrent_calls: number;
+  
+  // Statistics
+  total_contacts: number;
+  completed_calls: number;
+  successful_calls: number;
+  failed_calls: number;
+  
+  // Scheduling
+  start_date: string; // YYYY-MM-DD
+  end_date?: string;  // YYYY-MM-DD
+  
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  paused_at?: string | null;
+}
+
+export interface CampaignAnalytics {
+  campaign_id: string;
+  campaign_name: string;
+  
+  // Basic stats
+  total_contacts: number;
+  
+  // NEW: Handled calls (terminal outcomes: completed, no-answer, busy, failed, call-disconnected)
+  handled_calls: number;
+  
+  // Progress: Handled / Total
+  progress_percentage: number;
+  
+  // NEW: Connection rate metrics
+  attempted_calls: number;        // Calls that were attempted (lifecycle_status != 'initiated')
+  contacted_calls: number;         // Calls that reached the contact (lifecycle_status IN ('completed', 'in-progress'))
+  call_connection_rate: number;    // (contacted / attempted) * 100
+  
+  // Legacy fields (kept for backward compatibility)
+  completed_calls: number;
+  successful_calls: number;
+  failed_calls: number;
+  
+  // NEW: Attempt distribution
+  attempt_distribution: {
+    busy: number;           // call_lifecycle_status = 'busy'
+    no_answer: number;      // call_lifecycle_status = 'no-answer'
+    contacted: number;      // call_lifecycle_status IN ('completed', 'in-progress')
+    failed: number;         // call_lifecycle_status = 'failed'
+    not_attempted: number;  // call_lifecycle_status = 'initiated' or null
+  };
+  
+  // Time metrics
+  average_duration_seconds: number;
+  total_duration_seconds: number;
+  
+  // Campaign info
+  status: CampaignStatus;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+// ============================================================================
 // CALL INTERFACES
 // ============================================================================
 
@@ -383,6 +480,8 @@ export interface Call {
   contactEmail?: string;
   contactCompany?: string;
   agentName?: string;
+  campaignId?: string;         // NEW: Campaign ID if call is part of a campaign
+  campaignName?: string;       // NEW: Campaign name for display (converted from campaign_name)
   transcript?: Transcript;
   leadAnalytics?: LeadAnalytics;
 }
@@ -413,6 +512,12 @@ export interface CallListOptions {
   sortOrder?: 'ASC' | 'DESC';
   search?: string;
   agentNames?: string[];
+  campaignId?: string; // Filter by campaign ID
+  status?: string; // Filter by call status or lifecycle status (completed, failed, busy, no-answer, etc.)
+  leadType?: 'inbound' | 'outbound'; // Filter by lead type
+  callLifecycleStatus?: string; // Filter by lifecycle status (busy, no-answer, etc.)
+  startDate?: string; // Filter by start date (ISO string)
+  endDate?: string; // Filter by end date (ISO string)
 }
 
 export interface CallSearchOptions {

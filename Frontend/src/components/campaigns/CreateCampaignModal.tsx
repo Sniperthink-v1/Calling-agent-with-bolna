@@ -65,7 +65,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
 
   const [name, setName] = useState('');
   const [agentId, setAgentId] = useState('');
-  const [maxConcurrentCalls, setMaxConcurrentCalls] = useState('1');
   const [firstCallTime, setFirstCallTime] = useState('09:00');
   const [lastCallTime, setLastCallTime] = useState('17:00');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -103,19 +102,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
     (agent: any) => agent.type === 'CallAgent' || agent.agent_type === 'call'
   );
 
-  // Fetch user's concurrency settings
-  const { data: concurrencySettings } = useQuery({
-    queryKey: ['concurrency-settings'],
-    queryFn: async () => {
-      const response = await authenticatedFetch('/api/settings/concurrency');
-      if (!response.ok) throw new Error('Failed to fetch settings');
-      return response.json();
-    },
-  });
-
-  const userConcurrencyLimit = concurrencySettings?.settings?.user_concurrent_calls_limit || 10;
-  const availableSlots = concurrencySettings?.settings?.user_available_slots || 10;
-
   // Fetch user profile for timezone
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -144,7 +130,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
     mutationFn: async (data: { 
       name: string; 
       agent_id: string; 
-      max_concurrent_calls: number; 
       contact_ids: string[];
       first_call_time: string;
       last_call_time: string;
@@ -374,17 +359,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
       return;
     }
 
-    // Validate max concurrent calls doesn't exceed user limit
-    const concurrentCallsNum = parseInt(maxConcurrentCalls);
-    if (concurrentCallsNum > userConcurrencyLimit) {
-      toast({
-        title: 'Validation Error',
-        description: `Max concurrent calls cannot exceed your limit of ${userConcurrencyLimit}`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
     // Calculate contact count and show credit estimator
     let contactCount = 0;
     let campaignData: any = null;
@@ -396,7 +370,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         type: 'csv',
         name,
         agent_id: agentId,
-        max_concurrent_calls: maxConcurrentCalls,
         first_call_time: firstCallTime,
         last_call_time: lastCallTime,
         start_date: startDate,
@@ -412,7 +385,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         type: 'contacts',
         name,
         agent_id: agentId,
-        max_concurrent_calls: parseInt(maxConcurrentCalls),
         contact_ids: preSelectedContacts,
         first_call_time: firstCallTime,
         last_call_time: lastCallTime,
@@ -450,7 +422,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         formData.append('file', pendingCampaignData.csvFile);
         formData.append('name', pendingCampaignData.name);
         formData.append('agent_id', pendingCampaignData.agent_id);
-        formData.append('max_concurrent_calls', pendingCampaignData.max_concurrent_calls);
         formData.append('first_call_time', pendingCampaignData.first_call_time);
         formData.append('last_call_time', pendingCampaignData.last_call_time);
         formData.append('start_date', pendingCampaignData.start_date);
@@ -488,7 +459,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   const handleClose = () => {
     setName('');
     setAgentId('');
-    setMaxConcurrentCalls('1');
     setFirstCallTime('09:00');
     setLastCallTime('17:00');
     setStartDate(new Date().toISOString().split('T')[0]);
@@ -542,38 +512,6 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          {/* Max Concurrent Calls */}
-          <div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="concurrency">Max Concurrent Calls *</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="w-4 h-4 text-gray-400" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">Maximum number of simultaneous calls for this campaign. Your current limit: {userConcurrencyLimit}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <Input
-              id="concurrency"
-              type="number"
-              min="1"
-              max={userConcurrencyLimit}
-              value={maxConcurrentCalls}
-              onChange={(e) => {
-                const val = parseInt(e.target.value) || 1;
-                setMaxConcurrentCalls(Math.min(val, userConcurrencyLimit).toString());
-              }}
-              className="mt-1"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Your limit: {userConcurrencyLimit} | Available: {availableSlots}
-            </p>
           </div>
 
           {/* Call Time Window */}

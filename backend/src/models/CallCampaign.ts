@@ -231,8 +231,8 @@ export class CallCampaignModel {
   static async getAnalytics(id: string, userId: string): Promise<CampaignAnalytics | null> {
     const result = await pool.query(
       `SELECT 
-        c.id,
-        c.name,
+        c.id as campaign_id,
+        c.name as campaign_name,
         c.status,
         c.total_contacts,
         c.completed_calls,
@@ -248,30 +248,124 @@ export class CallCampaignModel {
         (SELECT COUNT(*) FROM call_queue WHERE campaign_id = c.id AND status = 'cancelled') as cancelled_calls,
         (SELECT COUNT(*) FROM call_queue WHERE campaign_id = c.id AND status = 'skipped') as skipped_calls,
         
+        -- Attempt Distribution based on call_lifecycle_status from calls table
+        (SELECT COUNT(*) 
+         FROM calls 
+         WHERE campaign_id = c.id AND call_lifecycle_status = 'busy') as busy_count,
+        
+        (SELECT COUNT(*) 
+         FROM calls 
+         WHERE campaign_id = c.id AND call_lifecycle_status = 'no-answer') as no_answer_count,
+        
+        (SELECT COUNT(*) 
+         FROM calls 
+         WHERE campaign_id = c.id 
+         AND call_lifecycle_status IN ('completed', 'in-progress')) as contacted_count,
+        
+        (SELECT COUNT(*) 
+         FROM calls 
+         WHERE campaign_id = c.id AND call_lifecycle_status = 'failed') as failed_count,
+        
+        -- Handled calls: any call with terminal outcome
+        (SELECT COUNT(*) 
+         FROM calls 
+         WHERE campaign_id = c.id 
+         AND call_lifecycle_status IN ('completed', 'no-answer', 'busy', 'failed', 'call-disconnected')) as handled_calls,
+        
+        -- Attempted calls: calls that left queue (have a call record)
+        (SELECT COUNT(*) 
+         FROM calls 
+         WHERE campaign_id = c.id 
+         AND call_lifecycle_status NOT IN ('initiated')) as attempted_calls,
+        
         -- Average call duration from calls table (using duration_seconds column)
         (SELECT COALESCE(AVG(duration_seconds), 0)
          FROM calls 
-         WHERE id IN (SELECT call_id FROM call_queue WHERE campaign_id = c.id AND call_id IS NOT NULL)
-        ) as avg_call_duration_seconds,
+         WHERE campaign_id = c.id AND call_lifecycle_status = 'completed') as avg_call_duration_seconds,
         
-        -- Success rate
-        CASE 
-          WHEN c.completed_calls > 0 THEN (c.successful_calls::float / c.completed_calls::float * 100)
-          ELSE 0
-        END as success_rate,
-        
-        -- Completion rate
-        CASE 
-          WHEN c.total_contacts > 0 THEN (c.completed_calls::float / c.total_contacts::float * 100)
-          ELSE 0
-        END as completion_rate
+        -- Total credits used
+        (SELECT COALESCE(SUM(credits_used), 0)
+         FROM calls 
+         WHERE campaign_id = c.id) as total_credits_used
 
       FROM call_campaigns c
       WHERE c.id = $1 AND c.user_id = $2`,
       [id, userId]
     );
 
-    return result.rows[0] || null;
+    if (!result.rows[0]) return null;
+    
+    const row = result.rows[0];
+    
+    // Calculate metrics
+    const totalContacts = row.total_contacts || 0;
+    const handledCalls = parseInt(row.handled_calls) || 0;
+    const attemptedCalls = parseInt(row.attempted_calls) || 0;
+    const contactedCalls = parseInt(row.contacted_count) || 0;
+    const busyCount = parseInt(row.busy_count) || 0;
+    const noAnswerCount = parseInt(row.no_answer_count) || 0;
+    const failedCount = parseInt(row.failed_count) || 0;
+    const queuedCalls = parseInt(row.queued_calls) || 0;
+    
+    const progressPercentage = totalContacts > 0 
+      ? (handledCalls / totalContacts * 100) 
+      : 0;
+    
+    const callConnectionRate = attemptedCalls > 0 
+      ? (contactedCalls / attemptedCalls * 100) 
+      : 0;
+    
+    const successRate = row.completed_calls > 0 
+      ? (row.successful_calls / row.completed_calls * 100) 
+      : 0;
+
+    return {
+      campaign_id: row.campaign_id,
+      campaign_name: row.campaign_name,
+      total_contacts: totalContacts,
+      completed_calls: row.completed_calls || 0,
+      successful_calls: row.successful_calls || 0,
+      failed_calls: row.failed_calls || 0,
+      in_progress: parseInt(row.processing_calls) || 0,
+      queued: queuedCalls,
+      
+      // Progress metrics
+      handled_calls: handledCalls,
+      progress_percentage: progressPercentage,
+      attempted_calls: attemptedCalls,
+      contacted_calls: contactedCalls,
+      call_connection_rate: callConnectionRate,
+      
+      // Success metrics
+      success_rate: successRate,
+      average_call_duration: parseFloat(row.avg_call_duration_seconds) || 0,
+      total_credits_used: parseInt(row.total_credits_used) || 0,
+      
+      // Time metrics
+      campaign_duration: 0, // TODO: Calculate from started_at to now/completed_at
+      estimated_completion: '', // TODO: Calculate based on current pace
+      
+      // Attempt Distribution
+      attempt_distribution: {
+        busy: busyCount,
+        no_answer: noAnswerCount,
+        contacted: contactedCalls,
+        failed: failedCount,
+        not_attempted: queuedCalls
+      },
+      
+      // Legacy outcomes (map from new structure)
+      outcomes: {
+        answered: contactedCalls,
+        busy: busyCount,
+        no_answer: noAnswerCount,
+        failed: failedCount,
+        voicemail: 0 // Not tracking voicemail separately
+      },
+      
+      // Daily breakdown (empty for now, can be implemented later)
+      daily_stats: []
+    };
   }
 
   /**

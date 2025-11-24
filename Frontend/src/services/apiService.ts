@@ -1167,6 +1167,12 @@ class ApiService {
       if (options.sortBy) queryParams.append('sortBy', options.sortBy);
       if (options.sortOrder) queryParams.append('sortOrder', options.sortOrder);
       if (options.search) queryParams.append('search', options.search);
+      if (options.campaignId) queryParams.append('campaignId', options.campaignId);
+      if (options.status) queryParams.append('status', options.status);
+      if (options.leadType) queryParams.append('leadType', options.leadType);
+      if (options.callLifecycleStatus) queryParams.append('callLifecycleStatus', options.callLifecycleStatus);
+      if (options.startDate) queryParams.append('start_date', options.startDate);
+      if (options.endDate) queryParams.append('end_date', options.endDate);
       if (options.agentNames && options.agentNames.length > 0) {
         options.agentNames.forEach(agentName => {
           queryParams.append('agent', agentName);

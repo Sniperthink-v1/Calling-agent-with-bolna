@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { CallSourceIndicator, getCallSourceFromData } from "@/components/call/CallSourceIndicator";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -35,6 +36,7 @@ import CallingModal from "@/components/call/CallingModal";
 import CallTranscriptViewer from "@/components/call/CallTranscriptViewer";
 import Pagination from "@/components/ui/pagination";
 import LazyLoader from "@/components/ui/LazyLoader";
+import { DateRangePicker } from "@/components/common/DateRangePicker";
 import { useCalls } from "@/hooks/useCalls";
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { Call, CallListOptions } from "@/types";
@@ -46,7 +48,13 @@ interface CallLogsProps {
   useLazyLoading?: boolean;
   initialPageSize?: number;
   selectedAgents?: string[];
+  selectedCampaign?: string | null;
   onOpenProfile?: (lead: any) => void;
+  // Filter control props
+  agents?: Array<{ id: string; name: string }>;
+  campaigns?: Array<{ id: string; name: string }>;
+  onAgentFilterChange?: (agentIds: string[]) => void;
+  onCampaignFilterChange?: (campaignId: string | null) => void;
 }
 
 const CallLogs: React.FC<CallLogsProps> = ({
@@ -55,7 +63,12 @@ const CallLogs: React.FC<CallLogsProps> = ({
   useLazyLoading = false,
   initialPageSize = 10,
   selectedAgents,
+  selectedCampaign = null,
   onOpenProfile,
+  agents = [],
+  campaigns = [],
+  onAgentFilterChange,
+  onCampaignFilterChange,
 }) => {
   const { theme } = useTheme();
   const { toast } = useToast();
@@ -78,9 +91,13 @@ const CallLogs: React.FC<CallLogsProps> = ({
 
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<'createdAt' | 'durationSeconds' | 'contactName'>('createdAt');
+  const [sortBy, setSortBy] = useState<'durationSeconds' | 'contactName'>('durationSeconds');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [selectedCallSource, setSelectedCallSource] = useState<string>("");
+  const [selectedLeadType, setSelectedLeadType] = useState<string>("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [allLoadedCalls, setAllLoadedCalls] = useState<Call[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -112,11 +129,10 @@ const CallLogs: React.FC<CallLogsProps> = ({
     setCurrentPage(1);
     setHasReachedEnd(false);
     // Don't immediately clear allLoadedCalls - let the data effect handle it
-  }, [selectedCallSource, sortBy, sortOrder, selectedAgents]);
+  }, [selectedCallSource, selectedLeadType, selectedStatus, startDate, endDate, sortBy, sortOrder, selectedAgents]);
 
   // Map camelCase to snake_case for backend - Updated for duration_seconds
   const sortByMapping: Record<string, string> = {
-    'createdAt': 'created_at',
     'durationSeconds': 'duration_seconds',
     'contactName': 'contact_name'
   };
@@ -130,6 +146,11 @@ const CallLogs: React.FC<CallLogsProps> = ({
     // Add server-side search and filtering
     search: debouncedSearchTerm || undefined,
     agentNames: selectedAgents && selectedAgents.length > 0 ? selectedAgents : undefined,
+    campaignId: selectedCampaign || undefined,
+    status: (selectedStatus || undefined) as string | undefined, // This handles both call status and lifecycle status
+    leadType: (selectedLeadType || undefined) as 'inbound' | 'outbound' | undefined,
+    startDate: startDate ? startDate.toISOString() : undefined,
+    endDate: endDate ? endDate.toISOString() : undefined,
   };
 
   const {
@@ -150,12 +171,8 @@ const CallLogs: React.FC<CallLogsProps> = ({
   const totalPages = Math.ceil(totalCalls / ITEMS_PER_PAGE);
   const hasMore = pagination?.hasMore || false;
 
-  // Apply only call source filtering client-side (other filters are server-side)
-  const filteredCalls = displayCalls.filter((call) => {
-    const matchesSource = !selectedCallSource ||
-      getCallSourceFromData(call) === selectedCallSource;
-    return matchesSource;
-  });
+  // All filtering is now done server-side
+  const filteredCalls = displayCalls;
   
 
   // Update accumulated calls for infinite scroll
@@ -163,6 +180,12 @@ const CallLogs: React.FC<CallLogsProps> = ({
     if (useLazyLoading) {
       if (currentPage === 1) {
         // Reset for new search or first load - always set the calls, even if empty
+        console.log('📞 Call Data Debug:', {
+          callsCount: calls.length,
+          firstCall: calls[0],
+          hasCampaignName: calls[0]?.campaignName,
+          campaignId: calls[0]?.campaignId
+        });
         setAllLoadedCalls(calls);
         setHasReachedEnd(!hasMore && calls.length === 0);
       } else if (calls.length > 0) {
@@ -580,25 +603,96 @@ const CallLogs: React.FC<CallLogsProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <Select value={selectedCallSource || "all"} onValueChange={(value) => setSelectedCallSource(value === "all" ? "" : value)}>
-                <SelectTrigger className="w-auto md:w-40">
-                  <SelectValue placeholder="All Sources" />
+            <div className="mt-2 flex items-center gap-2 flex-nowrap overflow-x-auto pb-1">
+              {/* Agent Filter */}
+              {agents.length > 0 && onAgentFilterChange && (
+                <Select 
+                  value={selectedAgents && selectedAgents.length === 1 ? selectedAgents[0] : "all"} 
+                  onValueChange={(value) => {
+                    if (value === "all") {
+                      onAgentFilterChange([]);
+                    } else {
+                      onAgentFilterChange([value]);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="All Agents" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Agents</SelectItem>
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.name}>
+                        {agent.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Campaign Filter */}
+              {campaigns.length > 0 && onCampaignFilterChange && (
+                <Select 
+                  value={selectedCampaign || "all"} 
+                  onValueChange={(value) => onCampaignFilterChange(value === "all" ? null : value)}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="All Campaigns" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Campaigns</SelectItem>
+                    {campaigns.map((campaign) => (
+                      <SelectItem key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              <Select value={selectedLeadType || "all"} onValueChange={(value) => setSelectedLeadType(value === "all" ? "" : value)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="phone">Phone Calls</SelectItem>
-                  <SelectItem value="internet">Internet Calls</SelectItem>
-                  <SelectItem value="unknown">Unknown Source</SelectItem>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="inbound">Inbound</SelectItem>
+                  <SelectItem value="outbound">Outbound</SelectItem>
                 </SelectContent>
               </Select>
 
+              <Select value={selectedStatus || "all"} onValueChange={(value) => setSelectedStatus(value === "all" ? "" : value)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="busy">Busy</SelectItem>
+                  <SelectItem value="no-answer">No Answer</SelectItem>
+                  <SelectItem value="ringing">Ringing</SelectItem>
+                  <SelectItem value="initiated">Initiated</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <DateRangePicker
+                startDate={startDate}
+                endDate={endDate}
+                onDateChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+                placeholder="Filter by date range"
+              />
+
               <Select value={sortBy} onValueChange={(newVal) => handleSortChange(newVal as any)}>
-                <SelectTrigger className="w-auto md:w-48">
+                <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="createdAt">Sort by Date</SelectItem>
                   <SelectItem value="durationSeconds">Sort by Duration</SelectItem>
                   <SelectItem value="contactName">Sort by Contact</SelectItem>
                 </SelectContent>
@@ -608,7 +702,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
                 variant="outline"
                 size="icon"
                 onClick={() => setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC')}
-                className="w-10 h-10"
+                className="w-10 h-10 flex-shrink-0"
               >
                 {sortOrder === 'ASC' ? '↑' : '↓'}
               </Button>
@@ -673,12 +767,23 @@ const CallLogs: React.FC<CallLogsProps> = ({
                       {call.contactName?.charAt(0) || 'U'}
                     </div>
                     <div>
-                      <h3
-                        className={`font-semibold cursor-pointer hover:underline ${theme === "dark" ? "text-white" : "text-gray-900"}`}
-                        onClick={() => navigateToLeadIntelligence({ phone: call.phoneNumber })}
-                      >
-                        {call.contactName || 'Unknown Contact'}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3
+                          className={`font-semibold cursor-pointer hover:underline ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+                          onClick={() => navigateToLeadIntelligence({ phone: call.phoneNumber })}
+                        >
+                          {call.contactName || 'Unknown Contact'}
+                        </h3>
+                        {/* Campaign Badge */}
+                        {call.campaignName && (
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs border-green-600 text-green-600 dark:border-green-400 dark:text-green-400"
+                          >
+                            {call.campaignName}
+                          </Badge>
+                        )}
+                      </div>
                       <p className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-600"}`}>
                         {call.phoneNumber}
                       </p>

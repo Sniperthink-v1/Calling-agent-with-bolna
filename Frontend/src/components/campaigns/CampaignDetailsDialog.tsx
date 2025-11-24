@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import {
   Dialog,
@@ -9,28 +10,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Calendar, Clock, Phone, CheckCircle, XCircle, TrendingUp } from 'lucide-react';
+import { Calendar, Clock, Phone, CheckCircle, XCircle, TrendingUp, Eye } from 'lucide-react';
 import { authenticatedFetch } from '@/utils/auth';
-
-interface Campaign {
-  id: string;
-  name: string;
-  agent_id: string;
-  status: string;
-  priority: number;
-  max_concurrent_calls: number;
-  total_contacts: number;
-  completed_calls: number;
-  successful_calls: number;
-  failed_calls: number;
-  created_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  // Timezone fields
-  campaign_timezone?: string;
-  use_custom_timezone?: boolean;
-}
+import type { Campaign } from '@/types/api';
 
 interface CampaignDetailsDialogProps {
   campaign: Campaign;
@@ -42,6 +26,7 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
   onClose,
 }) => {
   const { theme } = useTheme();
+  const navigate = useNavigate();
 
   // Fetch detailed analytics
   const { data: analytics, isLoading } = useQuery({
@@ -52,6 +37,15 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
       return response.json();
     },
   });
+  
+  // Navigate to call logs with campaign filter
+  const handleViewCallLogs = () => {
+    // Store campaign ID in sessionStorage so UnifiedCallLogs can read it
+    sessionStorage.setItem('filterCampaignId', campaign.id);
+    onClose();
+    // Navigate to dashboard with agents tab and calling-agent-logs subtab
+    navigate('/dashboard?tab=agents&subtab=calling-agent-logs');
+  };
 
   const calculateProgress = () => {
     if (campaign.total_contacts === 0) return 0;
@@ -224,6 +218,18 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
               </div>
             </div>
           ) : null}
+          
+          {/* View Call Logs Button */}
+          <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              onClick={handleViewCallLogs}
+              style={{ backgroundColor: '#1A6262' }}
+              className="text-white hover:opacity-90"
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              View Call Logs
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

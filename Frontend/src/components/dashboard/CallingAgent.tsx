@@ -39,15 +39,6 @@ const CallingAgent = ({
         theme === "dark" ? "bg-black text-white" : "bg-white text-gray-900"
       }`}
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Calling Agent</h1>
-          <p className="text-gray-500 mt-1">
-            Unified call logs and analytics across all agents
-          </p>
-        </div>
-      </div>
-
       {renderSubTabContent()}
     </div>
   );

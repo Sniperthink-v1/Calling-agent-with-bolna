@@ -451,6 +451,25 @@ router.get('/', async (req: Request, res: Response): Promise<any> => {
 
     const result = await CallCampaignService.getUserCampaigns(userId, filters);
     
+    // Auto-check and update status for all active campaigns
+    if (result.campaigns && Array.isArray(result.campaigns)) {
+      const activeCampaigns = result.campaigns.filter((c: any) => c.status === 'active');
+      await Promise.all(
+        activeCampaigns.map((campaign: any) => 
+          CallCampaignService.checkAndUpdateCampaignStatus(campaign.id, userId).catch(() => {})
+        )
+      );
+      
+      // Refetch to get updated status
+      if (activeCampaigns.length > 0) {
+        const updatedResult = await CallCampaignService.getUserCampaigns(userId, filters);
+        return res.json({
+          success: true,
+          ...updatedResult
+        });
+      }
+    }
+    
     res.json({
       success: true,
       ...result
@@ -809,6 +828,9 @@ router.get('/:id/analytics', async (req: Request, res: Response): Promise<any> =
         error: 'Campaign not found'
       });
     }
+    
+    // Auto-check and update campaign status if all contacts are handled
+    await CallCampaignService.checkAndUpdateCampaignStatus(req.params.id, userId);
     
     res.json({
       success: true,

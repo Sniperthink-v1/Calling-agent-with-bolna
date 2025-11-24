@@ -40,9 +40,14 @@ export class CallController {
         filters.search = req.query.search.trim();
       }
 
-      // Status filter
+      // Status filter - can be call status or lifecycle status
       if (req.query.status && typeof req.query.status === 'string') {
-        const validStatuses = ['completed', 'failed', 'in_progress', 'cancelled'];
+        const validStatuses = [
+          // Call statuses
+          'completed', 'failed', 'in_progress', 'cancelled',
+          // Lifecycle statuses
+          'busy', 'no-answer', 'ringing', 'initiated', 'call-disconnected'
+        ];
         if (validStatuses.includes(req.query.status)) {
           filters.status = req.query.status as any;
         }
@@ -58,6 +63,11 @@ export class CallController {
         filters.agentName = req.query.agent;
       }
 
+      // Campaign filter
+      if (req.query.campaignId && typeof req.query.campaignId === 'string') {
+        filters.campaignId = req.query.campaignId;
+      }
+
       // Phone number search
       if (req.query.phone && typeof req.query.phone === 'string') {
         filters.phoneNumber = req.query.phone;
@@ -70,11 +80,17 @@ export class CallController {
 
       // Date range filters
       if (req.query.start_date && typeof req.query.start_date === 'string') {
-        filters.startDate = new Date(req.query.start_date);
+        const startDate = new Date(req.query.start_date);
+        // Set to start of day (00:00:00)
+        startDate.setHours(0, 0, 0, 0);
+        filters.startDate = startDate;
       }
 
       if (req.query.end_date && typeof req.query.end_date === 'string') {
-        filters.endDate = new Date(req.query.end_date);
+        const endDate = new Date(req.query.end_date);
+        // Set to end of day (23:59:59.999)
+        endDate.setHours(23, 59, 59, 999);
+        filters.endDate = endDate;
       }
 
       // Duration filters (in seconds)
@@ -127,6 +143,19 @@ export class CallController {
       // Lead tag filter (Hot, Warm, Cold)
       if (req.query.lead_tag && typeof req.query.lead_tag === 'string') {
         filters.leadTag = req.query.lead_tag;
+      }
+
+      // Lead type filter (inbound/outbound)
+      if (req.query.leadType && typeof req.query.leadType === 'string') {
+        const validLeadTypes = ['inbound', 'outbound'];
+        if (validLeadTypes.includes(req.query.leadType)) {
+          filters.leadType = req.query.leadType as 'inbound' | 'outbound';
+        }
+      }
+
+      // Call lifecycle status filter (busy, no-answer, ringing, etc.)
+      if (req.query.callLifecycleStatus && typeof req.query.callLifecycleStatus === 'string') {
+        filters.callLifecycleStatus = req.query.callLifecycleStatus;
       }
 
       // Pagination options
