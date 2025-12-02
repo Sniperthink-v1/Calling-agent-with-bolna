@@ -2653,4 +2653,257 @@ export class AdminController {
       });
     }
   }
+
+  // ============================================
+  // USER EMAIL SETTINGS ADMIN ENDPOINTS
+  // ============================================
+
+  /**
+   * Get email settings for a specific user (admin only)
+   * GET /api/admin/users/:userId/email-settings
+   */
+  static async getUserEmailSettings(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      
+      // Import models dynamically to avoid circular dependencies
+      const UserEmailSettingsModel = (await import('../models/UserEmailSettings')).default;
+      const userModel = new UserModel();
+      
+      // Verify user exists
+      const user = await userModel.findById(userId);
+      if (!user) {
+        res.status(404).json({
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'User not found',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      // Get or create email settings
+      const settings = await UserEmailSettingsModel.getOrCreate(userId);
+
+      res.json({
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            openai_followup_email_prompt_id: user.openai_followup_email_prompt_id
+          },
+          settings
+        },
+        timestamp: new Date(),
+      });
+    } catch (error: any) {
+      logger.error('Get user email settings error:', error);
+      res.status(500).json({
+        error: {
+          code: 'GET_EMAIL_SETTINGS_ERROR',
+          message: 'Failed to retrieve user email settings',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Update email settings for a specific user (admin only)
+   * PUT /api/admin/users/:userId/email-settings
+   */
+  static async updateUserEmailSettings(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const settingsData = req.body;
+
+      // Import models dynamically
+      const UserEmailSettingsModel = (await import('../models/UserEmailSettings')).default;
+      const userModel = new UserModel();
+
+      // Verify user exists
+      const user = await userModel.findById(userId);
+      if (!user) {
+        res.status(404).json({
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'User not found',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      // Update email settings
+      const settings = await UserEmailSettingsModel.updateSettings(userId, settingsData);
+
+      res.json({
+        success: true,
+        data: settings,
+        message: 'Email settings updated successfully',
+        timestamp: new Date(),
+      });
+    } catch (error: any) {
+      logger.error('Update user email settings error:', error);
+      res.status(500).json({
+        error: {
+          code: 'UPDATE_EMAIL_SETTINGS_ERROR',
+          message: 'Failed to update user email settings',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Set OpenAI follow-up email prompt ID for a user (admin only)
+   * PUT /api/admin/users/:userId/followup-prompt
+   */
+  static async setUserFollowupPrompt(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { prompt_id } = req.body;
+
+      const userModel = new UserModel();
+
+      // Verify user exists
+      const user = await userModel.findById(userId);
+      if (!user) {
+        res.status(404).json({
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'User not found',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
+
+      // Validate prompt ID if provided
+      if (prompt_id) {
+        const openaiPromptService = (await import('../services/openaiPromptService')).default;
+        const validation = await openaiPromptService.validatePromptId(prompt_id);
+        if (!validation.valid) {
+          res.status(400).json({
+            error: {
+              code: 'INVALID_PROMPT_ID',
+              message: validation.error || 'Invalid OpenAI prompt ID',
+              timestamp: new Date(),
+            },
+          });
+          return;
+        }
+      }
+
+      // Update user's follow-up prompt ID
+      const updatedUser = await userModel.update(userId, {
+        openai_followup_email_prompt_id: prompt_id || null
+      });
+
+      res.json({
+        success: true,
+        data: {
+          userId: updatedUser?.id,
+          openai_followup_email_prompt_id: updatedUser?.openai_followup_email_prompt_id
+        },
+        message: prompt_id 
+          ? 'Follow-up email prompt ID set successfully' 
+          : 'Follow-up email prompt ID removed',
+        timestamp: new Date(),
+      });
+    } catch (error: any) {
+      logger.error('Set user followup prompt error:', error);
+      res.status(500).json({
+        error: {
+          code: 'SET_FOLLOWUP_PROMPT_ERROR',
+          message: 'Failed to set follow-up prompt',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Get all users with email settings summary (admin only)
+   * GET /api/admin/email-settings
+   */
+  static async getAllUsersEmailSettings(req: Request, res: Response): Promise<void> {
+    try {
+      const { page = 1, limit = 50, auto_send_enabled } = req.query;
+      const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+      const userModel = new UserModel();
+
+      let filterClause = '';
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (auto_send_enabled !== undefined) {
+        filterClause = `WHERE ues.auto_send_enabled = $${paramIndex}`;
+        params.push(auto_send_enabled === 'true');
+        paramIndex++;
+      }
+
+      const query = `
+        SELECT 
+          u.id as user_id,
+          u.email,
+          u.name,
+          u.openai_followup_email_prompt_id as admin_prompt_id,
+          ues.id as settings_id,
+          ues.auto_send_enabled,
+          ues.openai_followup_email_prompt_id as user_prompt_id,
+          ues.send_conditions,
+          ues.lead_status_filters,
+          ues.skip_if_no_email,
+          ues.send_delay_minutes,
+          ues.created_at as settings_created_at,
+          ues.updated_at as settings_updated_at
+        FROM users u
+        LEFT JOIN user_email_settings ues ON u.id = ues.user_id
+        ${filterClause}
+        ORDER BY u.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      params.push(parseInt(limit as string), offset);
+
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM users u
+        LEFT JOIN user_email_settings ues ON u.id = ues.user_id
+        ${filterClause}
+      `;
+
+      const countParams = params.slice(0, -2);
+
+      const [usersResult, countResult] = await Promise.all([
+        userModel.query(query, params),
+        userModel.query(countQuery, countParams)
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          users: usersResult.rows,
+          total: parseInt(countResult.rows[0].total),
+          page: parseInt(page as string),
+          limit: parseInt(limit as string),
+        },
+        timestamp: new Date(),
+      });
+    } catch (error: any) {
+      logger.error('Get all users email settings error:', error);
+      res.status(500).json({
+        error: {
+          code: 'GET_ALL_EMAIL_SETTINGS_ERROR',
+          message: 'Failed to retrieve users email settings',
+          timestamp: new Date(),
+        },
+      });
+    }
+  }
 }

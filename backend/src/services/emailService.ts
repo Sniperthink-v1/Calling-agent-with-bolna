@@ -1086,6 +1086,25 @@ If you have any questions, please don't hesitate to reach out.
   isEmailConfigured(): boolean {
     return zeptomailService.isReady();
   }
+
+  /**
+   * Send follow-up email after a call
+   */
+  async sendFollowUpEmail(params: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<boolean> {
+    const { to, subject, html, text } = params;
+
+    return await this.sendEmail({
+      to,
+      subject,
+      html,
+      text,
+    });
+  }
 }
 
 export const emailService = new EmailService();

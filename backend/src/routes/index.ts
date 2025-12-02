@@ -31,6 +31,7 @@ import schedulerRoutes from './schedulerRoutes';
 import userPhoneNumbersRoutes from './userPhoneNumbers';
 import integrationRoutes from './integrations';
 import demoRoutes from './demoRoutes';
+import emailSettingsRoutes from './emailSettingsRoutes';
 
 // Import rate limiting middleware
 import { generalRateLimit, authRateLimit } from '../middleware/rateLimit';
@@ -94,6 +95,7 @@ router.use('/scheduler', authenticatedRateLimit, schedulerRoutes); // Campaign s
 router.use('/phone-numbers', authenticatedRateLimit, userPhoneNumbersRoutes); // User phone numbers
 router.use('/integrations', integrationRoutes); // Google Calendar and other integrations (has mixed auth)
 router.use('/demos', authenticatedRateLimit, demoRoutes); // Demo schedule management
+router.use('/email-settings', authenticatedRateLimit, emailSettingsRoutes); // Follow-up email settings
 
 // Monitoring routes - no rate limiting
 router.use('/monitoring', monitoringRoutes);
