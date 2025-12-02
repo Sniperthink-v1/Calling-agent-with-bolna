@@ -605,8 +605,15 @@ export class CallQueueModel {
     const firstTime = data.campaign_first_call_time;
     const lastTime = data.campaign_last_call_time;
     
-    if (scheduledTime < firstTime || scheduledTime > lastTime) {
-      // Schedule for next day at first_call_time
+    // Check if we're within the time window
+    // Handle both normal windows (09:00-17:00) and overnight windows (22:00-06:00)
+    const isOvernightWindow = lastTime < firstTime;
+    const isWithinWindow = isOvernightWindow
+      ? (scheduledTime >= firstTime || scheduledTime <= lastTime)
+      : (scheduledTime >= firstTime && scheduledTime <= lastTime);
+    
+    if (!isWithinWindow) {
+      // Schedule for next appropriate time at first_call_time
       scheduledFor.setDate(scheduledFor.getDate() + 1);
       const [hours, minutes, seconds] = firstTime.split(':').map(Number);
       scheduledFor.setHours(hours, minutes, seconds || 0, 0);
@@ -657,13 +664,14 @@ export class CallQueueModel {
   ): Promise<{ shouldRetry: boolean; currentRetryCount: number }> {
     // Get the highest retry count for this contact in this campaign
     const result = await pool.query(
-      `SELECT COALESCE(MAX(retry_count), 0) as max_retry_count
+      `SELECT COALESCE(MAX(retry_count), 0)::int as max_retry_count
        FROM call_queue 
        WHERE campaign_id = $1 AND contact_id = $2`,
       [campaignId, contactId]
     );
     
-    const currentRetryCount = parseInt(result.rows[0]?.max_retry_count || '0');
+    // Database returns integer due to ::int cast, fallback to 0 if null
+    const currentRetryCount = result.rows[0]?.max_retry_count ?? 0;
     const shouldRetry = currentRetryCount < maxRetries;
     
     return { shouldRetry, currentRetryCount };

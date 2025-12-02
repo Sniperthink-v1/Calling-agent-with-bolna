@@ -9,7 +9,7 @@
 -- Add max_retries column (number of retry attempts for busy/no-answer)
 ALTER TABLE call_campaigns 
 ADD COLUMN IF NOT EXISTS max_retries INTEGER NOT NULL DEFAULT 0 
-CHECK (max_retries >= 0 AND max_retries <= 10);
+CHECK (max_retries >= 0 AND max_retries <= 5);
 
 -- Add retry_interval_minutes column (gap between retries in minutes)
 ALTER TABLE call_campaigns 
@@ -17,7 +17,7 @@ ADD COLUMN IF NOT EXISTS retry_interval_minutes INTEGER NOT NULL DEFAULT 60
 CHECK (retry_interval_minutes >= 1 AND retry_interval_minutes <= 1440);
 
 -- Add comments
-COMMENT ON COLUMN call_campaigns.max_retries IS 'Maximum number of auto-callback retries for busy/no-answer calls (0 = no retries)';
+COMMENT ON COLUMN call_campaigns.max_retries IS 'Maximum number of auto-callback retries for busy/no-answer calls (0 = no retries, max 5)';
 COMMENT ON COLUMN call_campaigns.retry_interval_minutes IS 'Time gap between retry attempts in minutes';
 
 -- =====================================================

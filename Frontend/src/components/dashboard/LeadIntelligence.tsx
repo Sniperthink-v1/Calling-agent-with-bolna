@@ -875,8 +875,9 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     try {
       // Create contacts from leads or get existing contact IDs
       const response = await apiService.createContactsFromLeads(leadsWithPhones);
-      if (response.contactIds && response.contactIds.length > 0) {
-        setCampaignContactIds(response.contactIds);
+      const contactIds = response.data?.contactIds || (response as any).contactIds;
+      if (contactIds && contactIds.length > 0) {
+        setCampaignContactIds(contactIds);
         setShowCampaignModal(true);
       } else {
         toast({
