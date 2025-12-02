@@ -575,6 +575,99 @@ export class CallQueueModel {
 
     return stats;
   }
+
+  /**
+   * Create a retry queue item for a failed call (busy/no-answer)
+   * Respects campaign retry settings and time window
+   */
+  static async createRetryItem(data: {
+    user_id: string;
+    campaign_id: string;
+    agent_id: string;
+    contact_id: string;
+    phone_number: string;
+    contact_name?: string;
+    user_data: any;
+    retry_count: number;
+    original_queue_id?: string;
+    last_call_outcome: string;
+    retry_interval_minutes: number;
+    campaign_first_call_time: string;
+    campaign_last_call_time: string;
+  }): Promise<CallQueueItem> {
+    // Calculate scheduled_for based on retry_interval_minutes
+    // but ensure it falls within campaign time window
+    const now = new Date();
+    let scheduledFor = new Date(now.getTime() + data.retry_interval_minutes * 60 * 1000);
+    
+    // Check if scheduled time is within campaign time window
+    const scheduledTime = scheduledFor.toTimeString().slice(0, 8); // HH:MM:SS
+    const firstTime = data.campaign_first_call_time;
+    const lastTime = data.campaign_last_call_time;
+    
+    if (scheduledTime < firstTime || scheduledTime > lastTime) {
+      // Schedule for next day at first_call_time
+      scheduledFor.setDate(scheduledFor.getDate() + 1);
+      const [hours, minutes, seconds] = firstTime.split(':').map(Number);
+      scheduledFor.setHours(hours, minutes, seconds || 0, 0);
+    }
+
+    // Get next position for this campaign
+    const positionResult = await pool.query(
+      `SELECT COALESCE(MAX(position), 0) + 1 as next_position 
+       FROM call_queue 
+       WHERE campaign_id = $1`,
+      [data.campaign_id]
+    );
+    const position = positionResult.rows[0].next_position;
+
+    const result = await pool.query(
+      `INSERT INTO call_queue (
+        user_id, campaign_id, agent_id, contact_id,
+        phone_number, contact_name, user_data, priority, position, scheduled_for,
+        retry_count, original_queue_id, last_call_outcome, call_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'campaign')
+      RETURNING *`,
+      [
+        data.user_id,
+        data.campaign_id,
+        data.agent_id,
+        data.contact_id,
+        data.phone_number,
+        data.contact_name || null,
+        JSON.stringify(data.user_data),
+        0, // Lower priority for retries
+        position,
+        scheduledFor,
+        data.retry_count,
+        data.original_queue_id || null,
+        data.last_call_outcome
+      ]
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Check if a contact should be retried for a campaign
+   */
+  static async shouldRetry(
+    campaignId: string, 
+    contactId: string,
+    maxRetries: number
+  ): Promise<{ shouldRetry: boolean; currentRetryCount: number }> {
+    // Get the highest retry count for this contact in this campaign
+    const result = await pool.query(
+      `SELECT COALESCE(MAX(retry_count), 0) as max_retry_count
+       FROM call_queue 
+       WHERE campaign_id = $1 AND contact_id = $2`,
+      [campaignId, contactId]
+    );
+    
+    const currentRetryCount = parseInt(result.rows[0]?.max_retry_count || '0');
+    const shouldRetry = currentRetryCount < maxRetries;
+    
+    return { shouldRetry, currentRetryCount };
+  }
 }
 
 export default CallQueueModel;
