@@ -1229,6 +1229,13 @@ class WebhookService {
 
     const call = await Call.findByExecutionId(executionId);
     
+    logger.info('🔍 [RETRY-DEBUG] handleFailed - Call record lookup', {
+      execution_id: executionId,
+      status,
+      call_found: !!call,
+      call_id: call?.id
+    });
+    
     await Call.updateByExecutionId(executionId, {
       call_lifecycle_status: status,
       status: 'failed',
@@ -1310,12 +1317,31 @@ class WebhookService {
     callOutcome: string
   ): Promise<void> {
     try {
+      logger.info('🔍 [RETRY-DEBUG] Looking up queue item by call_id', {
+        call_id: callId,
+        call_outcome: callOutcome
+      });
+      
       const queueItem = await CallQueue.findByCallId(callId);
       
       if (!queueItem) {
         // Not a campaign call, skip
+        logger.info('🔍 [RETRY-DEBUG] No queue item found for call_id (not a campaign call)', {
+          call_id: callId,
+          call_outcome: callOutcome
+        });
         return;
       }
+
+      logger.info('🔍 [RETRY-DEBUG] Queue item found', {
+        queue_item_id: queueItem.id,
+        call_id: callId,
+        campaign_id: queueItem.campaign_id,
+        contact_id: queueItem.contact_id,
+        current_status: queueItem.status,
+        current_retry_count: queueItem.retry_count,
+        call_outcome: callOutcome
+      });
 
       // Check if this is a campaign call with retry enabled
       if (queueItem.campaign_id && (callOutcome === 'busy' || callOutcome === 'no-answer')) {

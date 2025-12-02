@@ -4,6 +4,11 @@ import {
   QueueStatus
 } from '../types/campaign';
 
+// Simple console logger for debugging
+const logDebug = (message: string, data?: any) => {
+  console.log(`[CallQueue] ${message}`, data ? JSON.stringify(data) : '');
+};
+
 export class CallQueueModel {
   /**
    * Find queue item by ID
@@ -20,10 +25,17 @@ export class CallQueueModel {
    * Find queue item by call ID
    */
   static async findByCallId(callId: string): Promise<CallQueueItem | null> {
+    logDebug('findByCallId searching for', { callId });
     const result = await pool.query(
       'SELECT * FROM call_queue WHERE call_id = $1',
       [callId]
     );
+    logDebug('findByCallId result', { 
+      callId, 
+      found: result.rows.length > 0,
+      queueItemId: result.rows[0]?.id,
+      queueItemStatus: result.rows[0]?.status
+    });
     return result.rows[0] || null;
   }
 
@@ -201,6 +213,13 @@ export class CallQueueModel {
       failure_reason?: string;
     }
   ): Promise<CallQueueItem | null> {
+    logDebug('updateStatus called', { 
+      id, 
+      userId, 
+      status, 
+      call_id: additionalData?.call_id 
+    });
+    
     const updates: string[] = ['status = $3', 'updated_at = CURRENT_TIMESTAMP'];
     const params: any[] = [id, userId, status];
     let paramCount = 3;
@@ -221,6 +240,10 @@ export class CallQueueModel {
       paramCount++;
       updates.push(`call_id = $${paramCount}`);
       params.push(additionalData.call_id);
+      logDebug('Setting call_id on queue item', { 
+        queueItemId: id, 
+        call_id: additionalData.call_id 
+      });
     }
 
     if (additionalData?.failure_reason) {
