@@ -291,39 +291,38 @@ export class CallQueueModel {
   }
 
   /**
-   * Mark queue item as completed and delete it immediately
+   * Mark queue item as completed
+   * CHANGED: Now updates status instead of deleting to preserve history for retries
    */
   static async markAsCompleted(
     id: string, 
     userId: string, 
     callId?: string
   ): Promise<CallQueueItem | null> {
-    // Delete completed items immediately - call data already in calls table
-    const result = await pool.query(
-      `DELETE FROM call_queue 
-       WHERE id = $1 AND user_id = $2
-       RETURNING *`,
-      [id, userId]
-    );
-    return result.rows[0] || null;
+    // Update status to completed instead of deleting
+    // This preserves the record for retry history (original_queue_id FK)
+    // The unique index (campaign_id, contact_id) is partial (WHERE status IN ('queued', 'processing'))
+    // so keeping completed items does not violate uniqueness.
+    return this.updateStatus(id, userId, 'completed', {
+      completed_at: new Date(),
+      call_id: callId
+    });
   }
 
   /**
-   * Mark queue item as failed and delete it immediately
+   * Mark queue item as failed
+   * CHANGED: Now updates status instead of deleting to preserve history for retries
    */
   static async markAsFailed(
     id: string, 
     userId: string, 
     reason: string
   ): Promise<CallQueueItem | null> {
-    // Delete failed items immediately - no need to keep in queue
-    const result = await pool.query(
-      `DELETE FROM call_queue 
-       WHERE id = $1 AND user_id = $2
-       RETURNING *`,
-      [id, userId]
-    );
-    return result.rows[0] || null;
+    // Update status to failed instead of deleting
+    return this.updateStatus(id, userId, 'failed', {
+      completed_at: new Date(),
+      failure_reason: reason
+    });
   }
 
   /**
