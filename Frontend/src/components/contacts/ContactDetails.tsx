@@ -205,6 +205,29 @@ export const ContactDetails: React.FC<ContactDetailsProps> = ({
                     )}
                   </p>
                 </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-500">Location</label>
+                  <p className="text-lg">
+                    {contact.city || contact.country ? (
+                      <span>
+                        {contact.city || '-'}
+                        {contact.country && (
+                          <span className="text-sm text-muted-foreground ml-1">({contact.country})</span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">No location provided</span>
+                    )}
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-500">Business Context</label>
+                  <p className="text-lg">
+                    {contact.businessContext || <span className="text-gray-400">No business context provided</span>}
+                  </p>
+                </div>
               </div>
               
               {contact.notes && (

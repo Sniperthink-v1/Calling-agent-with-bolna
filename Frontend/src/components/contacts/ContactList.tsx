@@ -742,6 +742,8 @@ export const ContactList: React.FC<ContactListProps> = ({
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[200px]" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Notes</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Source</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Tags</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Location</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[150px]" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Business Context</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Last Contact</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Call Attempted</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
@@ -870,6 +872,25 @@ export const ContactList: React.FC<ContactListProps> = ({
                                 </Badge>
                               )}
                             </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="p-4 align-middle">
+                          {contact.city || contact.country ? (
+                            <div>
+                              <span className="text-sm">{contact.city || '-'}</span>
+                              {contact.country && (
+                                <div className="text-xs text-muted-foreground">{contact.country}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="p-4 align-middle">
+                          {contact.businessContext ? (
+                            <span className="text-sm">{contact.businessContext}</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
