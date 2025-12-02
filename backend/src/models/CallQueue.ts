@@ -680,10 +680,16 @@ export class CallQueueModel {
       
       const targetDate = new Date(scheduledFor);
       
-      // If current time is after the start time (meaning we missed today's window),
+      // If scheduled time is after the last call time (meaning we missed today's window),
       // schedule for tomorrow. Otherwise (too early), schedule for today.
-      if (scheduledTime >= firstTime) {
+      // Note: We compare with lastTime because if it's > lastTime, the window is closed for today.
+      // If it's < firstTime, the window hasn't opened yet, so we schedule for today.
+      if (scheduledTime > lastTime && !isOvernightWindow) {
         targetDate.setDate(targetDate.getDate() + 1);
+      } else if (isOvernightWindow && scheduledTime > lastTime && scheduledTime < firstTime) {
+        // For overnight window (e.g. 22:00-06:00), if time is 10:00, it's outside window.
+        // We should schedule for tonight (22:00).
+        // No date change needed, just set time to firstTime
       }
       
       // Set time in local timezone first, then adjust for campaign timezone offset
