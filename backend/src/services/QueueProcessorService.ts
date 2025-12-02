@@ -317,15 +317,6 @@ export class QueueProcessorService {
 
           if (isDirectCall) {
             // **Direct call path**
-            
-            // CRITICAL: Set call_id on queue item BEFORE making the Bolna API call
-            // This ensures findByCallId works when webhooks arrive during/after the call
-            await CallQueueModel.updateStatus(queueItem.id, queueItem.user_id, 'processing', {
-              call_id: callId  // Use pre-reserved callId
-            });
-            
-            console.log(`[QueueProcessor] Set call_id ${callId} on queue item ${queueItem.id} BEFORE initiating direct call`);
-            
             const callResponse = await CallService.initiateCall({
               userId: queueItem.user_id,
               agentId: queueItem.agent_id,
@@ -336,6 +327,12 @@ export class QueueProcessorService {
                 queue_id: queueItem.id,
                 call_source: 'direct_queue' // Mark as queued direct call
               }
+            });
+
+            // Update queue item with call_id AFTER call record is created
+            // (call_id has FK constraint to calls table)
+            await CallQueueModel.updateStatus(queueItem.id, queueItem.user_id, 'processing', {
+              call_id: callResponse.callId
             });
 
             console.log(`[QueueProcessor] Direct call initiated from queue: ${callResponse.callId} for queue_id: ${queueItem.id}`);
@@ -351,16 +348,6 @@ export class QueueProcessorService {
             });
           } else {
             // **Campaign call path** (existing logic)
-            
-            // CRITICAL: Set call_id on queue item BEFORE making the Bolna API call
-            // This ensures findByCallId works when webhooks arrive during/after the call
-            // The callId is the pre-reserved ID that will become the call record's ID
-            await CallQueueModel.updateStatus(queueItem.id, queueItem.user_id, 'processing', {
-              call_id: callId  // Use pre-reserved callId, not the response
-            });
-            
-            console.log(`[QueueProcessor] Set call_id ${callId} on queue item ${queueItem.id} BEFORE initiating call`);
-            
             const callResponse = await CallService.initiateCampaignCall({
               userId: queueItem.user_id,
               agentId: queueItem.agent_id,
@@ -374,10 +361,11 @@ export class QueueProcessorService {
               }
             }, callId);
 
-            // Verify call_id matches (should always match since we use preReservedCallId)
-            if (callResponse.callId !== callId) {
-              console.warn(`[QueueProcessor] WARNING: callResponse.callId (${callResponse.callId}) differs from pre-reserved callId (${callId})`);
-            }
+            // Update queue item with call_id AFTER call record is created
+            // (call_id has FK constraint to calls table)
+            await CallQueueModel.updateStatus(queueItem.id, queueItem.user_id, 'processing', {
+              call_id: callResponse.callId
+            });
 
             console.log(`[QueueProcessor] Campaign call initiated with atomic slot reservation: ${callResponse.callId} for queue_id: ${queueItem.id}`);
             

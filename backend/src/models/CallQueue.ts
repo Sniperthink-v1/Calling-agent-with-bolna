@@ -22,6 +22,23 @@ export class CallQueueModel {
   }
 
   /**
+   * Find queue item by ID (internal - no user check)
+   * Used for webhook processing where we only have the queue_id from metadata
+   */
+  static async findByIdInternal(id: string): Promise<CallQueueItem | null> {
+    logDebug('findByIdInternal searching for', { id });
+    const result = await pool.query(
+      'SELECT * FROM call_queue WHERE id = $1',
+      [id]
+    );
+    logDebug('findByIdInternal result', { 
+      id, 
+      found: result.rows.length > 0
+    });
+    return result.rows[0] || null;
+  }
+
+  /**
    * Find queue item by call ID
    */
   static async findByCallId(callId: string): Promise<CallQueueItem | null> {

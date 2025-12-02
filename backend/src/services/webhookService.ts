@@ -1305,29 +1305,58 @@ class WebhookService {
 
     // Update queue item and check if retry is needed
     if (call) {
-      await this.handleQueueItemFailureAndRetry(call.id, status);
+      // Pass queue_id from call metadata as fallback for race condition handling
+      const queueIdFromMetadata = call.metadata?.queue_id;
+      await this.handleQueueItemFailureAndRetry(call.id, status, queueIdFromMetadata);
     }
   }
 
   /**
    * Handle queue item failure and schedule retry if applicable
+   * 
+   * @param callId - The call record ID
+   * @param callOutcome - The call outcome (busy, no-answer, etc.)
+   * @param queueIdFromMetadata - Optional queue_id from call metadata (fallback)
    */
   private async handleQueueItemFailureAndRetry(
     callId: string,
-    callOutcome: string
+    callOutcome: string,
+    queueIdFromMetadata?: string
   ): Promise<void> {
     try {
-      logger.info('🔍 [RETRY-DEBUG] Looking up queue item by call_id', {
+      logger.info('🔍 [RETRY-DEBUG] Looking up queue item', {
         call_id: callId,
+        queue_id_from_metadata: queueIdFromMetadata,
         call_outcome: callOutcome
       });
       
-      const queueItem = await CallQueue.findByCallId(callId);
+      // Try to find queue item by call_id first
+      let queueItem = await CallQueue.findByCallId(callId);
+      
+      // Fallback: if call_id lookup fails but we have queue_id from metadata,
+      // use that to find the queue item. This handles the race condition where
+      // webhooks arrive before call_id is set on the queue item.
+      if (!queueItem && queueIdFromMetadata) {
+        logger.info('🔍 [RETRY-DEBUG] call_id lookup failed, trying queue_id from metadata', {
+          call_id: callId,
+          queue_id: queueIdFromMetadata
+        });
+        queueItem = await CallQueue.findByIdInternal(queueIdFromMetadata);
+        
+        if (queueItem) {
+          logger.info('🔍 [RETRY-DEBUG] Found queue item via metadata queue_id', {
+            queue_item_id: queueItem.id,
+            queue_call_id: queueItem.call_id,
+            expected_call_id: callId
+          });
+        }
+      }
       
       if (!queueItem) {
         // Not a campaign call, skip
-        logger.info('🔍 [RETRY-DEBUG] No queue item found for call_id (not a campaign call)', {
+        logger.info('🔍 [RETRY-DEBUG] No queue item found (not a campaign call)', {
           call_id: callId,
+          queue_id_from_metadata: queueIdFromMetadata,
           call_outcome: callOutcome
         });
         return;
