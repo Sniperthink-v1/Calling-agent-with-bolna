@@ -291,8 +291,13 @@ const EmailSettingsSection = () => {
     }
   };
 
+  // OpenAI prompt ID validation pattern (must start with "pmpt_")
+  const isValidPromptIdFormat = (id: string): boolean => {
+    return id.startsWith('pmpt_');
+  };
+
   const handleValidatePrompt = async () => {
-    if (!promptId || !promptId.startsWith('pmpt_')) {
+    if (!promptId || !isValidPromptIdFormat(promptId)) {
       setPromptValidation({
         status: 'invalid',
         message: 'Prompt ID must start with "pmpt_"',

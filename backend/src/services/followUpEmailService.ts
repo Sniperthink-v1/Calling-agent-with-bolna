@@ -4,6 +4,7 @@ import openaiPromptService from './openaiPromptService';
 import { logger } from '../utils/logger';
 import { pool } from '../config/database';
 import axios from 'axios';
+import DOMPurify from 'isomorphic-dompurify';
 
 /**
  * Variables available for email template replacement
@@ -221,10 +222,10 @@ class FollowUpEmailService {
         status = 'pending',
         updated_at = CURRENT_TIMESTAMP`,
       [callData.callId, callData.userId, contactEmail, scheduledTime]
-    ).catch(() => {
-      // Table might not exist yet, log warning
+    ).catch(async () => {
+      // Table might not exist yet, log warning and send immediately as fallback
       logger.warn('scheduled_emails table not available, sending immediately instead');
-      this.sendFollowUpEmail(callData, settings, contactEmail);
+      await this.sendFollowUpEmail(callData, settings, contactEmail);
     });
   }
 
@@ -332,6 +333,18 @@ class FollowUpEmailService {
   /**
    * Generate personalized email content using OpenAI
    */
+  /**
+   * Generate personalized email content using OpenAI Responses API
+   * 
+   * Uses OpenAI's Responses API (/v1/responses) with prompt templates.
+   * The API expects a prompt ID (starts with "pmpt_") and an input string.
+   * 
+   * Response formats:
+   * - Responses API: output_text contains the generated content
+   * - Legacy format: choices[0].message.content (fallback for compatibility)
+   * 
+   * @see openaiPromptService.ts for prompt ID validation
+   */
   private async generatePersonalizedContent(
     promptId: string,
     transcript: string,
@@ -343,6 +356,8 @@ class FollowUpEmailService {
         return {};
       }
 
+      // Use OpenAI Responses API with prompt templates
+      // This API is used for stored prompts (pmpt_...) that can be managed in OpenAI Dashboard
       const response = await axios.post(
         `${this.baseUrl}/responses`,
         {
@@ -364,18 +379,20 @@ class FollowUpEmailService {
         }
       );
 
-      // Parse the response
+      // Parse the response - handle both Responses API (output_text) 
+      // and legacy chat completions format (choices[0].message.content)
       const content = response.data?.output_text || response.data?.choices?.[0]?.message?.content;
       
       if (content) {
         try {
+          // Expect JSON response with subject and body fields
           const parsed = JSON.parse(content);
           return {
             subject: parsed.subject,
             body: parsed.body
           };
         } catch {
-          // If not JSON, use as body
+          // If response is not valid JSON, treat it as the email body
           return { body: content };
         }
       }
@@ -414,14 +431,18 @@ class FollowUpEmailService {
 
   /**
    * Convert HTML to plain text
+   * Uses DOMPurify to safely sanitize and extract text content from HTML.
+   * This generates a plain text alternative for email clients that don't support HTML.
    */
   private htmlToPlainText(html: string): string {
-    return html
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    // First sanitize the HTML to remove any potentially dangerous content
+    const sanitized = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [], // Strip all tags to get plain text
+      KEEP_CONTENT: true, // Keep text content
+    });
+    
+    // Normalize whitespace and trim
+    return sanitized.replace(/\s+/g, ' ').trim();
   }
 
   /**

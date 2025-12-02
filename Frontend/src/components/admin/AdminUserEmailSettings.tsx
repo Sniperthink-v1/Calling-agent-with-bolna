@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import {
   Select,
@@ -44,6 +43,10 @@ import {
   Sparkles,
   Filter,
 } from 'lucide-react';
+
+// Display configuration
+const PROMPT_ID_DISPLAY_LENGTH = 15;
+const PROMPT_ID_PREFIX = 'pmpt_';
 
 interface User {
   id: string;
@@ -135,16 +138,21 @@ export const AdminUserEmailSettings: React.FC<AdminUserEmailSettingsProps> = ({ 
     setEditModalOpen(true);
   };
 
+  // Validate OpenAI prompt ID format
+  const isValidPromptIdFormat = (id: string): boolean => {
+    return id.startsWith(PROMPT_ID_PREFIX);
+  };
+
   const handleValidatePrompt = async () => {
     if (!editPromptId) {
       setPromptValidation({ status: 'idle' });
       return;
     }
     
-    if (!editPromptId.startsWith('pmpt_')) {
+    if (!isValidPromptIdFormat(editPromptId)) {
       setPromptValidation({
         status: 'invalid',
-        message: 'Prompt ID must start with "pmpt_"',
+        message: `Prompt ID must start with "${PROMPT_ID_PREFIX}"`,
       });
       return;
     }
@@ -328,7 +336,7 @@ export const AdminUserEmailSettings: React.FC<AdminUserEmailSettingsProps> = ({ 
                       <TableCell>
                         {user.admin_prompt_id ? (
                           <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {user.admin_prompt_id.substring(0, 15)}...
+                            {user.admin_prompt_id.substring(0, PROMPT_ID_DISPLAY_LENGTH)}...
                           </code>
                         ) : (
                           <span className="text-muted-foreground text-sm">Not set</span>

@@ -274,16 +274,55 @@ export class UserEmailSettingsModel extends BaseModel<UserEmailSettingsInterface
 
   /**
    * Transform database row to interface (handle JSONB parsing)
+   * JSONB fields are returned as objects by pg driver, but might be strings in some cases
    */
-  private transformRow(row: any): UserEmailSettingsInterface {
+  private transformRow(row: Record<string, unknown>): UserEmailSettingsInterface {
+    const sendConditions = row.send_conditions;
+    const leadStatusFilters = row.lead_status_filters;
+
+    let parsedConditions: SendCondition[];
+    let parsedFilters: LeadStatusFilter[];
+
+    // Parse send_conditions - handle both string and array formats
+    if (typeof sendConditions === 'string') {
+      try {
+        parsedConditions = JSON.parse(sendConditions);
+      } catch {
+        parsedConditions = ['completed'];
+      }
+    } else if (Array.isArray(sendConditions)) {
+      parsedConditions = sendConditions as SendCondition[];
+    } else {
+      parsedConditions = ['completed'];
+    }
+
+    // Parse lead_status_filters - handle both string and array formats
+    if (typeof leadStatusFilters === 'string') {
+      try {
+        parsedFilters = JSON.parse(leadStatusFilters);
+      } catch {
+        parsedFilters = ['any'];
+      }
+    } else if (Array.isArray(leadStatusFilters)) {
+      parsedFilters = leadStatusFilters as LeadStatusFilter[];
+    } else {
+      parsedFilters = ['any'];
+    }
+
     return {
-      ...row,
-      send_conditions: typeof row.send_conditions === 'string' 
-        ? JSON.parse(row.send_conditions) 
-        : row.send_conditions || ['completed'],
-      lead_status_filters: typeof row.lead_status_filters === 'string'
-        ? JSON.parse(row.lead_status_filters)
-        : row.lead_status_filters || ['any']
+      id: row.id as string,
+      user_id: row.user_id as string,
+      auto_send_enabled: row.auto_send_enabled as boolean,
+      openai_followup_email_prompt_id: row.openai_followup_email_prompt_id as string | null | undefined,
+      subject_template: row.subject_template as string,
+      body_template: row.body_template as string,
+      send_conditions: parsedConditions,
+      lead_status_filters: parsedFilters,
+      skip_if_no_email: row.skip_if_no_email as boolean,
+      send_delay_minutes: row.send_delay_minutes as number,
+      max_retries_before_send: row.max_retries_before_send as number,
+      created_at: row.created_at as Date,
+      updated_at: row.updated_at as Date
     };
   }
 }
