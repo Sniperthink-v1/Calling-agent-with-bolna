@@ -1,0 +1,493 @@
+import { emailService } from './emailService';
+import UserEmailSettingsModel, { UserEmailSettingsInterface, DEFAULT_BODY_TEMPLATE, DEFAULT_SUBJECT_TEMPLATE } from '../models/UserEmailSettings';
+import openaiPromptService from './openaiPromptService';
+import { logger } from '../utils/logger';
+import { pool } from '../config/database';
+import axios from 'axios';
+
+/**
+ * Variables available for email template replacement
+ */
+export interface EmailTemplateVariables {
+  lead_name: string;
+  lead_email?: string;
+  company?: string;
+  phone?: string;
+  agent_name?: string;
+  sender_name: string;
+  summary?: string;
+  next_steps?: string;
+  call_duration?: string;
+  call_date?: string;
+  lead_status?: string;
+  // Custom variables from OpenAI personalization
+  [key: string]: string | undefined;
+}
+
+/**
+ * Call data for generating follow-up email
+ */
+export interface FollowUpCallData {
+  callId: string;
+  userId: string;
+  contactId?: string;
+  phoneNumber: string;
+  callStatus: string;
+  leadStatus?: string;
+  transcript?: string;
+  summary?: string;
+  nextSteps?: string;
+  durationMinutes?: number;
+  retryCount?: number;
+  createdAt: Date;
+}
+
+/**
+ * Service for managing and sending follow-up emails
+ */
+class FollowUpEmailService {
+  private apiKey: string;
+  private baseUrl = 'https://api.openai.com/v1';
+
+  constructor() {
+    this.apiKey = process.env.OPENAI_API_KEY || '';
+  }
+
+  /**
+   * Process a call for potential follow-up email
+   */
+  async processCallForFollowUp(callData: FollowUpCallData): Promise<{
+    sent: boolean;
+    reason: string;
+    emailId?: string;
+  }> {
+    try {
+      logger.info('Processing call for follow-up email', {
+        callId: callData.callId,
+        userId: callData.userId,
+        callStatus: callData.callStatus
+      });
+
+      // Get user email settings
+      const settings = await UserEmailSettingsModel.findByUserId(callData.userId);
+      
+      if (!settings) {
+        return { sent: false, reason: 'No email settings configured for user' };
+      }
+
+      // Get contact email
+      const contactEmail = await this.getContactEmail(callData.contactId, callData.phoneNumber, callData.userId);
+      
+      // Check if should send follow-up
+      const { shouldSend, reason } = await UserEmailSettingsModel.shouldSendFollowUp(
+        callData.userId,
+        callData.callStatus,
+        callData.leadStatus || null,
+        !!contactEmail,
+        callData.retryCount || 0
+      );
+
+      if (!shouldSend) {
+        logger.info('Follow-up email not sent', { callId: callData.callId, reason });
+        return { sent: false, reason };
+      }
+
+      // Schedule email (with delay if configured)
+      if (settings.send_delay_minutes > 0) {
+        await this.scheduleFollowUpEmail(callData, settings, contactEmail!);
+        return { sent: true, reason: `Email scheduled for ${settings.send_delay_minutes} minutes` };
+      }
+
+      // Send immediately
+      const result = await this.sendFollowUpEmail(callData, settings, contactEmail!);
+      return result;
+    } catch (error) {
+      logger.error('Error processing call for follow-up email', {
+        callId: callData.callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return { sent: false, reason: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Send follow-up email immediately
+   */
+  private async sendFollowUpEmail(
+    callData: FollowUpCallData,
+    settings: UserEmailSettingsInterface,
+    contactEmail: string
+  ): Promise<{ sent: boolean; reason: string; emailId?: string }> {
+    try {
+      // Get additional context for template variables
+      const context = await this.getEmailContext(callData);
+      
+      // Build template variables
+      const variables: EmailTemplateVariables = {
+        lead_name: context.contactName || 'Valued Customer',
+        lead_email: contactEmail,
+        company: context.company,
+        phone: callData.phoneNumber,
+        agent_name: context.agentName,
+        sender_name: context.userName || 'Our Team',
+        summary: callData.summary || 'We discussed your needs and how we can help.',
+        next_steps: callData.nextSteps,
+        call_duration: callData.durationMinutes ? `${callData.durationMinutes} minutes` : undefined,
+        call_date: callData.createdAt.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        lead_status: callData.leadStatus
+      };
+
+      // Generate personalized content using OpenAI if configured
+      let personalizedContent: { subject?: string; body?: string } = {};
+      
+      // Try user-level prompt first, then check if admin set one in users table
+      const promptId = settings.openai_followup_email_prompt_id || 
+        await this.getUserFollowupPromptId(callData.userId);
+      
+      if (promptId && callData.transcript) {
+        personalizedContent = await this.generatePersonalizedContent(
+          promptId,
+          callData.transcript,
+          variables
+        );
+      }
+
+      // Apply template with variables
+      const subject = this.applyTemplate(
+        personalizedContent.subject || settings.subject_template || DEFAULT_SUBJECT_TEMPLATE,
+        variables
+      );
+      
+      const body = this.applyTemplate(
+        personalizedContent.body || settings.body_template || DEFAULT_BODY_TEMPLATE,
+        variables
+      );
+
+      // Send the email
+      const sent = await emailService.sendFollowUpEmail({
+        to: contactEmail,
+        subject,
+        html: body,
+        text: this.htmlToPlainText(body)
+      });
+
+      if (sent) {
+        logger.info('Follow-up email sent successfully', {
+          callId: callData.callId,
+          to: contactEmail
+        });
+        return { sent: true, reason: 'Email sent successfully' };
+      } else {
+        return { sent: false, reason: 'Email service failed to send' };
+      }
+    } catch (error) {
+      logger.error('Error sending follow-up email', {
+        callId: callData.callId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return { sent: false, reason: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Schedule a follow-up email for later
+   */
+  private async scheduleFollowUpEmail(
+    callData: FollowUpCallData,
+    settings: UserEmailSettingsInterface,
+    contactEmail: string
+  ): Promise<void> {
+    // For now, store in a simple way. In production, use a proper job queue
+    const scheduledTime = new Date(Date.now() + settings.send_delay_minutes * 60 * 1000);
+    
+    logger.info('Scheduling follow-up email', {
+      callId: callData.callId,
+      scheduledFor: scheduledTime,
+      delay: settings.send_delay_minutes
+    });
+
+    // Store scheduled email in database for later processing
+    await pool.query(
+      `INSERT INTO scheduled_emails (
+        call_id, user_id, contact_email, scheduled_at, status, created_at
+      ) VALUES ($1, $2, $3, $4, 'pending', CURRENT_TIMESTAMP)
+      ON CONFLICT (call_id) DO UPDATE SET
+        scheduled_at = EXCLUDED.scheduled_at,
+        status = 'pending',
+        updated_at = CURRENT_TIMESTAMP`,
+      [callData.callId, callData.userId, contactEmail, scheduledTime]
+    ).catch(() => {
+      // Table might not exist yet, log warning
+      logger.warn('scheduled_emails table not available, sending immediately instead');
+      this.sendFollowUpEmail(callData, settings, contactEmail);
+    });
+  }
+
+  /**
+   * Get contact email from contact or lead analytics
+   */
+  private async getContactEmail(
+    contactId: string | undefined,
+    phoneNumber: string,
+    userId: string
+  ): Promise<string | null> {
+    try {
+      // Try contact table first
+      if (contactId) {
+        const contactResult = await pool.query(
+          'SELECT email FROM contacts WHERE id = $1 AND user_id = $2',
+          [contactId, userId]
+        );
+        if (contactResult.rows[0]?.email) {
+          return contactResult.rows[0].email;
+        }
+      }
+
+      // Try by phone number
+      const phoneResult = await pool.query(
+        'SELECT email FROM contacts WHERE phone_number = $1 AND user_id = $2 AND email IS NOT NULL',
+        [phoneNumber, userId]
+      );
+      if (phoneResult.rows[0]?.email) {
+        return phoneResult.rows[0].email;
+      }
+
+      // Try lead_analytics extracted email
+      const analyticsResult = await pool.query(
+        `SELECT la.extracted_email 
+         FROM lead_analytics la
+         JOIN calls c ON la.call_id = c.id
+         WHERE c.phone_number = $1 AND c.user_id = $2 AND la.extracted_email IS NOT NULL
+         ORDER BY la.created_at DESC LIMIT 1`,
+        [phoneNumber, userId]
+      );
+      if (analyticsResult.rows[0]?.extracted_email) {
+        return analyticsResult.rows[0].extracted_email;
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('Error getting contact email', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Get additional context for email template
+   */
+  private async getEmailContext(callData: FollowUpCallData): Promise<{
+    contactName?: string;
+    company?: string;
+    agentName?: string;
+    userName?: string;
+  }> {
+    try {
+      const result = await pool.query(
+        `SELECT 
+          c.name as contact_name,
+          c.company as company,
+          a.name as agent_name,
+          u.name as user_name
+         FROM calls cl
+         LEFT JOIN contacts c ON cl.contact_id = c.id
+         LEFT JOIN agents a ON cl.agent_id = a.id
+         LEFT JOIN users u ON cl.user_id = u.id
+         WHERE cl.id = $1`,
+        [callData.callId]
+      );
+
+      const row = result.rows[0] || {};
+      return {
+        contactName: row.contact_name,
+        company: row.company,
+        agentName: row.agent_name,
+        userName: row.user_name
+      };
+    } catch (error) {
+      logger.error('Error getting email context', { error });
+      return {};
+    }
+  }
+
+  /**
+   * Get user's follow-up prompt ID from users table (admin-set)
+   */
+  private async getUserFollowupPromptId(userId: string): Promise<string | null> {
+    try {
+      const result = await pool.query(
+        'SELECT openai_followup_email_prompt_id FROM users WHERE id = $1',
+        [userId]
+      );
+      return result.rows[0]?.openai_followup_email_prompt_id || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Generate personalized email content using OpenAI
+   */
+  private async generatePersonalizedContent(
+    promptId: string,
+    transcript: string,
+    variables: EmailTemplateVariables
+  ): Promise<{ subject?: string; body?: string }> {
+    try {
+      if (!this.apiKey) {
+        logger.warn('OpenAI API key not configured for email personalization');
+        return {};
+      }
+
+      const response = await axios.post(
+        `${this.baseUrl}/responses`,
+        {
+          prompt: { id: promptId },
+          input: JSON.stringify({
+            transcript: transcript.substring(0, 4000), // Limit transcript length
+            lead_name: variables.lead_name,
+            company: variables.company,
+            call_date: variables.call_date,
+            lead_status: variables.lead_status
+          })
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`
+          },
+          timeout: 30000
+        }
+      );
+
+      // Parse the response
+      const content = response.data?.output_text || response.data?.choices?.[0]?.message?.content;
+      
+      if (content) {
+        try {
+          const parsed = JSON.parse(content);
+          return {
+            subject: parsed.subject,
+            body: parsed.body
+          };
+        } catch {
+          // If not JSON, use as body
+          return { body: content };
+        }
+      }
+
+      return {};
+    } catch (error) {
+      logger.error('Error generating personalized email content', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return {};
+    }
+  }
+
+  /**
+   * Apply template variables to a template string
+   */
+  private applyTemplate(template: string, variables: EmailTemplateVariables): string {
+    let result = template;
+
+    // Replace simple variables {{variable_name}}
+    for (const [key, value] of Object.entries(variables)) {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+      result = result.replace(regex, value || '');
+    }
+
+    // Handle conditional blocks {{#if variable}}content{{/if}}
+    result = result.replace(
+      /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
+      (_, varName, content) => {
+        return variables[varName] ? content : '';
+      }
+    );
+
+    return result;
+  }
+
+  /**
+   * Convert HTML to plain text
+   */
+  private htmlToPlainText(html: string): string {
+    return html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Preview email with sample data
+   */
+  async previewEmail(
+    userId: string,
+    sampleData?: Partial<EmailTemplateVariables>
+  ): Promise<{ subject: string; html: string; text: string }> {
+    const settings = await UserEmailSettingsModel.getOrCreate(userId);
+    
+    const variables: EmailTemplateVariables = {
+      lead_name: sampleData?.lead_name || 'John Doe',
+      lead_email: sampleData?.lead_email || 'john.doe@example.com',
+      company: sampleData?.company || 'Acme Corp',
+      phone: sampleData?.phone || '+1 (555) 123-4567',
+      agent_name: sampleData?.agent_name || 'Sarah',
+      sender_name: sampleData?.sender_name || 'Your Team',
+      summary: sampleData?.summary || 'We discussed your needs for an AI calling solution and how our platform can help automate your outreach.',
+      next_steps: sampleData?.next_steps || 'Schedule a demo to see the platform in action.',
+      call_duration: sampleData?.call_duration || '5 minutes',
+      call_date: sampleData?.call_date || new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+      lead_status: sampleData?.lead_status || 'Warm'
+    };
+
+    const subject = this.applyTemplate(
+      settings.subject_template || DEFAULT_SUBJECT_TEMPLATE,
+      variables
+    );
+    
+    const html = this.applyTemplate(
+      settings.body_template || DEFAULT_BODY_TEMPLATE,
+      variables
+    );
+
+    return {
+      subject,
+      html,
+      text: this.htmlToPlainText(html)
+    };
+  }
+
+  /**
+   * Get available template variables with descriptions
+   */
+  getAvailableVariables(): Array<{ name: string; description: string; example: string }> {
+    return [
+      { name: 'lead_name', description: 'Name of the lead/contact', example: 'John Doe' },
+      { name: 'lead_email', description: 'Email address of the lead', example: 'john@example.com' },
+      { name: 'company', description: 'Company name of the lead', example: 'Acme Corp' },
+      { name: 'phone', description: 'Phone number of the lead', example: '+1 (555) 123-4567' },
+      { name: 'agent_name', description: 'Name of the AI agent that made the call', example: 'Sarah' },
+      { name: 'sender_name', description: 'Your name or company name', example: 'Your Team' },
+      { name: 'summary', description: 'AI-generated summary of the call', example: 'We discussed your needs...' },
+      { name: 'next_steps', description: 'Suggested next steps from the call', example: 'Schedule a demo...' },
+      { name: 'call_duration', description: 'Duration of the call', example: '5 minutes' },
+      { name: 'call_date', description: 'Date when the call was made', example: 'Monday, December 2, 2025' },
+      { name: 'lead_status', description: 'Current lead status/tag', example: 'Warm' }
+    ];
+  }
+}
+
+export const followUpEmailService = new FollowUpEmailService();
+export default followUpEmailService;

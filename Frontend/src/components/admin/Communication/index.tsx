@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageSquare, Megaphone, Ticket, Bell } from 'lucide-react';
+import { MessageSquare, Megaphone, Ticket, Bell, Mail } from 'lucide-react';
 import { UserMessaging } from './UserMessaging';
 import { BroadcastAnnouncements } from './BroadcastAnnouncements';
 import { SupportTickets } from './SupportTickets';
 import { NotificationManagement } from './NotificationManagement';
+import { AdminUserEmailSettings } from '../AdminUserEmailSettings';
 
 export const Communication: React.FC = () => {
   const [activeTab, setActiveTab] = useState('messaging');
@@ -20,22 +21,26 @@ export const Communication: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="messaging" className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
-            User Messaging
+            <span className="hidden sm:inline">User Messaging</span>
           </TabsTrigger>
           <TabsTrigger value="announcements" className="flex items-center gap-2">
             <Megaphone className="h-4 w-4" />
-            Announcements
+            <span className="hidden sm:inline">Announcements</span>
           </TabsTrigger>
           <TabsTrigger value="tickets" className="flex items-center gap-2">
             <Ticket className="h-4 w-4" />
-            Support Tickets
+            <span className="hidden sm:inline">Support Tickets</span>
           </TabsTrigger>
           <TabsTrigger value="notifications" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
-            Notifications
+            <span className="hidden sm:inline">Notifications</span>
+          </TabsTrigger>
+          <TabsTrigger value="email-settings" className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            <span className="hidden sm:inline">Email Settings</span>
           </TabsTrigger>
         </TabsList>
 
@@ -93,6 +98,10 @@ export const Communication: React.FC = () => {
               <NotificationManagement />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="email-settings" className="space-y-4">
+          <AdminUserEmailSettings />
         </TabsContent>
       </Tabs>
     </div>

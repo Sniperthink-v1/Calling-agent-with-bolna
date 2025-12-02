@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Upload, FileText, Link, Download, Calendar, CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Plus, Upload, FileText, Link, Download, Calendar, CheckCircle, XCircle, AlertCircle, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { toast } from "sonner";
+import EmailSettingsSection from "@/components/settings/EmailSettingsSection";
 
 type FormField = {
   name: string;
@@ -1046,6 +1047,18 @@ const Integrations = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Follow-up Email Settings Section */}
+      <div>
+        <h2
+          className={`text-lg font-semibold mb-4 ${
+            theme === "dark" ? "text-white" : "text-gray-900"
+          }`}
+        >
+          Follow-up Email Automation
+        </h2>
+        <EmailSettingsSection />
       </div>
 
       {/* Data Upload Modal */}

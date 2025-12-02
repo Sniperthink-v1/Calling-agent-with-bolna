@@ -373,6 +373,36 @@ router.post(
   AdminController.impersonateUser
 );
 
+// User email settings management (admin access required)
+router.get(
+  '/users/:userId/email-settings',
+  requireAdmin,
+  logAdminAction('VIEW_USER_EMAIL_SETTINGS', 'email_settings'),
+  AdminController.getUserEmailSettings
+);
+
+router.put(
+  '/users/:userId/email-settings',
+  requireAdmin,
+  logAdminAction('UPDATE_USER_EMAIL_SETTINGS', 'email_settings'),
+  AdminController.updateUserEmailSettings
+);
+
+router.put(
+  '/users/:userId/followup-prompt',
+  requireAdmin,
+  logAdminAction('SET_USER_FOLLOWUP_PROMPT', 'email_settings'),
+  AdminController.setUserFollowupPrompt
+);
+
+// Get all users email settings summary (admin access required)
+router.get(
+  '/email-settings',
+  requireAdmin,
+  logAdminAction('LIST_ALL_EMAIL_SETTINGS', 'email_settings'),
+  AdminController.getAllUsersEmailSettings
+);
+
 // Security endpoints (admin access required)
 router.get(
   '/security/csrf-token',

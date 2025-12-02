@@ -26,6 +26,7 @@ export interface UserInterface extends BaseModelInterface {
   // OpenAI prompt configuration (user-specific)
   openai_individual_prompt_id?: string | null;
   openai_complete_prompt_id?: string | null;
+  openai_followup_email_prompt_id?: string | null;  // For follow-up email personalization
   // Google Calendar integration
   google_access_token?: string | null;
   google_refresh_token?: string | null;
