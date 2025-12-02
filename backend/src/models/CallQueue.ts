@@ -675,23 +675,26 @@ export class CallQueueModel {
       : (scheduledTime >= firstTime && scheduledTime <= lastTime);
     
     if (!isWithinWindow) {
-      // Schedule for next day at first_call_time in campaign timezone
-      // We need to calculate what time first_call_time is in UTC/server time
+      // Schedule for next available slot at first_call_time
       const [hours, minutes, seconds] = firstTime.split(':').map(Number);
       
-      // Create a date for tomorrow at first_call_time in campaign timezone
-      const tomorrow = new Date(scheduledFor);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const targetDate = new Date(scheduledFor);
+      
+      // If current time is after the start time (meaning we missed today's window),
+      // schedule for tomorrow. Otherwise (too early), schedule for today.
+      if (scheduledTime >= firstTime) {
+        targetDate.setDate(targetDate.getDate() + 1);
+      }
       
       // Set time in local timezone first, then adjust for campaign timezone offset
       try {
         // Get current offset between server and campaign timezone
         const serverOffset = new Date().getTimezoneOffset(); // in minutes
-        const campaignDate = new Date(tomorrow.toLocaleString('en-US', { timeZone: timezone }));
-        const campaignOffset = (tomorrow.getTime() - campaignDate.getTime()) / 60000; // in minutes
+        const campaignDate = new Date(targetDate.toLocaleString('en-US', { timeZone: timezone }));
+        const campaignOffset = (targetDate.getTime() - campaignDate.getTime()) / 60000; // in minutes
         
         // Set the time for first_call_time
-        scheduledFor = new Date(tomorrow);
+        scheduledFor = new Date(targetDate);
         scheduledFor.setHours(hours, minutes, seconds || 0, 0);
         
         // Adjust for timezone difference (if campaign timezone differs from server)
@@ -699,7 +702,7 @@ export class CallQueueModel {
         scheduledFor = new Date(scheduledFor.getTime() + offsetDiff * 60000);
       } catch {
         // Fallback: just set the time without timezone adjustment
-        scheduledFor.setDate(scheduledFor.getDate() + 1);
+        scheduledFor = new Date(targetDate);
         scheduledFor.setHours(hours, minutes, seconds || 0, 0);
       }
     }
