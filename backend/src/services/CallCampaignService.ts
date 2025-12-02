@@ -29,6 +29,13 @@ export class CallCampaignService {
       );
     }
 
+    // If no custom timezone specified, default to user's timezone
+    if (!data.use_custom_timezone && !data.campaign_timezone) {
+      const userTimezone = user.timezone || 'UTC';
+      data.campaign_timezone = userTimezone;
+      logger.info(`Campaign using user timezone: ${userTimezone}`);
+    }
+
     // Validate time window
     this.validateTimeWindow(data.first_call_time, data.last_call_time);
 

@@ -636,10 +636,9 @@ export class CallQueueModel {
     campaign_timezone?: string | null;
     use_custom_timezone?: boolean;
   }): Promise<CallQueueItem> {
-    // Determine the timezone to use (campaign timezone or UTC)
-    const timezone = data.use_custom_timezone && data.campaign_timezone 
-      ? data.campaign_timezone 
-      : 'UTC';
+    // Determine the timezone to use
+    // Priority: custom timezone > campaign timezone > UTC
+    const timezone = data.campaign_timezone || 'UTC';
     
     // Calculate scheduled_for based on retry_interval_minutes
     // but ensure it falls within campaign time window
