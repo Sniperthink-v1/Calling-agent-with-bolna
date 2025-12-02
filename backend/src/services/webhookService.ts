@@ -409,6 +409,8 @@ class WebhookService {
         ]);
 
         // Update queue item status if this call was part of a campaign (within same transaction)
+        // NOTE: We do NOT delete the queue item here because the final status webhook
+        // (busy, no-answer, completed) will handle deletion and retry logic
         const queueItemResult = await client.query(`
           SELECT id, user_id, campaign_id, call_id 
           FROM call_queue 
@@ -418,30 +420,14 @@ class WebhookService {
         if (queueItemResult.rows.length > 0) {
           const queueItem = queueItemResult.rows[0];
           
-          // Delete completed queue item immediately (call data already in calls table)
-          await client.query(`
-            DELETE FROM call_queue
-            WHERE id = $1 AND user_id = $2
-          `, [queueItem.id, queueItem.user_id]);
-
-          logger.info('📋 Queue item completed and deleted (transactional)', {
+          logger.info('📋 Queue item found, waiting for final status webhook to handle deletion/retry', {
             queue_item_id: queueItem.id,
             call_id: call.id,
             campaign_id: queueItem.campaign_id
           });
-
-          // Check if campaign is now complete (after transaction commits)
-          if (queueItem.campaign_id) {
-            setImmediate(() => {
-              this.checkAndCompleteCampaign(queueItem.campaign_id, queueItem.user_id).catch((e: any) => {
-                logger.error('Failed to check campaign completion', {
-                  campaign_id: queueItem.campaign_id,
-                  user_id: queueItem.user_id,
-                  error: e?.message || String(e)
-                });
-              });
-            });
-          }
+          
+          // Don't delete here - let handleFailed or handleCompleted handle it
+          // This ensures retry logic can run for busy/no-answer calls
         }
       });
 
