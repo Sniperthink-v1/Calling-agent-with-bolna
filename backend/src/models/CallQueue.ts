@@ -105,10 +105,53 @@ export class CallQueueModel {
    * Get next queued call for a user (uses helper function)
    */
   static async getNextQueued(userId: string): Promise<CallQueueItem | null> {
+    logDebug('getNextQueued called', { userId });
+    
+    // First, debug: check what's in the queue for this user
+    const debugResult = await pool.query(
+      `SELECT q.id, q.status, q.scheduled_for, q.call_type, q.retry_count,
+              c.status as campaign_status, c.first_call_time, c.last_call_time,
+              c.campaign_timezone, c.use_custom_timezone,
+              u.timezone as user_timezone,
+              NOW() as db_now,
+              CURRENT_TIME as db_current_time
+       FROM call_queue q
+       LEFT JOIN call_campaigns c ON q.campaign_id = c.id
+       LEFT JOIN users u ON q.user_id = u.id
+       WHERE q.user_id = $1 AND q.status = 'queued'
+       LIMIT 5`,
+      [userId]
+    );
+    
+    if (debugResult.rows.length > 0) {
+      console.log(`[CallQueue] DEBUG - Queued items for user ${userId}:`, 
+        debugResult.rows.map((r: any) => ({
+          id: r.id?.slice(0, 8),
+          call_type: r.call_type,
+          retry_count: r.retry_count,
+          scheduled_for: r.scheduled_for,
+          campaign_status: r.campaign_status,
+          time_window: `${r.first_call_time}-${r.last_call_time}`,
+          campaign_tz: r.campaign_timezone,
+          use_custom_tz: r.use_custom_timezone,
+          user_tz: r.user_timezone,
+          db_now: r.db_now,
+          db_time: r.db_current_time
+        }))
+      );
+    }
+    
     const result = await pool.query(
       'SELECT * FROM get_next_queued_call($1)',
       [userId]
     );
+    
+    logDebug('getNextQueued result', { 
+      userId, 
+      found: !!result.rows[0]?.id,
+      queueItemId: result.rows[0]?.id
+    });
+    
     return result.rows[0] || null;
   }
 

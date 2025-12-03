@@ -443,12 +443,16 @@ export class InMemoryCampaignScheduler {
           cc.id,
           cc.first_call_time,
           cc.last_call_time,
+          cc.campaign_timezone,
+          cc.use_custom_timezone,
+          u.timezone as user_timezone,
           COUNT(cq.id) as queued_count
         FROM call_campaigns cc
         INNER JOIN call_queue cq ON cc.id = cq.campaign_id
+        INNER JOIN users u ON cc.user_id = u.id
         WHERE cc.status = 'active'
           AND cq.status = 'queued'
-        GROUP BY cc.id, cc.first_call_time, cc.last_call_time
+        GROUP BY cc.id, cc.first_call_time, cc.last_call_time, cc.campaign_timezone, cc.use_custom_timezone, u.timezone
       `);
 
       if (result.rows.length === 0) {
