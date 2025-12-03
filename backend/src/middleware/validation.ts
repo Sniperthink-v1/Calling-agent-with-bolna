@@ -44,18 +44,30 @@ export const sanitizeHtml = (input: string): string => {
   const limitedInput = input.length > 100000 ? input.substring(0, 100000) : input;
   
   let sanitized = limitedInput;
+  let previousLength: number;
   
-  // Remove script tags using a simple approach (without nested quantifiers)
-  // This is safer than regex with nested groups that can cause ReDoS
-  sanitized = sanitized.replace(/<script[^>]*>/gi, '');
-  sanitized = sanitized.replace(/<\/script>/gi, '');
+  // Iteratively remove script and iframe tags until no more changes
+  // This handles nested/obfuscated tags like <scr<script>ipt>
+  do {
+    previousLength = sanitized.length;
+    
+    // Remove script tags using a simple approach (without nested quantifiers)
+    sanitized = sanitized.replace(/<script[^>]*>/gi, '');
+    sanitized = sanitized.replace(/<\/script>/gi, '');
+    
+    // Remove iframe tags
+    sanitized = sanitized.replace(/<iframe[^>]*>/gi, '');
+    sanitized = sanitized.replace(/<\/iframe>/gi, '');
+  } while (sanitized.length !== previousLength);
   
-  // Remove iframe tags
-  sanitized = sanitized.replace(/<iframe[^>]*>/gi, '');
-  sanitized = sanitized.replace(/<\/iframe>/gi, '');
-  
-  // Remove javascript: protocol
-  sanitized = sanitized.replace(/javascript:/gi, '');
+  // Remove dangerous URL protocols (including javascript:, data:, vbscript:)
+  // Use iterative approach to handle obfuscated protocols
+  do {
+    previousLength = sanitized.length;
+    sanitized = sanitized.replace(/javascript:/gi, '');
+    sanitized = sanitized.replace(/data:/gi, '');
+    sanitized = sanitized.replace(/vbscript:/gi, '');
+  } while (sanitized.length !== previousLength);
   
   // Remove event handlers (on* attributes) - use simple pattern
   sanitized = sanitized.replace(/\s+on\w+\s*=/gi, ' ');
