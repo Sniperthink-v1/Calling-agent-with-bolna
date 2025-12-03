@@ -689,7 +689,6 @@ class WebhookService {
         );
         
         logger.info('💰 Credits deducted successfully', {
-          executionId,
           userId: call.user_id,
           creditsUsed: result.creditsUsed,
           newBalance: result.user.credits,
@@ -1425,6 +1424,19 @@ class WebhookService {
                 call_outcome: callOutcome,
                 scheduled_for: retryItem.scheduled_for
               });
+
+              // Trigger scheduler to reload and pick up the new retry
+              try {
+                const { campaignScheduler } = await import('./InMemoryCampaignScheduler');
+                // Force reload to pick up the new scheduled time
+                // We use a private method via 'any' cast or add a public method
+                // Ideally, add a public method 'triggerReload()' to InMemoryCampaignScheduler
+                await (campaignScheduler as any).loadCampaignSchedules();
+                (campaignScheduler as any).scheduleNextWake();
+                logger.info('🔄 Triggered scheduler reload for retry');
+              } catch (schedulerError) {
+                logger.warn('Failed to trigger scheduler reload', { error: schedulerError });
+              }
               
               return; // Don't mark as failed since retry is scheduled
             } catch (retryError) {
