@@ -39,29 +39,21 @@ export const sanitizeInput = (input: string, allowLongText: boolean = false): st
 export const sanitizeHtml = (input: string): string => {
   if (typeof input !== 'string') return String(input);
   
-  // Use a simple, non-backtracking approach to remove dangerous HTML
   // First, limit input length to prevent DoS
   const limitedInput = input.length > 100000 ? input.substring(0, 100000) : input;
   
-  let sanitized = limitedInput;
-  let previousLength: number;
+  // The safest approach is to HTML-encode characters that could form HTML tags
+  // This prevents any HTML injection including script and iframe tags
+  let sanitized = limitedInput
+    .replace(/&/g, '&amp;')   // Must be first
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
   
-  // Iteratively remove script and iframe tags until no more changes
-  // This handles nested/obfuscated tags like <scr<script>ipt>
-  do {
-    previousLength = sanitized.length;
-    
-    // Remove script tags using a simple approach (without nested quantifiers)
-    sanitized = sanitized.replace(/<script[^>]*>/gi, '');
-    sanitized = sanitized.replace(/<\/script>/gi, '');
-    
-    // Remove iframe tags
-    sanitized = sanitized.replace(/<iframe[^>]*>/gi, '');
-    sanitized = sanitized.replace(/<\/iframe>/gi, '');
-  } while (sanitized.length !== previousLength);
-  
-  // Remove dangerous URL protocols (including javascript:, data:, vbscript:)
+  // Additionally remove dangerous URL protocols for extra safety
   // Use iterative approach to handle obfuscated protocols
+  let previousLength: number;
   do {
     previousLength = sanitized.length;
     sanitized = sanitized.replace(/javascript:/gi, '');
