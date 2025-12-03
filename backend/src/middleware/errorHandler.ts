@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger';
 
 // Enhanced error handling middleware - centralized error processing with comprehensive logging
 export interface ApiError extends Error {
@@ -89,45 +90,8 @@ export class DatabaseError extends AppError {
   }
 }
 
-// Logging utility - uses console output for Railway/platform logging
-// Configuration via environment variables:
-// - LOG_LEVEL: ERROR, WARN, INFO, DEBUG (default: INFO)
-// - DEBUG_MODE: true/false - enables verbose debugging when true
-// - ENABLE_REQUEST_LOGGING: true/false - controls request logging middleware
-class Logger {
-  private debugMode: boolean;
-
-  constructor() {
-    this.debugMode = process.env.DEBUG_MODE === 'true';
-  }
-
-  private formatLogEntry(level: string, message: string, meta?: any): string {
-    const timestamp = new Date().toISOString();
-    const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
-    return `[${timestamp}] [${level}] ${message}${metaStr}`;
-  }
-
-  error(message: string, meta?: any): void {
-    console.error(this.formatLogEntry('ERROR', message, meta));
-  }
-
-  warn(message: string, meta?: any): void {
-    console.warn(this.formatLogEntry('WARN', message, meta));
-  }
-
-  info(message: string, meta?: any): void {
-    console.info(this.formatLogEntry('INFO', message, meta));
-  }
-
-  debug(message: string, meta?: any): void {
-    // Only log debug messages when DEBUG_MODE is enabled
-    if (this.debugMode) {
-      console.debug(this.formatLogEntry('DEBUG', message, meta));
-    }
-  }
-}
-
-export const logger = new Logger();
+// Re-export logger from utils for backward compatibility
+export { logger };
 
 // Request logging middleware - controlled by ENABLE_REQUEST_LOGGING environment variable
 export const requestLogger = (req: Request, res: Response, next: NextFunction): void => {
