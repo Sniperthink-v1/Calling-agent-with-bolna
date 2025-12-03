@@ -715,12 +715,12 @@ export class InMemoryCampaignScheduler {
       hour12: false,
       hour: '2-digit',
       minute: '2-digit',
-      timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata'
+      timeZone: process.env.APP_TIMEZONE || 'UTC'
     });
   }
 
   private getTimeToday(timeString: string): Date {
-    const timezone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
+    const timezone = process.env.APP_TIMEZONE || 'UTC';
     
     // Get current date components in IST
     const now = new Date();
@@ -755,7 +755,7 @@ export class InMemoryCampaignScheduler {
   }
 
   private getTimeTomorrow(timeString: string): Date {
-    const timezone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
+    const timezone = process.env.APP_TIMEZONE || 'UTC';
     
     // Get tomorrow's date in IST
     const now = new Date();
