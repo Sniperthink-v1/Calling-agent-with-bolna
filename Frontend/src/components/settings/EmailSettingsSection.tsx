@@ -203,6 +203,12 @@ const EmailSettingsSection = () => {
       setSaving(true);
       const token = localStorage.getItem('auth_token');
       
+      console.log('💾 Saving body_template:', {
+        length: bodyTemplate.length,
+        has_angle_brackets: bodyTemplate.includes('<') && bodyTemplate.includes('>'),
+        first_200_chars: bodyTemplate.substring(0, 200)
+      });
+      
       const response = await fetch(
         `${import.meta.env.VITE_API_BASE_URL}/api/email-settings`,
         {
@@ -420,8 +426,14 @@ const EmailSettingsSection = () => {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('🔍 AI Generated Template (from API):', {
+          body_length: data.data.body_template.length,
+          has_angle_brackets: data.data.body_template.includes('<') && data.data.body_template.includes('>'),
+          first_200_chars: data.data.body_template.substring(0, 200)
+        });
         setSubjectTemplate(data.data.subject_template);
         setBodyTemplate(data.data.body_template);
+        console.log('🔍 After setState - checking state will update async');
         toast.success('Template generated successfully! Review and save to apply.');
       } else {
         const error = await response.json();
