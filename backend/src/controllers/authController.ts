@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { body, validationResult } from 'express-validator';
 import { configService } from '../services/configService';
 import { getDetectedTimezone, wasTimezoneAutoDetected } from '../middleware/timezoneDetection';
+import { validateUrl } from '../middleware/validation';
 
 // Authentication controller - handles user registration, login, and session management
 export class AuthController {
@@ -519,8 +520,21 @@ export class AuthController {
       await authService.createSession(user.id, token, ipAddress, req.get('User-Agent'), refreshToken);
 
       // Get the first frontend URL (for development, typically localhost:8080)
-  const frontendUrls = process.env.FRONTEND_URL?.split(',');
-  const frontendUrl = (frontendUrls && frontendUrls[0]) ? frontendUrls[0].trim() : '';
+      const frontendUrls = process.env.FRONTEND_URL?.split(',');
+      const frontendUrl = (frontendUrls && frontendUrls[0]) ? frontendUrls[0].trim() : '';
+
+      // Validate frontend URL has a safe scheme to prevent open redirect vulnerabilities
+      if (!validateUrl(frontendUrl)) {
+        console.error('Invalid FRONTEND_URL configured:', frontendUrl);
+        res.status(500).json({
+          error: {
+            code: 'CONFIGURATION_ERROR',
+            message: 'OAuth redirect configuration error',
+            timestamp: new Date(),
+          },
+        });
+        return;
+      }
 
       // Redirect to frontend with tokens and user info
       const redirectUrl = new URL(`${frontendUrl}/oauth/callback`);
@@ -537,11 +551,23 @@ export class AuthController {
 
       res.redirect(redirectUrl.toString());
     } catch (error) {
-  console.error('Google OAuth callback error:', error);
-  const frontendUrls = process.env.FRONTEND_URL?.split(',');
-  const base = (frontendUrls && frontendUrls[0]) ? frontendUrls[0].trim() : '';
-  const frontendUrl = base.endsWith('/') ? base.slice(0, -1) : base;
-  res.redirect(`${frontendUrl}/?error=oauth_callback_failed`);
+      console.error('Google OAuth callback error:', error);
+      const frontendUrls = process.env.FRONTEND_URL?.split(',');
+      const base = (frontendUrls && frontendUrls[0]) ? frontendUrls[0].trim() : '';
+      const frontendUrl = base.endsWith('/') ? base.slice(0, -1) : base;
+      // Only redirect to validated URLs
+      if (validateUrl(frontendUrl)) {
+        res.redirect(`${frontendUrl}/?error=oauth_callback_failed`);
+      } else {
+        console.error('Invalid FRONTEND_URL in catch block:', frontendUrl);
+        res.status(500).json({
+          error: {
+            code: 'OAUTH_ERROR',
+            message: 'OAuth callback failed',
+            timestamp: new Date(),
+          },
+        });
+      }
     }
   }
 }
