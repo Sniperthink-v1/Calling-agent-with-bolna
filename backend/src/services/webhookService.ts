@@ -1163,6 +1163,49 @@ class WebhookService {
                 });
               }
 
+              // ============================================
+              // Follow-up Email Processing
+              // ============================================
+              try {
+                logger.info('📧 Processing follow-up email', {
+                  execution_id: executionId,
+                  user_id: updatedCall.user_id,
+                  call_id: updatedCall.id,
+                  call_status: updatedCall.status,
+                  lead_status: individualData?.lead_status_tag
+                });
+
+                const { followUpEmailService } = await import('./followUpEmailService');
+                
+                const emailResult = await followUpEmailService.processCallForFollowUp({
+                  callId: updatedCall.id,
+                  userId: updatedCall.user_id,
+                  contactId: contactResult.contactId || undefined,
+                  phoneNumber: updatedCall.phone_number,
+                  callStatus: updatedCall.status || 'completed',
+                  leadStatus: individualData?.lead_status_tag || undefined,
+                  transcript: transcript.content,
+                  summary: individualData?.reasoning?.intent || undefined,
+                  nextSteps: individualData?.reasoning?.cta_behavior || undefined,
+                  durationMinutes: updatedCall.duration_minutes,
+                  retryCount: 0,
+                  createdAt: new Date(updatedCall.created_at)
+                });
+
+                logger.info('📧 Follow-up email processing result', {
+                  execution_id: executionId,
+                  sent: emailResult.sent,
+                  reason: emailResult.reason,
+                  emailId: emailResult.emailId
+                });
+              } catch (emailError) {
+                logger.error('❌ Failed to process follow-up email', {
+                  execution_id: executionId,
+                  error: emailError instanceof Error ? emailError.message : 'Unknown error'
+                });
+                // Don't fail webhook - email is not critical
+              }
+
             } catch (contactError) {
               logger.error('❌ Failed to update contact with AI data', {
                 execution_id: executionId,
@@ -1280,6 +1323,47 @@ class WebhookService {
           error: error instanceof Error ? error.message : String(error)
         });
         // Continue - this is not critical for webhook processing
+      }
+    }
+
+    // Process follow-up email for failed calls (busy/no-answer)
+    if (call) {
+      try {
+        logger.info('📧 Processing follow-up email for failed call', {
+          execution_id: executionId,
+          user_id: call.user_id,
+          call_id: call.id,
+          call_status: status
+        });
+
+        const { followUpEmailService } = await import('./followUpEmailService');
+        
+        const emailResult = await followUpEmailService.processCallForFollowUp({
+          callId: call.id,
+          userId: call.user_id,
+          contactId: call.contact_id || undefined,
+          phoneNumber: call.phone_number,
+          callStatus: status, // 'busy' or 'no-answer'
+          leadStatus: undefined, // No lead status for failed calls
+          transcript: undefined, // No transcript for failed calls
+          summary: undefined,
+          nextSteps: undefined,
+          durationMinutes: 0,
+          retryCount: 0,
+          createdAt: new Date(call.created_at)
+        });
+
+        logger.info('📧 Follow-up email processing result for failed call', {
+          execution_id: executionId,
+          sent: emailResult.sent,
+          reason: emailResult.reason
+        });
+      } catch (emailError) {
+        logger.error('❌ Failed to process follow-up email for failed call', {
+          execution_id: executionId,
+          error: emailError instanceof Error ? emailError.message : 'Unknown error'
+        });
+        // Don't fail webhook - email is not critical
       }
     }
 
