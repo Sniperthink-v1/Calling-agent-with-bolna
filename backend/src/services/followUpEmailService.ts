@@ -535,6 +535,12 @@ class FollowUpEmailService {
 
     const systemPrompt = `You are an expert email template designer. Generate a professional HTML email template for follow-up emails after phone calls.
 
+CRITICAL JSON FORMATTING RULES:
+1. Use ONLY double quotes (") for all HTML attributes - NEVER use single quotes (')
+2. Escape double quotes inside the body_template string as \\"
+3. Use \\n for newlines (single backslash + n), NOT \\\\n or \\\\\n
+4. The body_template must be a single valid JSON string value
+
 AVAILABLE VARIABLES (use these in the template with double curly braces):
 - {{lead_name}} - Name of the lead/contact
 - {{lead_email}} - Email address of the lead  
@@ -561,7 +567,7 @@ REQUIREMENTS:
    - For completed calls: Thank them for the conversation, reference what was discussed
    - For busy calls: Acknowledge they were busy, offer to reschedule
    - For no answer: Let them know you tried to reach them, offer callback
-3. Use inline CSS styles (no external stylesheets)
+3. Use inline CSS styles with DOUBLE QUOTES ONLY: style="color: red" NOT style='color: red'
 4. Include the specified brand color: ${brandColor}
 5. Make it mobile-friendly with max-width: 600px
 6. Include proper email structure: header, content, footer
@@ -570,26 +576,13 @@ REQUIREMENTS:
 
 TONE GUIDE: ${toneGuide[tone]}
 
-EXAMPLE STRUCTURE:
-<div>
-  {{#if call_completed}}
-    <p>Thank you for speaking with us...</p>
-  {{/if}}
-  {{#if call_busy}}
-    <p>We tried to reach you but you were busy...</p>
-  {{/if}}
-  {{#if call_no_answer}}
-    <p>We attempted to call you but couldn't connect...</p>
-  {{/if}}
-</div>
-
-Respond with a JSON object containing:
+EXAMPLE VALID JSON RESPONSE:
 {
-  "subject_template": "The email subject line (can also use conditionals)",
-  "body_template": "Complete HTML email template with all three call outcome sections"
+  "subject_template": "Follow-Up After Our Call",
+  "body_template": "<div style=\\"max-width: 600px;\\">\\n  <p>Dear {{lead_name}},</p>\\n  {{#if call_completed}}\\n    <p>Thank you...</p>\\n  {{/if}}\\n</div>"
 }
 
-Do NOT include markdown code blocks. Return only valid JSON.`;
+RETURN ONLY VALID JSON - NO MARKDOWN CODE BLOCKS.`;
 
     const userPrompt = `Create an email template based on this description:
 "${description}"
@@ -631,10 +624,18 @@ Make sure to:
       let parsed;
       try {
         // Remove any markdown code blocks if present
-        const cleanContent = content
+        let cleanContent = content
           .replace(/```json\n?/g, '')
           .replace(/```\n?/g, '')
           .trim();
+        
+        // Fix common AI JSON formatting issues:
+        // 1. Replace single quotes with double quotes in HTML attributes (style='...' -> style="...")
+        // 2. Fix triple-escaped newlines (\\\n -> \\n)
+        cleanContent = cleanContent
+          .replace(/style='([^']*)'/g, 'style=\\"$1\\"')  // Fix single quotes in style attributes
+          .replace(/\\\\\\/g, '\\');  // Fix triple backslashes to single
+        
         parsed = JSON.parse(cleanContent);
       } catch (parseError) {
         logger.error('Failed to parse AI response:', { content, error: parseError });
