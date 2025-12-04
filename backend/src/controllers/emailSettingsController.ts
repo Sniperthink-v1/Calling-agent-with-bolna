@@ -129,6 +129,15 @@ export class EmailSettingsController {
         }
       }
 
+      // Debug logging before saving to database
+      if (body_template) {
+        logger.info('Saving body_template to database', {
+          length: body_template.length,
+          has_angle_brackets: body_template.includes('<') && body_template.includes('>'),
+          preview: body_template.substring(0, 200)
+        });
+      }
+
       const updatedSettings = await UserEmailSettingsModel.updateSettings(userId, {
         auto_send_enabled,
         openai_followup_email_prompt_id,
@@ -140,6 +149,15 @@ export class EmailSettingsController {
         send_delay_minutes,
         max_retries_before_send
       });
+
+      // Debug logging after database save
+      if (body_template) {
+        logger.info('Saved body_template from database', {
+          length: updatedSettings.body_template.length,
+          has_angle_brackets: updatedSettings.body_template.includes('<') && updatedSettings.body_template.includes('>'),
+          preview: updatedSettings.body_template.substring(0, 200)
+        });
+      }
 
       res.json({
         success: true,
@@ -421,6 +439,14 @@ export class EmailSettingsController {
         tone: selectedTone,
         brandColor: brandColor || '#4f46e5',
         companyName: companyName || undefined
+      });
+
+      // Debug logging to see what AI returns vs what we send
+      logger.info('AI Template Generated', {
+        subject_length: template.subject_template.length,
+        body_length: template.body_template.length,
+        body_has_angle_brackets: template.body_template.includes('<') && template.body_template.includes('>'),
+        body_preview: template.body_template.substring(0, 200)
       });
 
       res.json({
