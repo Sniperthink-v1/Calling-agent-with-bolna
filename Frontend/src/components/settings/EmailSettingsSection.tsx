@@ -774,20 +774,6 @@ const EmailSettingsSection = () => {
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Reset
                   </Button>
-                  {/* Preview with call status selector */}
-                  <Select
-                    value={previewCallStatus}
-                    onValueChange={(value: 'completed' | 'busy' | 'no_answer') => setPreviewCallStatus(value)}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="completed">✅ Completed</SelectItem>
-                      <SelectItem value="busy">📞 Busy</SelectItem>
-                      <SelectItem value="no_answer">❌ No Answer</SelectItem>
-                    </SelectContent>
-                  </Select>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1056,6 +1042,47 @@ const EmailSettingsSection = () => {
             </DialogDescription>
           </DialogHeader>
           
+          {/* Call Status Selector - Inside Preview */}
+          <div className="flex items-center gap-3 pb-4 border-b">
+            <Label className="text-sm font-medium">Preview for:</Label>
+            <div className="flex gap-2">
+              <Button
+                variant={previewCallStatus === 'completed' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setPreviewCallStatus('completed');
+                  handlePreview('completed');
+                }}
+                disabled={loadingPreview}
+              >
+                ✅ Completed
+              </Button>
+              <Button
+                variant={previewCallStatus === 'busy' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setPreviewCallStatus('busy');
+                  handlePreview('busy');
+                }}
+                disabled={loadingPreview}
+              >
+                📞 Busy
+              </Button>
+              <Button
+                variant={previewCallStatus === 'no_answer' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setPreviewCallStatus('no_answer');
+                  handlePreview('no_answer');
+                }}
+                disabled={loadingPreview}
+              >
+                ❌ No Answer
+              </Button>
+            </div>
+            {loadingPreview && <Loader2 className="w-4 h-4 animate-spin" />}
+          </div>
+          
           {preview && (
             <div className="space-y-4">
               <div className="space-y-2">
@@ -1069,25 +1096,21 @@ const EmailSettingsSection = () => {
               
               <div className="space-y-2">
                 <Label>Email Body</Label>
-                <div className={`border rounded-lg overflow-hidden ${
-                  theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
-                }`}>
-                  <iframe
-                    srcDoc={preview.html}
-                    className="w-full h-96 bg-white"
-                    title="Email Preview"
-                    sandbox="allow-same-origin"
-                    style={{ border: 'none' }}
+                <div className="border rounded-lg overflow-hidden border-gray-200 bg-white">
+                  {/* Render HTML directly using dangerouslySetInnerHTML for better compatibility */}
+                  <div 
+                    className="p-4 min-h-[300px]"
+                    dangerouslySetInnerHTML={{ __html: preview.html }}
                   />
                 </div>
-                {/* Fallback: Show rendered HTML directly */}
+                {/* Fallback: Show raw HTML */}
                 <details className="mt-2">
                   <summary className={`text-sm cursor-pointer ${
                     theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
                   }`}>
-                    View raw HTML
+                    View raw HTML code
                   </summary>
-                  <pre className={`mt-2 p-3 rounded text-xs overflow-x-auto ${
+                  <pre className={`mt-2 p-3 rounded text-xs overflow-x-auto whitespace-pre-wrap ${
                     theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
                   }`}>
                     {preview.html}
