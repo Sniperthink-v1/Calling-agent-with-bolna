@@ -654,14 +654,36 @@ Make sure to:
         parsed.body_template = `<div style="font-family: Arial, sans-serif;">${parsed.body_template}</div>`;
       }
 
-      // Sanitize the HTML template
-      const sanitizedBody = DOMPurify.sanitize(parsed.body_template, {
+      // Protect template syntax ({{...}}) from DOMPurify by encoding it temporarily.
+      // DOMPurify sees {{#if ...}} as malformed HTML and strips angle brackets.
+      // We encode these placeholders, sanitize, then restore them.
+      const PLACEHOLDER_PREFIX = '___TMPL_';
+      const PLACEHOLDER_SUFFIX = '___';
+      const templatePatterns: string[] = [];
+      
+      let protectedBody = parsed.body_template.replace(
+        /\{\{[^}]+\}\}/g,
+        (match: string) => {
+          const index = templatePatterns.length;
+          templatePatterns.push(match);
+          return `${PLACEHOLDER_PREFIX}${index}${PLACEHOLDER_SUFFIX}`;
+        }
+      );
+
+      // Sanitize the HTML template (template syntax is now protected)
+      let sanitizedBody = DOMPurify.sanitize(protectedBody, {
         ALLOWED_TAGS: ['html', 'head', 'body', 'meta', 'style', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
                        'span', 'a', 'br', 'hr', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'table', 
                        'tr', 'td', 'th', 'thead', 'tbody', 'img', 'center', 'blockquote'],
         ALLOWED_ATTR: ['style', 'href', 'src', 'alt', 'width', 'height', 'border', 'cellpadding', 
                        'cellspacing', 'align', 'valign', 'bgcolor', 'class', 'id', 'charset', 'name', 'content']
       });
+
+      // Restore template syntax placeholders
+      sanitizedBody = sanitizedBody.replace(
+        new RegExp(`${PLACEHOLDER_PREFIX}(\\d+)${PLACEHOLDER_SUFFIX}`, 'g'),
+        (_, index) => templatePatterns[parseInt(index, 10)] || ''
+      );
 
       return {
         subject_template: parsed.subject_template,
