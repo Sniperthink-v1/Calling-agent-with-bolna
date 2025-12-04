@@ -78,8 +78,12 @@ export const sanitizeString = (input: string, config: SecurityConfig = defaultSe
 
 /**
  * Recursively sanitize object properties
+ * 
+ * @param obj - Object to sanitize
+ * @param config - Security configuration
+ * @param parentKey - Parent key to check for whitelisted fields (internal use)
  */
-export const sanitizeObject = (obj: any, config: SecurityConfig = defaultSecurityConfig): any => {
+export const sanitizeObject = (obj: any, config: SecurityConfig = defaultSecurityConfig, parentKey?: string): any => {
   if (obj === null || obj === undefined) {
     return obj;
   }
@@ -89,14 +93,23 @@ export const sanitizeObject = (obj: any, config: SecurityConfig = defaultSecurit
   }
 
   if (Array.isArray(obj)) {
-    return obj.map(item => sanitizeObject(item, config));
+    return obj.map(item => sanitizeObject(item, config, parentKey));
   }
 
   if (typeof obj === 'object') {
     const sanitized: any = {};
+    // Fields that should NOT be sanitized (e.g., HTML email templates)
+    const UNSANITIZED_FIELDS = ['body_template', 'subject_template'];
+    
     for (const [key, value] of Object.entries(obj)) {
       const sanitizedKey = sanitizeString(key, config);
-      sanitized[sanitizedKey] = sanitizeObject(value, config);
+      
+      // Skip sanitization for whitelisted fields (HTML email templates)
+      if (UNSANITIZED_FIELDS.includes(key)) {
+        sanitized[sanitizedKey] = value;
+      } else {
+        sanitized[sanitizedKey] = sanitizeObject(value, config, key);
+      }
     }
     return sanitized;
   }
