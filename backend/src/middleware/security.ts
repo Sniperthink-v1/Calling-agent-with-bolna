@@ -102,12 +102,12 @@ export const sanitizeObject = (obj: any, config: SecurityConfig = defaultSecurit
     const UNSANITIZED_FIELDS = ['body_template', 'subject_template'];
     
     for (const [key, value] of Object.entries(obj)) {
-      const sanitizedKey = sanitizeString(key, config);
-      
-      // Skip sanitization for whitelisted fields (HTML email templates)
+      // Check whitelist BEFORE sanitizing the key
       if (UNSANITIZED_FIELDS.includes(key)) {
-        sanitized[sanitizedKey] = value;
+        // Keep original key and value without any sanitization
+        sanitized[key] = value;
       } else {
+        const sanitizedKey = sanitizeString(key, config);
         sanitized[sanitizedKey] = sanitizeObject(value, config, key);
       }
     }

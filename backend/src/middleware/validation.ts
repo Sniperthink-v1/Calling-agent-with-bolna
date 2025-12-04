@@ -238,6 +238,9 @@ export const validateRegistration = (req: Request, res: Response, next: NextFunc
 
 // Request sanitization middleware
 export const sanitizeRequest = (req: Request, res: Response, next: NextFunction): void => {
+  // Fields that should NOT be sanitized (preserve HTML)
+  const UNSANITIZED_FIELDS = ['body_template', 'subject_template'];
+  
   // Helper function to check if a field should allow long text
   const shouldAllowLongText = (key: string, parentKeys: string[] = []): boolean => {
     const fullPath = [...parentKeys, key].join('.');
@@ -249,6 +252,11 @@ export const sanitizeRequest = (req: Request, res: Response, next: NextFunction)
   const sanitizeObject = (obj: any, parentKeys: string[] = []): void => {
     if (obj && typeof obj === 'object') {
       for (const [key, value] of Object.entries(obj)) {
+        // Skip sanitization for email template fields (preserve HTML)
+        if (UNSANITIZED_FIELDS.includes(key)) {
+          continue; // Keep original value, don't sanitize
+        }
+        
         if (typeof value === 'string') {
           const allowLongText = shouldAllowLongText(key, parentKeys);
           obj[key] = sanitizeInput(value, allowLongText);
