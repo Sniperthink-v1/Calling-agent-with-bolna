@@ -13,8 +13,17 @@ import { hashPhoneNumber, hashUserId } from '../utils/sentryHelpers';
 import { logger } from '../utils/logger';
 
 /**
- * Build user_data object for Bolna API calls
- * Uses standardized field names: lead_name, business_name, email
+ * Build user_data object for Bolna API calls.
+ * Maps contact/queue data to standardized field names for Bolna AI agent.
+ * 
+ * Field Mapping:
+ * - contact.name OR queueUserData.name/lead_name → lead_name
+ * - contact.company OR queueUserData.company/business_name → business_name
+ * - contact.email OR queueUserData.email → email
+ * 
+ * @param contact - Contact data from database (for direct calls)
+ * @param queueUserData - User data from campaign queue item (for campaign calls)
+ * @returns Object with lead_name, business_name, email fields for Bolna API
  */
 function buildUserData(contact: ContactInterface | null, queueUserData?: Record<string, any>): Record<string, any> {
   // If we have queue user_data (from campaign), use it but transform field names
@@ -532,20 +541,23 @@ export class CallService {
             if (callRequest.contactId) {
               contactData = await Contact.findById(callRequest.contactId);
               
-              // Verify contact ownership
-              if (contactData && contactData.user_id !== callRequest.userId) {
-                const error = new Error('Contact does not belong to user');
-                Sentry.captureException(error, {
-                  tags: {
-                    error_type: 'unauthorized_contact_access',
-                    user_id_hash: hashUserId(callRequest.userId),
-                    severity: 'high'
-                  }
-                });
-                throw error;
-              }
-              
-              if (contactData) {
+              if (!contactData) {
+                // Contact not found - log warning but continue (call can still proceed without contact data)
+                logger.warn(`Contact ${callRequest.contactId} not found for call, proceeding without contact data`);
+              } else {
+                // Verify contact ownership
+                if (contactData.user_id !== callRequest.userId) {
+                  const error = new Error('Contact does not belong to user');
+                  Sentry.captureException(error, {
+                    tags: {
+                      error_type: 'unauthorized_contact_access',
+                      user_id_hash: hashUserId(callRequest.userId),
+                      severity: 'high'
+                    }
+                  });
+                  throw error;
+                }
+                
                 logger.info(`Fetched contact data for call: ${contactData.name}`);
               }
             }
