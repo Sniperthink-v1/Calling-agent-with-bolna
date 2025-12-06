@@ -323,6 +323,14 @@ ${transcript}`,
       totalScore: analysis.total_score,
       leadStatusTag: analysis.lead_status_tag,
       intentScore: analysis.intent_score,
+      demo_book_datetime: analysis.demo_book_datetime,
+      has_demo_datetime: !!analysis.demo_book_datetime,
+    });
+
+    // ⚠️ DEBUG: Log the COMPLETE extracted analysis for debugging
+    logger.debug('🔍 DEBUG: Complete analysis object from OpenAI', {
+      executionId,
+      analysis: JSON.stringify(analysis, null, 2)
     });
 
     return analysis;

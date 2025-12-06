@@ -771,6 +771,17 @@ class WebhookService {
               user?.openai_individual_prompt_id
             );
 
+            // ⚠️ DEBUG: Log the COMPLETE individualData object immediately after extraction
+            logger.info('🔍 DEBUG: IndividualData extracted', {
+              execution_id: executionId,
+              full_individualData: JSON.stringify(individualData, null, 2),
+              has_demo_book_datetime: !!individualData?.demo_book_datetime,
+              demo_book_datetime_value: individualData?.demo_book_datetime,
+              demo_book_datetime_type: typeof individualData?.demo_book_datetime,
+              extraction_email: individualData?.extraction?.email_address,
+              lead_status: individualData?.lead_status_tag
+            });
+
             // Get previous calls for complete analysis
             const previousCalls = await Call.findByPhoneNumberAllUsers(updatedCall.phone_number);
             const previousCallsCount = previousCalls.filter(c => c.id !== updatedCall.id).length;
@@ -847,6 +858,14 @@ class WebhookService {
               updatedCall.phone_number,
               previousCallsCount
             );
+
+            // ⚠️ DEBUG: Verify individualData after processDualAnalysis
+            logger.info('🔍 DEBUG: IndividualData after processDualAnalysis', {
+              execution_id: executionId,
+              has_demo_book_datetime: !!individualData?.demo_book_datetime,
+              demo_book_datetime_value: individualData?.demo_book_datetime,
+              demo_book_datetime_type: typeof individualData?.demo_book_datetime,
+            });
 
             logger.info('✅ OpenAI analysis completed', { execution_id: executionId });
 
@@ -956,6 +975,18 @@ class WebhookService {
               // ============================================
               // Google Calendar Meeting Auto-Scheduling
               // ============================================
+              
+              // ⚠️ DEBUG: Log individualData state BEFORE calendar scheduling
+              logger.info('🔍 DEBUG: IndividualData before calendar scheduling', {
+                execution_id: executionId,
+                has_individualData: !!individualData,
+                has_demo_book_datetime: !!individualData?.demo_book_datetime,
+                demo_book_datetime_value: individualData?.demo_book_datetime,
+                demo_book_datetime_type: typeof individualData?.demo_book_datetime,
+                extraction_email: individualData?.extraction?.email_address,
+                contact_created: contactResult.created,
+                contact_id: contactResult.contactId
+              });
               
               // Wait 10 seconds to ensure all AI processing is complete
               await new Promise(resolve => setTimeout(resolve, 10000));
