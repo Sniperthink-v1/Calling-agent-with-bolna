@@ -4,12 +4,53 @@ import LeadAnalytics, { LeadAnalyticsInterface } from '../models/LeadAnalytics';
 import { bolnaService, BolnaCallRequest, BolnaCallResponse } from './bolnaService';
 import Agent from '../models/Agent';
 import PhoneNumber from '../models/PhoneNumber';
+import Contact, { ContactInterface } from '../models/Contact';
 import { ConcurrencyManager } from './ConcurrencyManager';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
 import { hashPhoneNumber, hashUserId } from '../utils/sentryHelpers';
 
 import { logger } from '../utils/logger';
+
+/**
+ * Build user_data object for Bolna API calls.
+ * Maps contact/queue data to standardized field names for Bolna AI agent.
+ * 
+ * Field Mapping:
+ * - contact.name OR queueUserData.name/lead_name → lead_name
+ * - contact.company OR queueUserData.company/business_name → business_name
+ * - contact.email OR queueUserData.email → email
+ * 
+ * @param contact - Contact data from database (for direct calls)
+ * @param queueUserData - User data from campaign queue item (for campaign calls)
+ * @returns Object with lead_name, business_name, email fields for Bolna API
+ */
+function buildUserData(contact: ContactInterface | null, queueUserData?: Record<string, any>): Record<string, any> {
+  // If we have queue user_data (from campaign), use it but transform field names
+  if (queueUserData) {
+    return {
+      lead_name: queueUserData.name || queueUserData.lead_name || '',
+      business_name: queueUserData.company || queueUserData.business_name || '',
+      email: queueUserData.email || ''
+    };
+  }
+  
+  // If we have contact data, build user_data from it
+  if (contact) {
+    return {
+      lead_name: contact.name || '',
+      business_name: contact.company || '',
+      email: contact.email || ''
+    };
+  }
+  
+  // Return empty user_data if no data available
+  return {
+    lead_name: '',
+    business_name: '',
+    email: ''
+  };
+}
 
 // Create singleton instance of ConcurrencyManager
 const concurrencyManager = new ConcurrencyManager();
@@ -495,6 +536,32 @@ export class CallService {
               }
             });
             
+            // Fetch contact data if contactId is provided (for direct calls)
+            let contactData: ContactInterface | null = null;
+            if (callRequest.contactId) {
+              contactData = await Contact.findById(callRequest.contactId);
+              
+              if (!contactData) {
+                // Contact not found - log warning but continue (call can still proceed without contact data)
+                logger.warn(`Contact ${callRequest.contactId} not found for call, proceeding without contact data`);
+              } else {
+                // Verify contact ownership
+                if (contactData.user_id !== callRequest.userId) {
+                  const error = new Error('Contact does not belong to user');
+                  Sentry.captureException(error, {
+                    tags: {
+                      error_type: 'unauthorized_contact_access',
+                      user_id_hash: hashUserId(callRequest.userId),
+                      severity: 'high'
+                    }
+                  });
+                  throw error;
+                }
+                
+                logger.info(`Fetched contact data for call: ${contactData.name}`);
+              }
+            }
+            
             // Determine which phone number to use for the call
             let callerPhoneNumber: any = null;
             
@@ -562,6 +629,7 @@ export class CallService {
               agent_id: agent.bolna_agent_id,
               recipient_phone_number: callRequest.phoneNumber,
               webhook_url: process.env.BOLNA_WEBHOOK_URL || undefined,
+              user_data: buildUserData(contactData),
               metadata: {
                 user_id: callRequest.userId,
                 agent_id: callRequest.agentId,
@@ -763,10 +831,13 @@ export class CallService {
       }
       
       // Prepare Bolna.ai call request
+      // Extract user_data from queue item metadata (built by CallCampaignService.addContactsToQueue)
+      const queueUserData = callRequest.metadata?.user_data;
       const bolnaCallData: BolnaCallRequest = {
         agent_id: agent.bolna_agent_id,
         recipient_phone_number: callRequest.phoneNumber,
         webhook_url: process.env.BOLNA_WEBHOOK_URL || undefined,
+        user_data: buildUserData(null, queueUserData),
         metadata: {
           user_id: callRequest.userId,
           agent_id: callRequest.agentId,
