@@ -239,7 +239,7 @@ export class CallModel extends BaseModel<CallInterface> {
     user_id: string;
     contact_id?: string;
     campaign_id?: string; // Track campaign association
-    bolna_execution_id: string;
+    bolna_execution_id: string | null;
     phone_number: string;
     call_source?: 'phone' | 'internet' | 'unknown';
     caller_name?: string;
