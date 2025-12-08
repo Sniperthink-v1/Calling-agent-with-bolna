@@ -643,13 +643,13 @@ class AdminService {
 
       logger.info(`Admin assigned agent ${agentId} from user ${oldUserId} to user ${userId}`);
       
-      // Determine if we need to invalidate old user's cache
-      const isDifferentUser = oldUserId && oldUserId !== userId;
+      // Determine if we need to invalidate old user's cache (only if reassigning to a different user)
+      const shouldInvalidateOldUserCache = oldUserId && oldUserId !== userId;
       
       // Invalidate agent caches for both old and new users
       // Note: clearUserAgentCaches() uses pattern matching to clear all agent caches for the user,
       // including specific agent caches, so no need to call invalidateAgentCache() separately
-      if (isDifferentUser) {
+      if (shouldInvalidateOldUserCache) {
         agentCacheService.clearUserAgentCaches(oldUserId);
         logger.debug(`Invalidated agent caches for old user ${oldUserId} after agent reassignment`);
       }
