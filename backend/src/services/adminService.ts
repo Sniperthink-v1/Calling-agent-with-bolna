@@ -595,22 +595,16 @@ class AdminService {
         
         if (assignToUserId) {
           // Create agent for the specified user
+          // Note: Cache invalidation is handled in agentService.createAgent()
           const agent = await agentService.createAgent(assignToUserId, agentData);
           logger.info(`Admin created agent ${agent.id} for user ${assignToUserId}`);
-          
-          // Cache is already invalidated in agentService.createAgent(), but log it for clarity
-          logger.debug(`Agent caches for user ${assignToUserId} already invalidated by agentService.createAgent()`);
-          
           return agent;
         } else {
           // Create unassigned agent - use admin user ID as the owner for now
+          // Note: Cache invalidation is handled in agentService.createAgent()
           const ownerUserId = adminUserId || process.env.SYSTEM_USER_ID || 'admin-default';
           const agent = await agentService.createAgent(ownerUserId, agentData);
           logger.info(`Admin created unassigned agent ${agent.id} with owner ${ownerUserId}`);
-          
-          // Cache is already invalidated in agentService.createAgent(), but log it for clarity
-          logger.debug(`Agent caches for owner ${ownerUserId} already invalidated by agentService.createAgent()`);
-          
           return agent;
         }
       }
@@ -649,21 +643,19 @@ class AdminService {
 
       logger.info(`Admin assigned agent ${agentId} from user ${oldUserId} to user ${userId}`);
       
+      // Determine if we need to invalidate old user's cache
+      const isDifferentUser = oldUserId && oldUserId !== userId;
+      
       // Invalidate agent caches for both old and new users
-      if (oldUserId && oldUserId !== userId) {
+      if (isDifferentUser) {
         agentCacheService.clearUserAgentCaches(oldUserId);
+        agentCacheService.invalidateAgentCache(oldUserId, agentId);
         logger.debug(`Invalidated agent caches for old user ${oldUserId} after agent reassignment`);
       }
       
       agentCacheService.clearUserAgentCaches(userId);
-      logger.debug(`Invalidated agent caches for new user ${userId} after agent assignment`);
-      
-      // Also invalidate the specific agent cache
       agentCacheService.invalidateAgentCache(userId, agentId);
-      if (oldUserId && oldUserId !== userId) {
-        agentCacheService.invalidateAgentCache(oldUserId, agentId);
-      }
-      logger.debug(`Invalidated specific agent ${agentId} caches for both users`);
+      logger.debug(`Invalidated agent caches for new user ${userId} after agent assignment`);
       
       return true;
     } catch (error) {
