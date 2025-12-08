@@ -647,14 +647,14 @@ class AdminService {
       const isDifferentUser = oldUserId && oldUserId !== userId;
       
       // Invalidate agent caches for both old and new users
+      // Note: clearUserAgentCaches() uses pattern matching to clear all agent caches for the user,
+      // including specific agent caches, so no need to call invalidateAgentCache() separately
       if (isDifferentUser) {
         agentCacheService.clearUserAgentCaches(oldUserId);
-        agentCacheService.invalidateAgentCache(oldUserId, agentId);
         logger.debug(`Invalidated agent caches for old user ${oldUserId} after agent reassignment`);
       }
       
       agentCacheService.clearUserAgentCaches(userId);
-      agentCacheService.invalidateAgentCache(userId, agentId);
       logger.debug(`Invalidated agent caches for new user ${userId} after agent assignment`);
       
       return true;
