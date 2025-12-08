@@ -393,6 +393,10 @@ export interface SystemConfig {
     minimumPurchase: number;
     currency: string;
   };
+  billingSettings: {
+    pulseSeconds: number; // Pulse-based billing: 60 = per minute, 30 = per 30s, 20 = per 20s
+    creditsPerMinute: number;
+  };
   contactLimits: {
     freeUser: number;
     paidUser: number;

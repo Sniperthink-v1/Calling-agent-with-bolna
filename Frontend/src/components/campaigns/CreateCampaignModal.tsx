@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Upload, X, FileText, CheckCircle, AlertCircle, Download, HelpCircle } from 'lucide-react';
+import { Upload, X, FileText, CheckCircle, AlertCircle, Download, HelpCircle, Loader2, Phone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -33,7 +33,18 @@ import { CampaignCreditEstimator } from '@/components/campaigns/CampaignCreditEs
 import { useCreditToasts } from '@/components/ui/ToastProvider';
 import CampaignTimezoneSelectorCard from '@/components/campaigns/CampaignTimezoneSelectorCard';
 import { detectBrowserTimezone } from '@/utils/timezone';
+import { API_ENDPOINTS } from '@/config/api';
 import * as XLSX from 'xlsx';
+
+// Phone number interface for dropdown
+interface PhoneNumber {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  assignedToAgentId?: string | null;
+  agentName?: string;
+  isActive: boolean;
+}
 
 /**
  * Get current date in a specific timezone as YYYY-MM-DD
@@ -87,6 +98,11 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   const [uploadResult, setUploadResult] = useState<CsvUploadResult | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [parsedContactCount, setParsedContactCount] = useState(0);
+  
+  // Phone number selection states
+  const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumber[]>([]);
+  const [selectedPhoneNumberId, setSelectedPhoneNumberId] = useState<string>('');
+  const [isFetchingPhoneNumbers, setIsFetchingPhoneNumbers] = useState(false);
   
   // Timezone states
   const [useCustomTimezone, setUseCustomTimezone] = useState(false);
@@ -146,14 +162,76 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
     
     if (isOpen) {
       fetchUserProfile();
+      fetchPhoneNumbers();
     }
   }, [isOpen]);
+
+  // Fetch phone numbers for selection
+  const fetchPhoneNumbers = async () => {
+    setIsFetchingPhoneNumbers(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(API_ENDPOINTS.PHONE_NUMBERS.LIST, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch phone numbers');
+      }
+
+      const data = await response.json();
+      
+      // Handle response format
+      let phoneNumbersList: PhoneNumber[] = [];
+      if (data.success && Array.isArray(data.data)) {
+        phoneNumbersList = data.data.map((pn: any) => ({
+          id: pn.id,
+          name: pn.name,
+          phoneNumber: pn.phone_number || pn.phoneNumber,
+          assignedToAgentId: pn.assigned_to_agent_id || pn.assignedToAgentId,
+          agentName: pn.agent_name || pn.agentName,
+          isActive: pn.is_active !== false,
+        }));
+      } else if (Array.isArray(data)) {
+        phoneNumbersList = data.map((pn: any) => ({
+          id: pn.id,
+          name: pn.name,
+          phoneNumber: pn.phone_number || pn.phoneNumber,
+          assignedToAgentId: pn.assigned_to_agent_id || pn.assignedToAgentId,
+          agentName: pn.agent_name || pn.agentName,
+          isActive: pn.is_active !== false,
+        }));
+      }
+
+      // Filter only active phone numbers
+      const activePhoneNumbers = phoneNumbersList.filter(pn => pn.isActive);
+      setPhoneNumbers(activePhoneNumbers);
+
+      // Auto-select first phone number if available
+      if (activePhoneNumbers.length > 0 && !selectedPhoneNumberId) {
+        setSelectedPhoneNumberId(activePhoneNumbers[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching phone numbers:', error);
+      toast({
+        title: 'Warning',
+        description: 'Failed to load phone numbers. You can still create the campaign.',
+        variant: 'default',
+      });
+    } finally {
+      setIsFetchingPhoneNumbers(false);
+    }
+  };
 
   // Create campaign mutation (for contact-based campaigns)
   const createMutation = useMutation({
     mutationFn: async (data: { 
       name: string; 
       agent_id: string; 
+      phone_number_id?: string;
       contact_ids: string[];
       first_call_time: string;
       last_call_time: string;
@@ -407,6 +485,7 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         campaign_timezone: effectiveTimezone,
         max_retries: maxRetries,
         retry_interval_minutes: retryIntervalMinutes,
+        phone_number_id: selectedPhoneNumberId || undefined,
       };
     } else if (preSelectedContacts.length > 0) {
       contactCount = preSelectedContacts.length;
@@ -414,6 +493,7 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         type: 'contacts',
         name,
         agent_id: agentId,
+        phone_number_id: selectedPhoneNumberId || undefined,
         contact_ids: preSelectedContacts,
         first_call_time: firstCallTime,
         last_call_time: lastCallTime,
@@ -468,6 +548,11 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         formData.append('max_retries', pendingCampaignData.max_retries.toString());
         formData.append('retry_interval_minutes', pendingCampaignData.retry_interval_minutes.toString());
         
+        // Add phone number ID if selected
+        if (pendingCampaignData.phone_number_id) {
+          formData.append('phone_number_id', pendingCampaignData.phone_number_id);
+        }
+        
         uploadCsvMutation.mutate(formData);
       } else {
         // Handle contact-based campaign
@@ -493,6 +578,7 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   const handleClose = () => {
     setName('');
     setAgentId('');
+    setSelectedPhoneNumberId('');
     setFirstCallTime('09:00');
     setLastCallTime('17:00');
     // Reset to today's date in user's timezone
@@ -549,6 +635,60 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Phone Number Selection */}
+          <div>
+            <Label htmlFor="phoneNumber" className="flex items-center gap-2">
+              <Phone className="w-4 h-4" />
+              Caller Phone Number
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="w-4 h-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>Select the phone number that will be used to make outbound calls for this campaign. If not selected, the agent's assigned phone or any available number will be used.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            {isFetchingPhoneNumbers ? (
+              <div className="flex items-center justify-center p-3 border rounded-md mt-1">
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <span className="text-sm text-muted-foreground">Loading phone numbers...</span>
+              </div>
+            ) : phoneNumbers.length === 0 ? (
+              <div className={`p-3 border rounded-md mt-1 text-sm ${theme === 'dark' ? 'bg-yellow-950/20 border-yellow-800 text-yellow-200' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
+                No phone numbers available. The agent's assigned phone number or system default will be used.
+              </div>
+            ) : (
+              <Select value={selectedPhoneNumberId} onValueChange={setSelectedPhoneNumberId}>
+                <SelectTrigger id="phoneNumber" className="mt-1">
+                  <SelectValue placeholder="Choose a phone number (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {phoneNumbers.map((phone) => {
+                    // Find the agent name for this phone number
+                    const assignedAgent = phone.assignedToAgentId 
+                      ? agents.find((a: any) => a.id === phone.assignedToAgentId)
+                      : null;
+                    
+                    return (
+                      <SelectItem key={phone.id} value={phone.id}>
+                        <span className="font-medium">{phone.phoneNumber}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {phone.name}
+                          {assignedAgent 
+                            ? ` • Linked to ${assignedAgent.name}` 
+                            : ' • Not linked to any agent'}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Call Time Window */}

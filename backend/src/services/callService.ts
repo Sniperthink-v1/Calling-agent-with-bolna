@@ -5,6 +5,7 @@ import { bolnaService, BolnaCallRequest, BolnaCallResponse } from './bolnaServic
 import Agent from '../models/Agent';
 import PhoneNumber from '../models/PhoneNumber';
 import Contact, { ContactInterface } from '../models/Contact';
+import { CallCampaignModel } from '../models/CallCampaign';
 import { ConcurrencyManager } from './ConcurrencyManager';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
@@ -816,18 +817,32 @@ export class CallService {
       // Determine which phone number to use for campaign call
       let callerPhoneNumber: any = null;
       
-      // Priority 1: Agent's assigned phone number
-      callerPhoneNumber = await PhoneNumber.findByAgentId(callRequest.agentId);
+      // Priority 1: Campaign's explicitly selected phone number
+      const campaignId = callRequest.metadata?.campaign_id;
+      if (campaignId) {
+        const campaign = await CallCampaignModel.findById(campaignId, callRequest.userId);
+        if (campaign?.phone_number_id) {
+          callerPhoneNumber = await PhoneNumber.findById(campaign.phone_number_id);
+          if (callerPhoneNumber) {
+            logger.info(`Campaign call using campaign-selected phone number: ${callerPhoneNumber.name} (${callerPhoneNumber.phone_number})`);
+          }
+        }
+      }
       
+      // Priority 2: Agent's assigned phone number
       if (!callerPhoneNumber) {
-        // Priority 2: Fallback to any phone number belonging to user (newest first)
+        callerPhoneNumber = await PhoneNumber.findByAgentId(callRequest.agentId);
+        if (callerPhoneNumber) {
+          logger.info(`Campaign call using agent assigned phone number: ${callerPhoneNumber.name} (${callerPhoneNumber.phone_number})`);
+        }
+      }
+      
+      // Priority 3: Fallback to any phone number belonging to user (newest first)
+      if (!callerPhoneNumber) {
         callerPhoneNumber = await PhoneNumber.findAnyByUserId(callRequest.userId);
-        
         if (callerPhoneNumber) {
           logger.info(`Campaign call using fallback phone number from user pool: ${callerPhoneNumber.name} (${callerPhoneNumber.phone_number})`);
         }
-      } else {
-        logger.info(`Campaign call using agent assigned phone number: ${callerPhoneNumber.name} (${callerPhoneNumber.phone_number})`);
       }
       
       // Prepare Bolna.ai call request

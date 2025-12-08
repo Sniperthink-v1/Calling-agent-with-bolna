@@ -83,16 +83,17 @@ export class CallCampaignModel {
   static async create(userId: string, data: CreateCampaignRequest): Promise<CallCampaign> {
     const result = await pool.query(
       `INSERT INTO call_campaigns (
-        user_id, name, description, agent_id, next_action,
+        user_id, name, description, agent_id, phone_number_id, next_action,
         first_call_time, last_call_time, status, start_date, end_date, started_at,
         campaign_timezone, use_custom_timezone, max_retries, retry_interval_minutes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING *`,
       [
         userId,
         data.name,
         data.description || null,
         data.agent_id,
+        data.phone_number_id || null, // User-selected phone number for campaign calls
         data.next_action,
         data.first_call_time,
         data.last_call_time,

@@ -11,6 +11,7 @@ import { adminApiService } from '../../../services/adminApiService';
 interface SystemConfig {
   // Billing Configuration
   credits_per_minute: number;
+  billing_pulse_seconds: number; // Pulse-based billing: 60 = per minute, 30 = per 30s, etc.
   new_user_bonus_credits: number;
   minimum_credit_purchase: number;
   max_contacts_per_upload: number;
@@ -183,6 +184,21 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ className }) => {
               />
               <p className="text-sm text-muted-foreground mt-1">
                 Credits charged per minute of call time
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="billing_pulse_seconds">Billing Pulse (seconds)</Label>
+              <Input
+                id="billing_pulse_seconds"
+                type="number"
+                min="1"
+                max="60"
+                value={config.billing_pulse_seconds}
+                onChange={(e) => updateConfig('billing_pulse_seconds', parseInt(e.target.value))}
+              />
+              <p className="text-sm text-muted-foreground mt-1">
+                Billing increment in seconds. 60 = per minute, 30 = per 30s, 20 = per 20s
               </p>
             </div>
             

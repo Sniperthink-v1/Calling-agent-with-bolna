@@ -3,6 +3,7 @@ import { DatabaseService } from './databaseService';
 interface SystemConfig {
   // Legacy configuration values
   credits_per_minute: number;
+  billing_pulse_seconds: number; // Pulse-based billing: 60 = per minute, 30 = per 30s, 20 = per 20s
   max_contacts_per_upload: number;
   new_user_bonus_credits: number;
   minimum_credit_purchase: number;
@@ -76,6 +77,7 @@ class ConfigService {
         FROM system_config 
         WHERE config_key IN (
           'credits_per_minute',
+          'billing_pulse_seconds',
           'max_contacts_per_upload',
           'new_user_bonus_credits',
           'minimum_credit_purchase',
@@ -104,6 +106,7 @@ class ConfigService {
       this.config = {
         // Legacy configuration values
         credits_per_minute: parseInt(configMap.get('credits_per_minute') || '1'),
+        billing_pulse_seconds: parseInt(configMap.get('billing_pulse_seconds') || '60'), // Default: 60s (per-minute billing)
         max_contacts_per_upload: parseInt(configMap.get('max_contacts_per_upload') || '1000'),
         new_user_bonus_credits: parseInt(configMap.get('new_user_bonus_credits') || '15'),
         minimum_credit_purchase: parseInt(configMap.get('minimum_credit_purchase') || '50'),
@@ -141,6 +144,7 @@ class ConfigService {
     this.config = {
       // Legacy configuration values
       credits_per_minute: 1,
+      billing_pulse_seconds: 60, // Default: 60s (per-minute billing)
       max_contacts_per_upload: 1000,
       new_user_bonus_credits: 15,
       minimum_credit_purchase: 50,

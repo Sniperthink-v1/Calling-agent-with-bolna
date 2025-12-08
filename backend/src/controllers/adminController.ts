@@ -1073,6 +1073,7 @@ export class AdminController {
       const config = {
         // Legacy Billing Configuration
         credits_per_minute: configService.get('credits_per_minute'),
+        billing_pulse_seconds: configService.get('billing_pulse_seconds'),
         max_contacts_per_upload: configService.get('max_contacts_per_upload'),
         new_user_bonus_credits: configService.get('new_user_bonus_credits'),
         minimum_credit_purchase: configService.get('minimum_credit_purchase'),

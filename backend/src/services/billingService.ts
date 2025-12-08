@@ -18,16 +18,36 @@ export class BillingService {
   }
 
   /**
-   * Calculate credits needed for call duration (minute-based rounding)
-   * Examples: 2:13 = 3 credits, 1:00 = 1 credit, 0:30 = 1 credit
+   * Calculate credits needed for call duration using pulse-based billing
+   * 
+   * Pulse billing charges in increments of `billing_pulse_seconds` (configurable by admin)
+   * Examples with 30s pulse (credits_per_minute = 1):
+   *   - 3:20 (200s) = ceil(200/30) = 7 pulses × 0.5 = 3.5 credits
+   *   - 2:35 (155s) = ceil(155/30) = 6 pulses × 0.5 = 3.0 credits
+   * Examples with 20s pulse:
+   *   - 2:15 (135s) = ceil(135/20) = 7 pulses × 0.33 = 2.33 credits
+   *   - 3:00 (180s) = ceil(180/20) = 9 pulses × 0.33 = 3.0 credits
+   * Examples with 60s pulse (default, per-minute billing):
+   *   - 2:13 (133s) = ceil(133/60) = 3 pulses × 1.0 = 3.0 credits
    */
   static calculateCreditsForDuration(durationSeconds: number): number {
     if (durationSeconds <= 0) return 0;
     
-    // Get credits per minute from configuration
+    // Get billing configuration
     const creditsPerMinute = configService.get('credits_per_minute');
-    const minutes = Math.ceil(durationSeconds / 60);
-    return minutes * creditsPerMinute;
+    const pulseSeconds = configService.get('billing_pulse_seconds');
+    
+    // Calculate number of pulses (rounded up - partial pulse counts as full)
+    const numberOfPulses = Math.ceil(durationSeconds / pulseSeconds);
+    
+    // Each pulse is worth (pulseSeconds / 60) minutes of credit
+    // e.g., 30s pulse = 0.5 credits per pulse (if credits_per_minute = 1)
+    const creditsPerPulse = creditsPerMinute * (pulseSeconds / 60);
+    
+    const totalCredits = numberOfPulses * creditsPerPulse;
+    
+    // Round to 2 decimal places for clean billing display
+    return Math.round(totalCredits * 100) / 100;
   }
 
   /**

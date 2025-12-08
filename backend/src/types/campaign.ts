@@ -38,6 +38,7 @@ export interface CallCampaign {
   name: string;
   description?: string;
   agent_id: string;
+  phone_number_id?: string | null; // User-selected phone number for campaign calls
   
   // Configuration
   next_action: string;
@@ -143,6 +144,7 @@ export interface CreateCampaignRequest {
   name: string;
   description?: string;
   agent_id: string;
+  phone_number_id?: string; // Optional: user-selected phone number for campaign calls
   next_action: string;
   
   // Time window
