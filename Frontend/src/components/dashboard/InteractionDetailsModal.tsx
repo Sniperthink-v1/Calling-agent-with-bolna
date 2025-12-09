@@ -134,23 +134,8 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
       // Get the recording URL directly from the API
       const audioUrl = await apiService.getCallAudioBlob(callData.id);
       
-      // Check if it's a Twilio API URL (requires authentication, not playable)
-      if (audioUrl.includes('api.twilio.com') || audioUrl.includes('twilio.com/')) {
-        console.log('Twilio URL detected in modal, showing message:', audioUrl);
-        setIsAudioLoading(false);
-        setIsPlayingAudio(false);
-        
-        // Show toast notification
-        toast({
-          title: 'Audio not available',
-          description: 'Call recording is not available for international numbers.',
-          variant: 'destructive',
-        });
-        
-        // Also show alert for better visibility
-        alert('Audio not available: Call recording is not available for international numbers.');
-        return;
-      }
+      // Twilio URLs are now proxied through backend with authentication
+      // No need to block them anymore
       
       objectUrlRef.current = audioUrl;
 

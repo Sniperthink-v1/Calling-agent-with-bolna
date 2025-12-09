@@ -2364,10 +2364,11 @@ class ApiService {
   }
 
   // Method to get the call audio URL for direct playback
+  // Returns either a direct URL (for S3) or a blob URL (for Twilio recordings proxied through backend)
   async getCallAudioBlob(callId: string): Promise<string> {
     const token = localStorage.getItem('auth_token');
     
-    // First, get the recording URL from the API
+    // Fetch the recording from the API
     const response = await fetch(API_ENDPOINTS.CALLS.AUDIO(callId), {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -2387,7 +2388,18 @@ class ApiService {
       throw new Error(errorMessage);
     }
     
-    // Parse the JSON response to get the recording URL
+    // Check content type to determine response format
+    const contentType = response.headers.get('content-type') || '';
+    
+    // If the response is audio (Twilio recording proxied through backend), create a blob URL
+    if (contentType.includes('audio/') || contentType.includes('application/octet-stream')) {
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      console.log('Created blob URL for Twilio recording:', blobUrl);
+      return blobUrl;
+    }
+    
+    // Otherwise, parse the JSON response to get the recording URL (S3/direct URL)
     const data = await response.json();
     const recordingUrl = data.recording_url;
     
@@ -2395,7 +2407,7 @@ class ApiService {
       throw new Error('No recording URL found for this call');
     }
     
-    // Return the recording URL for direct playback with crossOrigin support
+    // Return the recording URL for direct playback
     return recordingUrl;
   }
 

@@ -558,7 +558,96 @@ export class CallController {
         return;
       }
 
-      // Return the recording URL for direct playback
+      // Check if this is a Twilio recording URL that needs authentication
+      const isTwilioUrl = call.recording_url.includes('api.twilio.com') || call.recording_url.includes('twilio.com/');
+      
+      if (isTwilioUrl) {
+        // Proxy the Twilio recording with authentication
+        const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+        
+        if (!twilioAuthToken) {
+          logger.error('TWILIO_AUTH_TOKEN not configured for Twilio recording proxy');
+          res.status(500).json({
+            error: 'Recording configuration error',
+            message: 'Twilio authentication not configured. Please contact support.'
+          });
+          return;
+        }
+
+        try {
+          // Extract Account SID from the URL
+          // URL format: https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}
+          const urlMatch = call.recording_url.match(/Accounts\/([^/]+)/);
+          if (!urlMatch) {
+            logger.error('Could not extract Account SID from Twilio URL', { url: call.recording_url });
+            res.status(500).json({
+              error: 'Invalid recording URL',
+              message: 'Could not parse Twilio recording URL.'
+            });
+            return;
+          }
+          
+          const accountSid = urlMatch[1];
+          const basicAuth = Buffer.from(`${accountSid}:${twilioAuthToken}`).toString('base64');
+          
+          logger.info('Proxying Twilio recording', { 
+            callId: call.id, 
+            accountSid,
+            recordingUrl: call.recording_url 
+          });
+
+          // Fetch the recording from Twilio with authentication
+          const twilioResponse = await fetch(call.recording_url, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${basicAuth}`
+            }
+          });
+
+          if (!twilioResponse.ok) {
+            logger.error('Failed to fetch Twilio recording', {
+              status: twilioResponse.status,
+              statusText: twilioResponse.statusText,
+              callId: call.id
+            });
+            res.status(twilioResponse.status).json({
+              error: 'Failed to fetch recording',
+              message: `Twilio returned status ${twilioResponse.status}`
+            });
+            return;
+          }
+
+          // Get content type and length from Twilio response
+          const contentType = twilioResponse.headers.get('content-type') || 'audio/wav';
+          const contentLength = twilioResponse.headers.get('content-length');
+
+          // Set response headers for audio streaming
+          res.setHeader('Content-Type', contentType);
+          if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+          }
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+
+          // Stream the audio data to the client
+          const arrayBuffer = await twilioResponse.arrayBuffer();
+          res.send(Buffer.from(arrayBuffer));
+          return;
+
+        } catch (proxyError) {
+          logger.error('Error proxying Twilio recording', {
+            error: proxyError instanceof Error ? proxyError.message : String(proxyError),
+            callId: call.id
+          });
+          res.status(500).json({
+            error: 'Failed to proxy recording',
+            message: proxyError instanceof Error ? proxyError.message : 'Unknown error'
+          });
+          return;
+        }
+      }
+
+      // For non-Twilio URLs (e.g., S3), return the URL for direct playback
       res.json({
         success: true,
         recording_url: call.recording_url,

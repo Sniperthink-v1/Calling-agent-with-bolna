@@ -335,23 +335,8 @@ const CallLogs: React.FC<CallLogsProps> = ({
           throw new Error('Invalid recording URL received');
         }
 
-        // Check if it's a Twilio API URL (requires authentication, not playable)
-        if (audioUrl.includes('api.twilio.com') || audioUrl.includes('twilio.com/')) {
-          console.log('Twilio URL detected, showing message:', audioUrl);
-          setIsAudioLoading(null);
-          setPlayingAudio(null);
-          
-          // Show toast notification
-          toast({
-            title: 'Audio not available',
-            description: 'Call recording is not available for international numbers.',
-            variant: 'destructive',
-          });
-          
-          // Also show alert for better visibility
-          alert('Audio not available: Call recording is not available for international numbers.');
-          return;
-        }
+        // Twilio URLs are now proxied through backend with authentication
+        // No need to block them anymore
 
         console.log('Playing audio from URL:', audioUrl); // Debug log
         objectUrlRef.current = audioUrl; // Store the URL for reference
