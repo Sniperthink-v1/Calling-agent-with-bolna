@@ -253,6 +253,7 @@ export interface Contact {
   lastContactAt?: string;
   callAttemptedBusy: number;
   callAttemptedNoAnswer: number;
+  callAttemptedFailed: number;
   callType: 'inbound' | 'outbound';
   createdAt: string;
   updatedAt: string;

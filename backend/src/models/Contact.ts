@@ -19,6 +19,7 @@ export interface ContactInterface extends BaseModelInterface {
   last_contact_at?: Date;
   call_attempted_busy: number;
   call_attempted_no_answer: number;
+  call_attempted_failed: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -40,6 +41,7 @@ export interface CreateContactData {
   last_contact_at?: Date;
   call_attempted_busy?: number;
   call_attempted_no_answer?: number;
+  call_attempted_failed?: number;
 }
 
 export interface UpdateContactData {
@@ -56,6 +58,7 @@ export interface UpdateContactData {
   last_contact_at?: Date;
   call_attempted_busy?: number;
   call_attempted_no_answer?: number;
+  call_attempted_failed?: number;
 }
 
 export class ContactModel extends BaseModel<ContactInterface> {
@@ -99,6 +102,7 @@ export class ContactModel extends BaseModel<ContactInterface> {
       tags: contactData.tags ?? [],
       call_attempted_busy: contactData.call_attempted_busy ?? 0,
       call_attempted_no_answer: contactData.call_attempted_no_answer ?? 0,
+      call_attempted_failed: contactData.call_attempted_failed ?? 0,
     };
     return await this.create(normalizedData);
   }
@@ -177,9 +181,9 @@ export class ContactModel extends BaseModel<ContactInterface> {
     const valuePlaceholders: string[] = [];
     
     contactsData.forEach((contact, index) => {
-      const baseIndex = index * 15; // Updated to 15 for city, country, business_context fields
+      const baseIndex = index * 16; // Updated to 16 for call_attempted_failed field
       valuePlaceholders.push(
-        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}, $${baseIndex + 10}, $${baseIndex + 11}, $${baseIndex + 12}, $${baseIndex + 13}, $${baseIndex + 14}, $${baseIndex + 15})`
+        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}, $${baseIndex + 10}, $${baseIndex + 11}, $${baseIndex + 12}, $${baseIndex + 13}, $${baseIndex + 14}, $${baseIndex + 15}, $${baseIndex + 16})`
       );
       values.push(
         contact.user_id,
@@ -196,14 +200,15 @@ export class ContactModel extends BaseModel<ContactInterface> {
         contact.tags || [],
         contact.last_contact_at || null,
         contact.call_attempted_busy ?? 0,
-        contact.call_attempted_no_answer ?? 0
+        contact.call_attempted_no_answer ?? 0,
+        contact.call_attempted_failed ?? 0
       );
     });
 
     const query = `
       INSERT INTO contacts (
         user_id, name, phone_number, email, company, notes, city, country, business_context,
-        is_auto_created, auto_creation_source, tags, last_contact_at, call_attempted_busy, call_attempted_no_answer
+        is_auto_created, auto_creation_source, tags, last_contact_at, call_attempted_busy, call_attempted_no_answer, call_attempted_failed
       ) VALUES ${valuePlaceholders.join(', ')}
       RETURNING id
     `;

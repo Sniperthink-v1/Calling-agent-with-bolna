@@ -1,7 +1,7 @@
 // Webhook types - Bolna.ai webhook payloads (based on real production data)
 
 /**
- * Webhook Event Types (5-stage lifecycle)
+ * Webhook Event Types (5-stage lifecycle + failure states)
  */
 export type WebhookEventType = 
   | 'initiated'
@@ -9,6 +9,7 @@ export type WebhookEventType =
   | 'in-progress'
   | 'no-answer'
   | 'busy'
+  | 'failed'
   | 'call-disconnected'
   | 'completed';
 

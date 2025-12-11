@@ -120,6 +120,7 @@ class WebhookService {
         
         case 'busy':
         case 'no-answer':
+        case 'failed':
           await this.handleFailed(payload, status);
           break;
         
@@ -1291,7 +1292,8 @@ class WebhookService {
   }
 
   /**
-   * Handle failed call states (busy, no-answer)
+   * Handle failed call states (busy, no-answer, failed)
+   * 'failed' status is for calls where the number is invalid/unavailable
    */
   private async handleFailed(payload: BolnaWebhookPayload, status: string): Promise<void> {
     const executionId = payload.id;
@@ -1343,6 +1345,19 @@ class WebhookService {
           logger.info('Updated contact - incremented no-answer counter', {
             contact_id: call.contact_id,
             execution_id: executionId
+          });
+        } else if (status === 'failed') {
+          await database.query(
+            `UPDATE contacts 
+             SET call_attempted_failed = COALESCE(call_attempted_failed, 0) + 1,
+                 last_contact_at = NOW()
+             WHERE id = $1`,
+            [call.contact_id]
+          );
+          logger.info('Updated contact - incremented failed counter', {
+            contact_id: call.contact_id,
+            execution_id: executionId,
+            error_message: payload.error_message
           });
         }
       } catch (error) {
