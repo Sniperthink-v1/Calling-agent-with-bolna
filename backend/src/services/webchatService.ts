@@ -114,12 +114,31 @@ class WebchatServiceClient {
    */
   async listAgents(userId: string): Promise<WebchatResponse<ChatAgentListResponse[]>> {
     try {
+      // Check if Chat Agent Server URL is configured
+      if (!process.env.CHAT_AGENT_SERVER_URL) {
+        logger.warn('⚠️ CHAT_AGENT_SERVER_URL not configured, webchat agents not available');
+        return {
+          success: true,
+          data: [],
+          message: 'Chat Agent Server not configured',
+        };
+      }
+
       const response = await this.client.get(`/api/v1/agents`, {
         params: { user_id: userId },
       });
       return response.data;
     } catch (error: any) {
       logger.error('❌ List agents failed', { userId, error: error.message });
+      
+      // Return empty array instead of throwing when Chat Agent Server is unavailable
+      if (error.code === 'ECONNREFUSED' || error.response?.status === 404) {
+        return {
+          success: true,
+          data: [],
+          message: 'Chat Agent Server unavailable or endpoint not implemented',
+        };
+      }
       throw error;
     }
   }
@@ -130,6 +149,12 @@ class WebchatServiceClient {
    */
   async createWebchatChannel(data: CreateWebchatRequest): Promise<WebchatResponse<WebchatChannel>> {
     try {
+      // Check if Chat Agent Server URL is configured
+      if (!process.env.CHAT_AGENT_SERVER_URL) {
+        logger.error('❌ CHAT_AGENT_SERVER_URL not configured');
+        throw new Error('Chat Agent Server not configured. Please set CHAT_AGENT_SERVER_URL environment variable.');
+      }
+
       logger.info('🔧 Creating webchat channel', {
         userId: data.user_id,
         name: data.name,
@@ -160,12 +185,31 @@ class WebchatServiceClient {
    */
   async listWebchatChannels(userId: string): Promise<WebchatResponse<ListWebchatChannelsResponse>> {
     try {
+      // Check if Chat Agent Server URL is configured
+      if (!process.env.CHAT_AGENT_SERVER_URL) {
+        logger.warn('⚠️ CHAT_AGENT_SERVER_URL not configured, webchat channels not available');
+        return {
+          success: true,
+          data: { channels: [], count: 0 },
+          message: 'Chat Agent Server not configured',
+        };
+      }
+
       const response = await this.client.get('/api/v1/webchat/channels', {
         params: { user_id: userId },
       });
       return response.data;
     } catch (error: any) {
       logger.error('❌ List webchat channels failed', { userId, error: error.message });
+      
+      // Return empty array instead of throwing when Chat Agent Server is unavailable
+      if (error.code === 'ECONNREFUSED' || error.response?.status === 404) {
+        return {
+          success: true,
+          data: { channels: [], count: 0 },
+          message: 'Chat Agent Server unavailable or endpoint not implemented',
+        };
+      }
       throw error;
     }
   }
