@@ -203,16 +203,6 @@ class GoogleAuthService {
       // Exchange authorization code for tokens
       const { tokens } = await this.oauth2Client.getToken(code);
 
-      // Log the scopes received from Google to verify gmail.send is included
-      logger.info('📝 OAuth tokens received from Google', {
-        userId,
-        hasAccessToken: !!tokens.access_token,
-        hasRefreshToken: !!tokens.refresh_token,
-        scopeReceived: tokens.scope,
-        hasGmailScope: tokens.scope?.includes('gmail.send') || false,
-        expiryDate: tokens.expiry_date
-      });
-
       if (!tokens.access_token || !tokens.refresh_token) {
         logger.error('❌ Missing tokens from Google OAuth', {
           userId,

@@ -98,7 +98,6 @@ class GmailService {
         const accessToken = await googleAuthService.ensureValidToken(userId);
         
         // Verify token has gmail.send scope using Google's tokeninfo endpoint
-        logger.info('📧 Verifying Gmail scope via tokeninfo API', { userId });
         const axios = require('axios');
         const tokenInfoResponse = await axios.get(
           `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`
@@ -108,11 +107,6 @@ class GmailService {
         const hasGmailSendScope = scopes.includes('gmail.send');
         
         if (hasGmailSendScope) {
-          logger.info('✅ Gmail connected and ready (gmail.send scope verified)', { 
-            userId, 
-            email: user.google_email,
-            scopes 
-          });
           return {
             connected: true,
             hasGmailScope: true,
@@ -205,20 +199,6 @@ class GmailService {
    */
   async sendEmail(userId: string, options: SendGmailOptions): Promise<GmailSendResult> {
     try {
-      // Log attachment info for debugging
-      if (options.attachments && options.attachments.length > 0) {
-        logger.info('📎 Email attachments received:', {
-          count: options.attachments.length,
-          attachments: options.attachments.map(att => ({
-            filename: att.filename,
-            contentType: att.contentType,
-            contentLength: att.content?.length || 0,
-            // Approx decoded size (base64 is ~4/3 of original)
-            approxDecodedSize: Math.round((att.content?.length || 0) * 3 / 4)
-          }))
-        });
-      }
-
       // First check Gmail status
       const status = await this.getGmailStatus(userId);
       
