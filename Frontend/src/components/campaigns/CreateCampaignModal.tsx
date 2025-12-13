@@ -1559,7 +1559,7 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
                               const info = variableInfo.find(i => i.position === v.position);
                               return (
                                 <div key={v.position} className="flex items-center gap-2">
-                                  <span className="text-muted-foreground">{{'{{'}{v.position}{'}}'}}:</span>
+                                  <span className="text-muted-foreground">{`{{${v.position}}}`}:</span>
                                   <span className={info?.userValue ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}>
                                     {info?.mappedTo || 'not mapped'}
                                   </span>
