@@ -365,12 +365,13 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
       const data = await response.json();
       
       if (data.success) {
+        // API returns flat structure: { success, connected, hasGmailScope, ... }
         setGmailStatus({
-          connected: data.data.connected,
-          hasGmailScope: data.data.hasGmailScope,
-          requiresReconnect: data.data.requiresReconnect,
-          email: data.data.email,
-          message: data.data.message,
+          connected: data.connected,
+          hasGmailScope: data.hasGmailScope,
+          requiresReconnect: data.requiresReconnect,
+          email: data.email,
+          message: data.message,
           loading: false,
         });
       } else {
@@ -452,16 +453,8 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
       const templatesList = data.data || data.templates || [];
       setWhatsappTemplates(templatesList);
 
-      // Auto-select first template if available
-      if (templatesList.length > 0) {
-        setSelectedTemplateId(templatesList[0].template_id);
-        // Initialize variables for the template
-        const vars: Record<string, string> = {};
-        templatesList[0].variables?.forEach((v: any) => {
-          vars[v.variable_name] = v.default_value || '';
-        });
-        setTemplateVariables(vars);
-      }
+      // Don't auto-select template - let user explicitly choose one
+      // Template variables will be initialized when user selects a template via handleTemplateSelect
     } catch (error: any) {
       console.error('Error fetching WhatsApp templates:', error);
       toast({
@@ -1449,6 +1442,16 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
               <Label htmlFor="whatsappTemplate" className="flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 Message Template *
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="w-3 h-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>Select a pre-approved WhatsApp template to use for this campaign. Templates must be approved by Meta before use.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </Label>
               <Select 
                 value={selectedTemplateId} 
@@ -1461,17 +1464,46 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
                       ? "Loading templates..." 
                       : whatsappTemplates.length === 0 
                         ? "No templates available" 
-                        : "Select a template"
+                        : "Select a template..."
                   } />
                 </SelectTrigger>
-                <SelectContent>
-                  {whatsappTemplates.map((template) => (
-                    <SelectItem key={template.template_id} value={template.template_id}>
-                      {template.name} ({template.language})
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[300px]">
+                  {whatsappTemplates.map((template) => {
+                    const bodyPreview = template.components?.body?.text 
+                      ? template.components.body.text.substring(0, 50) + (template.components.body.text.length > 50 ? '...' : '')
+                      : '';
+                    return (
+                      <SelectItem 
+                        key={template.template_id} 
+                        value={template.template_id}
+                        className="py-2"
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{template.name}</span>
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5">
+                              {template.language}
+                            </Badge>
+                            <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
+                              {template.category}
+                            </Badge>
+                          </div>
+                          {bodyPreview && (
+                            <span className="text-xs text-muted-foreground truncate max-w-[350px]">
+                              {bodyPreview}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
+              {whatsappTemplates.length > 0 && !selectedTemplateId && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {whatsappTemplates.length} template{whatsappTemplates.length > 1 ? 's' : ''} available
+                </p>
+              )}
             </div>
           )}
 
