@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Upload, FileText, Link, Download, Calendar, CheckCircle, XCircle, AlertCircle, Loader2, Mail } from "lucide-react";
+import { Plus, Upload, FileText, Link, Download, Calendar, CheckCircle, XCircle, AlertCircle, Loader2, Mail, Code, Copy, Trash2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -63,6 +63,31 @@ const Integrations = () => {
   const [dynamicInformation, setDynamicInformation] = useState("");
   const [loadingDynamicInfo, setLoadingDynamicInfo] = useState(false);
   const [savingDynamicInfo, setSavingDynamicInfo] = useState(false);
+
+  // Webchat Widget state
+  const [showWebchatModal, setShowWebchatModal] = useState(false);
+  const [webchatAgents, setWebchatAgents] = useState<Array<{ 
+    agent_id: string; 
+    name: string; 
+    prompt_id: string;
+    phone_number?: { platform: string; display_name: string };
+  }>>([]);
+  const [webchatChannels, setWebchatChannels] = useState<Array<{
+    webchat_id: string;
+    name: string;
+    embed_code: string;
+    config_url: string;
+    prompt_id: string;
+    created_at: string;
+  }>>([]);
+  const [loadingWebchatAgents, setLoadingWebchatAgents] = useState(false);
+  const [loadingWebchatChannels, setLoadingWebchatChannels] = useState(false);
+  const [creatingWidget, setCreatingWidget] = useState(false);
+  const [webchatCreationType, setWebchatCreationType] = useState<"agent" | "prompt">("agent");
+  const [selectedWebchatAgent, setSelectedWebchatAgent] = useState("");
+  const [webchatPromptId, setWebchatPromptId] = useState("");
+  const [webchatWidgetName, setWebchatWidgetName] = useState("");
+  const [showEmbedCode, setShowEmbedCode] = useState<string | null>(null);
 
   // New state for enhanced Add Lead form
   const [newLeadData, setNewLeadData] = useState({
@@ -341,6 +366,7 @@ const Integrations = () => {
   // Load agents when component mounts
   useEffect(() => {
     fetchDynamicInfoAgents();
+    fetchWebchatChannels();
   }, []);
 
   // Load dynamic info when agent selection changes
@@ -351,6 +377,176 @@ const Integrations = () => {
       setDynamicInformation("");
     }
   }, [selectedDynamicAgent]);
+
+  // ============================================
+  // Webchat Widget Functions
+  // ============================================
+
+  // Fetch available chat agents for webchat widget creation
+  const fetchWebchatAgents = async () => {
+    try {
+      setLoadingWebchatAgents(true);
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/integrations/webchat/agents`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setWebchatAgents(data.data || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch webchat agents:", error);
+    } finally {
+      setLoadingWebchatAgents(false);
+    }
+  };
+
+  // Fetch user's webchat channels
+  const fetchWebchatChannels = async () => {
+    try {
+      setLoadingWebchatChannels(true);
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/integrations/webchat/channels`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setWebchatChannels(data.data?.channels || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch webchat channels:", error);
+    } finally {
+      setLoadingWebchatChannels(false);
+    }
+  };
+
+  // Create webchat widget
+  const handleCreateWebchatWidget = async () => {
+    if (!webchatWidgetName.trim()) {
+      toast.error("Please enter a widget name");
+      return;
+    }
+
+    if (webchatCreationType === "agent" && !selectedWebchatAgent) {
+      toast.error("Please select an agent");
+      return;
+    }
+
+    if (webchatCreationType === "prompt" && !webchatPromptId.trim()) {
+      toast.error("Please enter a prompt ID");
+      return;
+    }
+
+    try {
+      setCreatingWidget(true);
+      const token = localStorage.getItem("auth_token");
+      
+      const body: { name: string; agent_id?: string; prompt_id?: string } = {
+        name: webchatWidgetName.trim(),
+      };
+
+      if (webchatCreationType === "agent") {
+        body.agent_id = selectedWebchatAgent;
+      } else {
+        body.prompt_id = webchatPromptId.trim();
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/integrations/webchat/channels`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success("Webchat widget created successfully!");
+        setShowWebchatModal(false);
+        setWebchatWidgetName("");
+        setSelectedWebchatAgent("");
+        setWebchatPromptId("");
+        setWebchatCreationType("agent");
+        // Refresh the channels list
+        await fetchWebchatChannels();
+        // Show embed code
+        if (data.data?.embed_code) {
+          setShowEmbedCode(data.data.embed_code);
+        }
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Failed to create webchat widget");
+      }
+    } catch (error) {
+      console.error("Failed to create webchat widget:", error);
+      toast.error("Failed to create webchat widget");
+    } finally {
+      setCreatingWidget(false);
+    }
+  };
+
+  // Delete webchat channel
+  const handleDeleteWebchatChannel = async (webchatId: string) => {
+    if (!confirm("Are you sure you want to delete this webchat widget?")) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/integrations/webchat/channels/${webchatId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        toast.success("Webchat widget deleted successfully");
+        await fetchWebchatChannels();
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Failed to delete webchat widget");
+      }
+    } catch (error) {
+      console.error("Failed to delete webchat widget:", error);
+      toast.error("Failed to delete webchat widget");
+    }
+  };
+
+  // Copy embed code to clipboard
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard!");
+    } catch (error) {
+      toast.error("Failed to copy to clipboard");
+    }
+  };
+
+  // Open webchat modal and fetch agents
+  const openWebchatModal = () => {
+    setShowWebchatModal(true);
+    fetchWebchatAgents();
+  };
 
   const handleDataUpload = () => {
     if (!selectedAgent || !dataUploadType) {
@@ -1172,6 +1368,431 @@ const Integrations = () => {
         </h2>
         <EmailSettingsSection />
       </div>
+
+      {/* Advanced: Webchat Widget Section */}
+      <div>
+        <h2
+          className={`text-lg font-semibold mb-4 ${
+            theme === "dark" ? "text-white" : "text-gray-900"
+          }`}
+        >
+          Advanced
+        </h2>
+        <div
+          className={`p-6 rounded-lg border ${
+            theme === "dark"
+              ? "bg-gray-800 border-gray-700"
+              : "bg-white border-gray-200"
+          }`}
+        >
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <Globe className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h3
+                  className={`font-semibold text-lg mb-1 ${
+                    theme === "dark" ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  Webchat Widgets
+                </h3>
+                <p
+                  className={`text-sm ${
+                    theme === "dark" ? "text-slate-400" : "text-gray-600"
+                  }`}
+                >
+                  Create embeddable AI chat widgets for your website
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={openWebchatModal}
+              style={{ backgroundColor: "#1A6262" }}
+              className="hover:opacity-90 text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Widget
+            </Button>
+          </div>
+
+          {/* Existing Webchat Channels */}
+          {loadingWebchatChannels ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+              <span className={`ml-2 ${theme === "dark" ? "text-slate-400" : "text-gray-600"}`}>
+                Loading widgets...
+              </span>
+            </div>
+          ) : webchatChannels.length > 0 ? (
+            <div className="space-y-4">
+              <h4 className={`text-sm font-medium ${theme === "dark" ? "text-slate-300" : "text-gray-700"}`}>
+                Your Webchat Widgets ({webchatChannels.length})
+              </h4>
+              <div className="grid gap-4">
+                {webchatChannels.map((channel) => (
+                  <div
+                    key={channel.webchat_id}
+                    className={`p-4 rounded-lg border ${
+                      theme === "dark"
+                        ? "bg-gray-700 border-gray-600"
+                        : "bg-gray-50 border-gray-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h5 className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                          {channel.name}
+                        </h5>
+                        <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                          ID: {channel.webchat_id} • Prompt: {channel.prompt_id}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(channel.embed_code)}
+                          className={theme === "dark" ? "border-gray-600 hover:bg-gray-600" : ""}
+                        >
+                          <Copy className="w-4 h-4 mr-1" />
+                          Copy Code
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowEmbedCode(channel.embed_code)}
+                          className={theme === "dark" ? "border-gray-600 hover:bg-gray-600" : ""}
+                        >
+                          <Code className="w-4 h-4 mr-1" />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteWebchatChannel(channel.webchat_id)}
+                          className={`${
+                            theme === "dark"
+                              ? "border-red-800 text-red-400 hover:bg-red-900/20"
+                              : "border-red-300 text-red-600 hover:bg-red-50"
+                          }`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className={`text-center py-8 ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+              <Globe className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No webchat widgets created yet</p>
+              <p className="text-sm mt-1">Click "Create Widget" to add an AI chat widget to your website</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create Webchat Widget Modal */}
+      <Dialog open={showWebchatModal} onOpenChange={setShowWebchatModal}>
+        <DialogContent
+          className={`max-w-lg ${
+            theme === "dark"
+              ? "bg-gray-800 border-gray-700"
+              : "bg-white border-gray-200"
+          }`}
+        >
+          <DialogHeader>
+            <DialogTitle
+              className={`flex items-center ${
+                theme === "dark" ? "text-white" : "text-gray-900"
+              }`}
+            >
+              <Globe className="w-5 h-5 mr-2" />
+              Create Webchat Widget
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            {/* Widget Name */}
+            <div>
+              <label
+                className={`text-sm font-medium mb-2 block ${
+                  theme === "dark" ? "text-slate-300" : "text-gray-700"
+                }`}
+              >
+                Widget Name *
+              </label>
+              <Input
+                placeholder="e.g., Customer Support Chat"
+                value={webchatWidgetName}
+                onChange={(e) => setWebchatWidgetName(e.target.value)}
+                className={
+                  theme === "dark"
+                    ? "bg-gray-700 border-gray-600 text-white"
+                    : ""
+                }
+              />
+            </div>
+
+            {/* Creation Type Toggle */}
+            <div>
+              <label
+                className={`text-sm font-medium mb-3 block ${
+                  theme === "dark" ? "text-slate-300" : "text-gray-700"
+                }`}
+              >
+                AI Agent Configuration
+              </label>
+              
+              <div className="space-y-4">
+                {/* Option A: Select Existing Agent */}
+                <div
+                  className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                    webchatCreationType === "agent"
+                      ? theme === "dark"
+                        ? "border-purple-500 bg-purple-900/20"
+                        : "border-purple-500 bg-purple-50"
+                      : theme === "dark"
+                        ? "border-gray-600 hover:border-gray-500"
+                        : "border-gray-200 hover:border-gray-300"
+                  }`}
+                  onClick={() => setWebchatCreationType("agent")}
+                >
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        webchatCreationType === "agent"
+                          ? "border-purple-500"
+                          : theme === "dark"
+                            ? "border-gray-500"
+                            : "border-gray-300"
+                      }`}
+                    >
+                      {webchatCreationType === "agent" && (
+                        <div className="w-2 h-2 rounded-full bg-purple-500" />
+                      )}
+                    </div>
+                    <span className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                      Copy from Existing Agent
+                    </span>
+                  </div>
+                  
+                  {webchatCreationType === "agent" && (
+                    <div className="ml-7">
+                      {loadingWebchatAgents ? (
+                        <div className="flex items-center space-x-2 py-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className={theme === "dark" ? "text-slate-400" : "text-gray-500"}>
+                            Loading agents...
+                          </span>
+                        </div>
+                      ) : webchatAgents.length > 0 ? (
+                        <Select
+                          value={selectedWebchatAgent}
+                          onValueChange={setSelectedWebchatAgent}
+                        >
+                          <SelectTrigger
+                            className={
+                              theme === "dark"
+                                ? "bg-gray-700 border-gray-600 text-white"
+                                : ""
+                            }
+                          >
+                            <SelectValue placeholder="Select an agent..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {webchatAgents.map((agent) => (
+                              <SelectItem key={agent.agent_id} value={agent.agent_id}>
+                                <div className="flex flex-col">
+                                  <span>{agent.name}</span>
+                                  <span className="text-xs text-gray-500">
+                                    Prompt: {agent.prompt_id}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                          No existing agents found. Use prompt ID option instead.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* OR Divider */}
+                <div className="flex items-center">
+                  <div className={`flex-1 border-t ${theme === "dark" ? "border-gray-600" : "border-gray-200"}`} />
+                  <span className={`px-4 text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                    OR
+                  </span>
+                  <div className={`flex-1 border-t ${theme === "dark" ? "border-gray-600" : "border-gray-200"}`} />
+                </div>
+
+                {/* Option B: Enter Prompt ID */}
+                <div
+                  className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                    webchatCreationType === "prompt"
+                      ? theme === "dark"
+                        ? "border-purple-500 bg-purple-900/20"
+                        : "border-purple-500 bg-purple-50"
+                      : theme === "dark"
+                        ? "border-gray-600 hover:border-gray-500"
+                        : "border-gray-200 hover:border-gray-300"
+                  }`}
+                  onClick={() => setWebchatCreationType("prompt")}
+                >
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        webchatCreationType === "prompt"
+                          ? "border-purple-500"
+                          : theme === "dark"
+                            ? "border-gray-500"
+                            : "border-gray-300"
+                      }`}
+                    >
+                      {webchatCreationType === "prompt" && (
+                        <div className="w-2 h-2 rounded-full bg-purple-500" />
+                      )}
+                    </div>
+                    <span className={`font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                      Use New Prompt ID
+                    </span>
+                  </div>
+                  
+                  {webchatCreationType === "prompt" && (
+                    <div className="ml-7">
+                      <Input
+                        placeholder="e.g., prompt_abc123xyz"
+                        value={webchatPromptId}
+                        onChange={(e) => setWebchatPromptId(e.target.value)}
+                        className={
+                          theme === "dark"
+                            ? "bg-gray-700 border-gray-600 text-white"
+                            : ""
+                        }
+                      />
+                      <p className={`text-xs mt-2 ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                        Enter your OpenAI Responses API prompt ID
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowWebchatModal(false);
+                  setWebchatWidgetName("");
+                  setSelectedWebchatAgent("");
+                  setWebchatPromptId("");
+                  setWebchatCreationType("agent");
+                }}
+                className={
+                  theme === "dark"
+                    ? "bg-gray-700 border-gray-600 text-slate-300 hover:bg-gray-600"
+                    : ""
+                }
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateWebchatWidget}
+                disabled={creatingWidget}
+                style={{ backgroundColor: "#1A6262" }}
+                className="hover:opacity-90 text-white"
+              >
+                {creatingWidget ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Widget
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Embed Code View Modal */}
+      <Dialog open={!!showEmbedCode} onOpenChange={() => setShowEmbedCode(null)}>
+        <DialogContent
+          className={`max-w-2xl ${
+            theme === "dark"
+              ? "bg-gray-800 border-gray-700"
+              : "bg-white border-gray-200"
+          }`}
+        >
+          <DialogHeader>
+            <DialogTitle
+              className={`flex items-center ${
+                theme === "dark" ? "text-white" : "text-gray-900"
+              }`}
+            >
+              <Code className="w-5 h-5 mr-2" />
+              Widget Embed Code
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            <p className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-600"}`}>
+              Copy this code and paste it into your website's HTML, just before the closing <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">&lt;/body&gt;</code> tag.
+            </p>
+            
+            <div
+              className={`p-4 rounded-lg font-mono text-sm overflow-x-auto ${
+                theme === "dark"
+                  ? "bg-gray-900 border border-gray-700"
+                  : "bg-gray-100 border border-gray-200"
+              }`}
+            >
+              <pre className={`whitespace-pre-wrap break-all ${theme === "dark" ? "text-green-400" : "text-gray-800"}`}>
+                {showEmbedCode}
+              </pre>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowEmbedCode(null)}
+                className={
+                  theme === "dark"
+                    ? "bg-gray-700 border-gray-600 text-slate-300 hover:bg-gray-600"
+                    : ""
+                }
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  if (showEmbedCode) copyToClipboard(showEmbedCode);
+                }}
+                style={{ backgroundColor: "#1A6262" }}
+                className="hover:opacity-90 text-white"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy to Clipboard
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Data Upload Modal */}
       <Dialog open={showDataModal} onOpenChange={setShowDataModal}>

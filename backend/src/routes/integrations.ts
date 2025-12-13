@@ -1,11 +1,12 @@
 /**
  * Integration Routes
  * 
- * API routes for third-party integrations (Google Calendar, etc.)
+ * API routes for third-party integrations (Google Calendar, Webchat, etc.)
  */
 
 import { Router } from 'express';
 import { integrationController } from '../controllers/integrationController';
+import { webchatController } from '../controllers/webchatController';
 import { authenticateToken } from '../middleware/auth';
 import { authRateLimit } from '../middleware/rateLimit';
 
@@ -192,6 +193,66 @@ router.put(
   '/agents/:agentId/dynamic-info',
   authenticateToken,
   integrationController.updateAgentDynamicInfo.bind(integrationController)
+);
+
+// ============================================
+// Webchat Widget Routes
+// ============================================
+
+/**
+ * GET /api/integrations/webchat/agents
+ * List chat agents available to copy for webchat widgets
+ * Requires authentication
+ */
+router.get(
+  '/webchat/agents',
+  authenticateToken,
+  webchatController.listChatAgents
+);
+
+/**
+ * POST /api/integrations/webchat/channels
+ * Create a new webchat widget channel
+ * Body: { name: string, prompt_id?: string, agent_id?: string }
+ * Requires authentication
+ */
+router.post(
+  '/webchat/channels',
+  authenticateToken,
+  webchatController.createWebchatChannel
+);
+
+/**
+ * GET /api/integrations/webchat/channels
+ * List all webchat channels for the authenticated user
+ * Requires authentication
+ */
+router.get(
+  '/webchat/channels',
+  authenticateToken,
+  webchatController.listWebchatChannels
+);
+
+/**
+ * GET /api/integrations/webchat/channels/:webchatId/embed
+ * Get embed code for a specific webchat widget
+ * Requires authentication
+ */
+router.get(
+  '/webchat/channels/:webchatId/embed',
+  authenticateToken,
+  webchatController.getWebchatEmbed
+);
+
+/**
+ * DELETE /api/integrations/webchat/channels/:webchatId
+ * Delete a webchat widget channel
+ * Requires authentication
+ */
+router.delete(
+  '/webchat/channels/:webchatId',
+  authenticateToken,
+  webchatController.deleteWebchatChannel
 );
 
 export default router;
