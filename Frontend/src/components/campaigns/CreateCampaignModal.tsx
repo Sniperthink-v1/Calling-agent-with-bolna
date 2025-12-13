@@ -85,6 +85,56 @@ interface WhatsAppTemplate {
 }
 
 /**
+ * Format a date/time string for display
+ */
+function formatMeetingDateTime(dateTimeStr: string | undefined): string {
+  if (!dateTimeStr) return '';
+  try {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return dateTimeStr;
+  }
+}
+
+function formatMeetingDate(dateTimeStr: string | undefined): string {
+  if (!dateTimeStr) return '';
+  try {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  } catch {
+    return dateTimeStr;
+  }
+}
+
+function formatMeetingTime(dateTimeStr: string | undefined): string {
+  if (!dateTimeStr) return '';
+  try {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return dateTimeStr;
+  }
+}
+
+/**
  * Resolve a variable value from contact data using dashboard_mapping
  * Dashboard is the source of truth for all variable resolution.
  * For campaigns with CSV upload, variables are resolved per-contact at send time.
@@ -109,13 +159,25 @@ function resolveVariableFromContactData(
     'tags': Array.isArray(contactData.tags) ? contactData.tags.join(', ') : contactData.tags,
   };
 
-  // Meeting fields (resolved at send time from calendar_meetings if available)
+  // Meeting fields (from calendar_meetings JOIN - fields come as meeting_link, meeting_start_time, etc.)
+  // Also support camelCase versions for flexibility
+  const meetingLink = contactData.meeting_link || contactData.meetingLink;
+  const meetingStartTime = contactData.meeting_start_time || contactData.meetingStartTime || contactData.meetingTime;
+  const meetingTitle = contactData.meeting_title || contactData.meetingTitle || contactData.meetingDetails;
+  
   const meetingFieldMap: Record<string, string | undefined> = {
-    'meetingLink': contactData.meetingLink || contactData.meeting_link,
-    'meetingTime': contactData.meetingTime || contactData.meeting_time,
-    'meetingDate': contactData.meetingDate || contactData.meeting_date,
-    'meetingDateTime': contactData.meetingDateTime || contactData.meeting_datetime,
-    'meetingDetails': contactData.meetingDetails || contactData.meeting_details,
+    'meetingLink': meetingLink,
+    'meeting_link': meetingLink,
+    'meetingTime': formatMeetingTime(meetingStartTime),
+    'meeting_time': formatMeetingTime(meetingStartTime),
+    'meetingDate': formatMeetingDate(meetingStartTime),
+    'meeting_date': formatMeetingDate(meetingStartTime),
+    'meetingDateTime': formatMeetingDateTime(meetingStartTime),
+    'meeting_datetime': formatMeetingDateTime(meetingStartTime),
+    'meetingDetails': meetingTitle,
+    'meeting_details': meetingTitle,
+    'meetingTitle': meetingTitle,
+    'meeting_title': meetingTitle,
   };
 
   // Check contact fields first

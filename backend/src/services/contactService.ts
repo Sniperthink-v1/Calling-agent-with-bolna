@@ -26,7 +26,7 @@ export class ContactService {
       let total: number;
 
       if (search) {
-        // Enhanced search with auto-creation info
+        // Enhanced search with auto-creation info and meeting data
         // Universal search across Name, Company, Phone, Email, Notes, Tags
         const query = `
           SELECT c.*, 
@@ -46,7 +46,14 @@ export class ContactService {
             COALESCE(
               (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
               'outbound'
-            ) as call_type
+            ) as call_type,
+            -- Meeting data from calendar_meetings (latest upcoming or most recent meeting)
+            latest_meeting.meeting_link,
+            latest_meeting.meeting_start_time,
+            latest_meeting.meeting_end_time,
+            latest_meeting.meeting_title,
+            latest_meeting.meeting_id,
+            latest_meeting.meeting_status
           FROM contacts c
           LEFT JOIN calls ON c.auto_created_from_call_id = calls.id
           LEFT JOIN LATERAL (
@@ -56,6 +63,22 @@ export class ContactService {
             ORDER BY created_at DESC
             LIMIT 1
           ) last_call ON true
+          LEFT JOIN LATERAL (
+            SELECT 
+              cm.id as meeting_id,
+              cm.meeting_link,
+              cm.meeting_start_time,
+              cm.meeting_end_time,
+              cm.meeting_title,
+              cm.status as meeting_status
+            FROM calendar_meetings cm
+            WHERE cm.contact_id = c.id 
+              AND cm.status IN ('scheduled', 'rescheduled')
+            ORDER BY 
+              CASE WHEN cm.meeting_start_time >= NOW() THEN 0 ELSE 1 END,
+              ABS(EXTRACT(EPOCH FROM (cm.meeting_start_time - NOW())))
+            LIMIT 1
+          ) latest_meeting ON true
           WHERE c.user_id = $1 
           AND (
             c.name ILIKE $2 
@@ -74,7 +97,7 @@ export class ContactService {
         // Apply pagination to search results
         contacts = contacts.slice(offset, offset + limit);
       } else {
-        // Get all contacts with pagination, sorting, and auto-creation info
+        // Get all contacts with pagination, sorting, auto-creation info, and meeting data
         // Using CASE statement for safe dynamic sorting
         const validSortColumns: Record<string, string> = {
           'name': 'c.name',
@@ -102,7 +125,14 @@ export class ContactService {
             COALESCE(
               (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
               'outbound'
-            ) as call_type
+            ) as call_type,
+            -- Meeting data from calendar_meetings (latest upcoming or most recent meeting)
+            latest_meeting.meeting_link,
+            latest_meeting.meeting_start_time,
+            latest_meeting.meeting_end_time,
+            latest_meeting.meeting_title,
+            latest_meeting.meeting_id,
+            latest_meeting.meeting_status
           FROM contacts c
           LEFT JOIN calls ON c.auto_created_from_call_id = calls.id
           LEFT JOIN LATERAL (
@@ -112,6 +142,22 @@ export class ContactService {
             ORDER BY created_at DESC
             LIMIT 1
           ) last_call ON true
+          LEFT JOIN LATERAL (
+            SELECT 
+              cm.id as meeting_id,
+              cm.meeting_link,
+              cm.meeting_start_time,
+              cm.meeting_end_time,
+              cm.meeting_title,
+              cm.status as meeting_status
+            FROM calendar_meetings cm
+            WHERE cm.contact_id = c.id 
+              AND cm.status IN ('scheduled', 'rescheduled')
+            ORDER BY 
+              CASE WHEN cm.meeting_start_time >= NOW() THEN 0 ELSE 1 END,
+              ABS(EXTRACT(EPOCH FROM (cm.meeting_start_time - NOW())))
+            LIMIT 1
+          ) latest_meeting ON true
           WHERE c.user_id = $1 
           ORDER BY ${sortColumn} ${sortDirection}
           LIMIT $2 OFFSET $3
