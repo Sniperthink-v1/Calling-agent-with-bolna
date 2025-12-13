@@ -88,6 +88,8 @@ const Integrations = () => {
   const [webchatPromptId, setWebchatPromptId] = useState("");
   const [webchatWidgetName, setWebchatWidgetName] = useState("");
   const [showEmbedCode, setShowEmbedCode] = useState<string | null>(null);
+  const [webchatPrimaryColor, setWebchatPrimaryColor] = useState("#3B82F6");
+  const [webchatSecondaryColor, setWebchatSecondaryColor] = useState("#EFF6FF");
 
   // New state for enhanced Add Lead form
   const [newLeadData, setNewLeadData] = useState({
@@ -453,8 +455,16 @@ const Integrations = () => {
       setCreatingWidget(true);
       const token = localStorage.getItem("auth_token");
       
-      const body: { name: string; agent_id?: string; prompt_id?: string } = {
+      const body: { 
+        name: string; 
+        agent_id?: string; 
+        prompt_id?: string;
+        primary_color?: string;
+        secondary_color?: string;
+      } = {
         name: webchatWidgetName.trim(),
+        primary_color: webchatPrimaryColor,
+        secondary_color: webchatSecondaryColor,
       };
 
       if (webchatCreationType === "agent") {
@@ -483,6 +493,8 @@ const Integrations = () => {
         setSelectedWebchatAgent("");
         setWebchatPromptId("");
         setWebchatCreationType("agent");
+        setWebchatPrimaryColor("#3B82F6");
+        setWebchatSecondaryColor("#EFF6FF");
         // Refresh the channels list
         await fetchWebchatChannels();
         // Show embed code
@@ -1499,7 +1511,7 @@ const Integrations = () => {
       {/* Create Webchat Widget Modal */}
       <Dialog open={showWebchatModal} onOpenChange={setShowWebchatModal}>
         <DialogContent
-          className={`max-w-lg ${
+          className={`max-w-2xl max-h-[90vh] overflow-y-auto ${
             theme === "dark"
               ? "bg-gray-800 border-gray-700"
               : "bg-white border-gray-200"
@@ -1688,6 +1700,168 @@ const Integrations = () => {
               </div>
             </div>
 
+            {/* Color Customization */}
+            <div>
+              <label
+                className={`text-sm font-medium mb-3 block ${
+                  theme === "dark" ? "text-slate-300" : "text-gray-700"
+                }`}
+              >
+                Widget Colors
+              </label>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* Primary Color */}
+                <div>
+                  <label
+                    className={`text-xs mb-2 block ${
+                      theme === "dark" ? "text-slate-400" : "text-gray-600"
+                    }`}
+                  >
+                    Primary Color (Buttons & Messages)
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={webchatPrimaryColor}
+                      onChange={(e) => setWebchatPrimaryColor(e.target.value)}
+                      className="w-10 h-10 rounded cursor-pointer border-0 p-0"
+                    />
+                    <Input
+                      value={webchatPrimaryColor}
+                      onChange={(e) => setWebchatPrimaryColor(e.target.value)}
+                      placeholder="#3B82F6"
+                      className={`flex-1 font-mono text-sm ${
+                        theme === "dark"
+                          ? "bg-gray-700 border-gray-600 text-white"
+                          : ""
+                      }`}
+                    />
+                  </div>
+                </div>
+                
+                {/* Secondary Color */}
+                <div>
+                  <label
+                    className={`text-xs mb-2 block ${
+                      theme === "dark" ? "text-slate-400" : "text-gray-600"
+                    }`}
+                  >
+                    Secondary Color (Background)
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={webchatSecondaryColor}
+                      onChange={(e) => setWebchatSecondaryColor(e.target.value)}
+                      className="w-10 h-10 rounded cursor-pointer border-0 p-0"
+                    />
+                    <Input
+                      value={webchatSecondaryColor}
+                      onChange={(e) => setWebchatSecondaryColor(e.target.value)}
+                      placeholder="#EFF6FF"
+                      className={`flex-1 font-mono text-sm ${
+                        theme === "dark"
+                          ? "bg-gray-700 border-gray-600 text-white"
+                          : ""
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Preview */}
+            <div>
+              <label
+                className={`text-sm font-medium mb-3 block ${
+                  theme === "dark" ? "text-slate-300" : "text-gray-700"
+                }`}
+              >
+                Live Preview
+              </label>
+              
+              <div
+                className={`rounded-lg p-4 border ${
+                  theme === "dark" ? "bg-gray-900 border-gray-700" : "bg-gray-50 border-gray-200"
+                }`}
+              >
+                {/* Mini Chat Widget Preview */}
+                <div className="flex flex-col h-64 rounded-lg overflow-hidden border shadow-lg" style={{ backgroundColor: webchatSecondaryColor }}>
+                  {/* Chat Header */}
+                  <div
+                    className="px-4 py-3 flex items-center space-x-3"
+                    style={{ backgroundColor: webchatPrimaryColor }}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-white font-medium text-sm">{webchatWidgetName || "AI Assistant"}</p>
+                      <p className="text-white/70 text-xs">Online</p>
+                    </div>
+                  </div>
+                  
+                  {/* Chat Messages */}
+                  <div className="flex-1 p-3 space-y-2 overflow-hidden">
+                    {/* Bot Message */}
+                    <div className="flex items-start space-x-2">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs"
+                        style={{ backgroundColor: webchatPrimaryColor }}
+                      >
+                        AI
+                      </div>
+                      <div className={`px-3 py-2 rounded-lg text-xs max-w-[70%] ${theme === "dark" ? "bg-gray-700 text-white" : "bg-white text-gray-800"}`}>
+                        Hello! How can I help you today?
+                      </div>
+                    </div>
+                    
+                    {/* User Message */}
+                    <div className="flex items-start justify-end">
+                      <div
+                        className="px-3 py-2 rounded-lg text-xs max-w-[70%] text-white"
+                        style={{ backgroundColor: webchatPrimaryColor }}
+                      >
+                        I have a question
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Input Area */}
+                  <div className={`px-3 py-2 border-t ${theme === "dark" ? "border-gray-600 bg-gray-800" : "border-gray-200 bg-white"}`}>
+                    <div className="flex items-center space-x-2">
+                      <div className={`flex-1 px-3 py-1.5 rounded-full text-xs ${theme === "dark" ? "bg-gray-700 text-gray-400" : "bg-gray-100 text-gray-500"}`}>
+                        Type a message...
+                      </div>
+                      <button
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-white"
+                        style={{ backgroundColor: webchatPrimaryColor }}
+                      >
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Floating Button Preview */}
+                <div className="mt-3 flex items-center justify-end">
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg cursor-pointer"
+                    style={{ backgroundColor: webchatPrimaryColor }}
+                  >
+                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Action Buttons */}
             <div className="flex justify-end space-x-2 pt-4">
               <Button
@@ -1698,6 +1872,8 @@ const Integrations = () => {
                   setSelectedWebchatAgent("");
                   setWebchatPromptId("");
                   setWebchatCreationType("agent");
+                  setWebchatPrimaryColor("#3B82F6");
+                  setWebchatSecondaryColor("#EFF6FF");
                 }}
                 className={
                   theme === "dark"

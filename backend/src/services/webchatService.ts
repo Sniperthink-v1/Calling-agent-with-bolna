@@ -33,6 +33,8 @@ export interface CreateWebchatRequest {
   prompt_id?: string;  // Either prompt_id or agent_id is required
   agent_id?: string;   // Either prompt_id or agent_id is required
   name: string;
+  primary_color?: string;   // Widget primary color (buttons, user messages)
+  secondary_color?: string; // Widget secondary color (background)
 }
 
 export interface WebchatResponse<T = any> {
@@ -170,6 +172,8 @@ class WebchatServiceClient {
         name: data.name,
         hasPromptId: !!data.prompt_id,
         hasAgentId: !!data.agent_id,
+        primaryColor: data.primary_color,
+        secondaryColor: data.secondary_color,
       });
 
       const response = await this.getClient().post('/api/v1/webchat/channels', data);
