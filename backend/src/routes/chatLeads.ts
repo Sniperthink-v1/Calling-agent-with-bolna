@@ -20,16 +20,17 @@ const CHAT_AGENT_SERVER_URL = process.env.CHAT_AGENT_SERVER_URL || 'http://local
  * 
  * Proxies to: GET /users/:user_id/leads
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
     
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Unauthorized',
         message: 'User ID not found in request',
       });
+      return;
     }
 
     // Forward all query params to the chat agent server
@@ -54,7 +55,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Forward error response if available
     if (error.response) {
-      return res.status(error.response.status).json(error.response.data);
+      res.status(error.response.status).json(error.response.data);
+      return;
     }
 
     res.status(500).json({
@@ -71,16 +73,17 @@ router.get('/', async (req: Request, res: Response) => {
  * 
  * Proxies to: GET /users/:user_id/leads/stats
  */
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
     
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Unauthorized',
         message: 'User ID not found in request',
       });
+      return;
     }
 
     const queryParams = new URLSearchParams(req.query as Record<string, string>);
@@ -103,7 +106,8 @@ router.get('/stats', async (req: Request, res: Response) => {
     });
 
     if (error.response) {
-      return res.status(error.response.status).json(error.response.data);
+      res.status(error.response.status).json(error.response.data);
+      return;
     }
 
     res.status(500).json({
@@ -120,17 +124,18 @@ router.get('/stats', async (req: Request, res: Response) => {
  * 
  * Proxies to: GET /users/:user_id/leads/:customer_phone
  */
-router.get('/:customerPhone', async (req: Request, res: Response) => {
+router.get('/:customerPhone', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
     const { customerPhone } = req.params;
     
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Unauthorized',
         message: 'User ID not found in request',
       });
+      return;
     }
 
     const encodedPhone = encodeURIComponent(customerPhone);
@@ -154,7 +159,8 @@ router.get('/:customerPhone', async (req: Request, res: Response) => {
     });
 
     if (error.response) {
-      return res.status(error.response.status).json(error.response.data);
+      res.status(error.response.status).json(error.response.data);
+      return;
     }
 
     res.status(500).json({
@@ -171,17 +177,18 @@ router.get('/:customerPhone', async (req: Request, res: Response) => {
  * 
  * Proxies to: GET /users/:user_id/leads/:customer_phone/messages
  */
-router.get('/:customerPhone/messages', async (req: Request, res: Response) => {
+router.get('/:customerPhone/messages', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
     const { customerPhone } = req.params;
     
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Unauthorized',
         message: 'User ID not found in request',
       });
+      return;
     }
 
     const encodedPhone = encodeURIComponent(customerPhone);
@@ -206,7 +213,8 @@ router.get('/:customerPhone/messages', async (req: Request, res: Response) => {
     });
 
     if (error.response) {
-      return res.status(error.response.status).json(error.response.data);
+      res.status(error.response.status).json(error.response.data);
+      return;
     }
 
     res.status(500).json({
@@ -223,17 +231,18 @@ router.get('/:customerPhone/messages', async (req: Request, res: Response) => {
  * 
  * Proxies to: GET /users/:user_id/messages/:message_id/status
  */
-router.get('/messages/:messageId/status', async (req: Request, res: Response) => {
+router.get('/messages/:messageId/status', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
     const { messageId } = req.params;
     
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Unauthorized',
         message: 'User ID not found in request',
       });
+      return;
     }
 
     const encodedMessageId = encodeURIComponent(messageId);
@@ -257,7 +266,8 @@ router.get('/messages/:messageId/status', async (req: Request, res: Response) =>
     });
 
     if (error.response) {
-      return res.status(error.response.status).json(error.response.data);
+      res.status(error.response.status).json(error.response.data);
+      return;
     }
 
     res.status(500).json({
