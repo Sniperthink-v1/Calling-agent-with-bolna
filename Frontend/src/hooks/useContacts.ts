@@ -136,8 +136,17 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
   const createContactMutation = useMutation({
     mutationFn: async (data: CreateContactRequest) => {
       const response = await apiService.createContact(data);
-      const contact = response.data || response as unknown as Contact;
-      return toCamelCase(contact);
+      // Backend returns: { success: true, data: { contact } }
+      const maybeWrapped = response.data as unknown;
+      const contact = (maybeWrapped && typeof maybeWrapped === 'object' && 'contact' in (maybeWrapped as any))
+        ? (maybeWrapped as any).contact
+        : maybeWrapped;
+
+      if (!contact || typeof contact !== 'object') {
+        throw new Error('Invalid createContact response: missing contact');
+      }
+
+      return toCamelCase(contact as Contact);
     },
     onMutate: async (newContact) => {
       // Cancel any outgoing refetches
@@ -186,8 +195,17 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
   const updateContactMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateContactRequest }) => {
       const response = await apiService.updateContact(id, data);
-      const contact = response.data || response as unknown as Contact;
-      return toCamelCase(contact);
+      // Backend returns: { success: true, data: { contact } }
+      const maybeWrapped = response.data as unknown;
+      const contact = (maybeWrapped && typeof maybeWrapped === 'object' && 'contact' in (maybeWrapped as any))
+        ? (maybeWrapped as any).contact
+        : maybeWrapped;
+
+      if (!contact || typeof contact !== 'object') {
+        throw new Error('Invalid updateContact response: missing contact');
+      }
+
+      return toCamelCase(contact as Contact);
     },
     onMutate: async ({ id, data }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.contacts(user?.id) });
