@@ -45,6 +45,7 @@ export interface LeadAnalyticsInterface extends BaseModelInterface {
   company_name?: string;
   extracted_name?: string;
   extracted_email?: string;
+  requirements?: string;
   // Dedicated CTA boolean columns
   cta_pricing_clicked?: boolean;
   cta_demo_clicked?: boolean;
@@ -83,6 +84,7 @@ export interface CreateLeadAnalyticsData {
   company_name?: string;
   extracted_name?: string;
   extracted_email?: string;
+  requirements?: string;
   // Dedicated CTA boolean columns
   cta_pricing_clicked?: boolean;
   cta_demo_clicked?: boolean;
@@ -150,7 +152,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         engagement_health, engagement_score,
         total_score, lead_status_tag,
         reasoning, cta_interactions,
-        company_name, extracted_name, extracted_email,
+        company_name, extracted_name, extracted_email, requirements,
         cta_pricing_clicked, cta_demo_clicked, cta_followup_clicked,
         cta_sample_clicked, cta_escalated_to_human,
         smart_notification, demo_book_datetime
@@ -165,10 +167,10 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         $15, $16,
         $17, $18,
         $19, $20,
-        $21, $22, $23,
-        $24, $25, $26,
-        $27, $28,
-        $29, $30
+        $21, $22, $23, $24,
+        $25, $26, $27,
+        $28, $29,
+        $30, $31
       )
       ON CONFLICT (user_id, phone_number, analysis_type) WHERE (analysis_type = 'complete')
       DO UPDATE SET
@@ -192,6 +194,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         company_name = EXCLUDED.company_name,
         extracted_name = EXCLUDED.extracted_name,
         extracted_email = EXCLUDED.extracted_email,
+        requirements = EXCLUDED.requirements,
         cta_pricing_clicked = EXCLUDED.cta_pricing_clicked,
         cta_demo_clicked = EXCLUDED.cta_demo_clicked,
         cta_followup_clicked = EXCLUDED.cta_followup_clicked,
@@ -227,6 +230,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
       analyticsData.company_name ?? null,
       analyticsData.extracted_name ?? null,
       analyticsData.extracted_email ?? null,
+      analyticsData.requirements ?? null,
       analyticsData.cta_pricing_clicked ?? false,
       analyticsData.cta_demo_clicked ?? false,
       analyticsData.cta_followup_clicked ?? false,

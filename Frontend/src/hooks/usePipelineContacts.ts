@@ -4,16 +4,29 @@
  * Fetches contacts with quality badges for the pipeline/kanban view.
  * Quality badges (Hot/Warm/Cold) are derived from lead_analytics.
  * Uses user's custom lead stages from useLeadStages hook.
+ * 
+ * Optimized payload - only includes fields needed for display:
+ * name, lead_status, source, email, phone, company, last_updated, tags
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
 import { useLeadStages } from './useLeadStages';
-import type { Contact, LeadStage } from '../types';
+import type { LeadStage } from '../types';
 
-// Extended contact with quality badge info
-export interface PipelineContact extends Contact {
+// Slim pipeline contact interface - only required fields for display
+export interface PipelineContact {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  email: string | null;
+  company: string | null;
+  leadStage: string | null;
+  leadStageUpdatedAt: string | null;
+  autoCreationSource: string | null;
+  tags: string[];
+  updatedAt: string;
   qualityBadge: 'Hot' | 'Warm' | 'Cold' | null;
   totalScore: number | null;
 }

@@ -49,15 +49,14 @@ import { cn } from '@/lib/utils';
 import { usePipelineContacts, type PipelineContact } from '@/hooks/usePipelineContacts';
 import { PREDEFINED_LEAD_STAGES } from '@/types/api';
 import { useToast } from '@/components/ui/use-toast';
-import type { Contact } from '@/types';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface PipelineViewProps {
-  onContactSelect?: (contact: Contact) => void;
-  onContactEdit?: (contact: Contact) => void;
+  onContactSelect?: (contact: PipelineContact) => void;
+  onContactEdit?: (contact: PipelineContact) => void;
   className?: string;
 }
 
@@ -65,13 +64,13 @@ interface StageColumnProps {
   stageName: string;
   stageColor: string;
   contacts: PipelineContact[];
-  onContactSelect?: (contact: Contact) => void;
+  onContactSelect?: (contact: PipelineContact) => void;
   activeId: string | null;
 }
 
 interface LeadCardProps {
   contact: PipelineContact;
-  onSelect?: (contact: Contact) => void;
+  onSelect?: (contact: PipelineContact) => void;
   isDragging?: boolean;
   isOverlay?: boolean;
 }
@@ -87,8 +86,9 @@ const getInitials = (name: string): string => {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
-const getDaysInStage = (leadStageUpdatedAt?: string, createdAt?: string): number => {
-  const dateStr = leadStageUpdatedAt || createdAt;
+const getDaysInStage = (leadStageUpdatedAt?: string | null, updatedAt?: string | null): number => {
+  // Use leadStageUpdatedAt if available, otherwise fall back to updatedAt
+  const dateStr = leadStageUpdatedAt || updatedAt;
   if (!dateStr) return 0;
   
   const date = new Date(dateStr);
@@ -124,10 +124,7 @@ const getSourceLabel = (source?: string): string => {
 // Quality Badge Component
 // ============================================================================
 
-const QualityBadge: React.FC<{ quality: 'Hot' | 'Warm' | 'Cold' | null; score?: number | null }> = ({ 
-  quality,
-  score 
-}) => {
+const QualityBadge: React.FC<{ quality: 'Hot' | 'Warm' | 'Cold' | null }> = ({ quality }) => {
   if (!quality) return null;
 
   const config = {
@@ -154,9 +151,6 @@ const QualityBadge: React.FC<{ quality: 'Hot' | 'Warm' | 'Cold' | null; score?: 
     <Badge className={cn('text-xs font-medium px-2 py-0.5 flex items-center gap-1 shadow-sm', className)}>
       <Icon className={cn('h-3 w-3', iconClassName)} />
       <span>{quality}</span>
-      {score !== null && score !== undefined && (
-        <span className="opacity-75">({score})</span>
-      )}
     </Badge>
   );
 };
@@ -171,7 +165,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
   isDragging = false,
   isOverlay = false,
 }) => {
-  const daysInStage = getDaysInStage(contact.leadStageUpdatedAt, contact.createdAt);
+  const daysInStage = getDaysInStage(contact.leadStageUpdatedAt, contact.updatedAt);
   const sourceLabel = getSourceLabel(contact.autoCreationSource);
 
   return (
@@ -207,7 +201,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
               <h4 className="font-semibold text-sm text-foreground truncate">
                 {contact.name}
               </h4>
-              <QualityBadge quality={contact.qualityBadge} score={contact.totalScore} />
+              <QualityBadge quality={contact.qualityBadge} />
             </div>
             
             {/* Company */}

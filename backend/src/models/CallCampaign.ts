@@ -239,7 +239,13 @@ export class CallCampaignModel {
         c.status,
         c.total_contacts,
         c.completed_calls,
-        c.successful_calls,
+        c.successful_calls, -- Keep original column for reference
+        
+        -- Calculate successful calls dynamically (unique contacts)
+        (SELECT COUNT(DISTINCT contact_id) 
+         FROM calls 
+         WHERE campaign_id = c.id AND call_lifecycle_status = 'completed') as calculated_successful_calls,
+
         c.failed_calls,
         c.created_at,
         c.started_at,
@@ -251,29 +257,36 @@ export class CallCampaignModel {
         (SELECT COUNT(*) FROM call_queue WHERE campaign_id = c.id AND status = 'cancelled') as cancelled_calls,
         (SELECT COUNT(*) FROM call_queue WHERE campaign_id = c.id AND status = 'skipped') as skipped_calls,
         
-        -- Attempt Distribution based on call_lifecycle_status from calls table
-        (SELECT COUNT(*) 
+        -- Attempt Distribution: Count unique contacts for each final outcome
+        -- A contact's final status is determined by their most recent call outcome
+        (SELECT COUNT(DISTINCT contact_id) 
          FROM calls 
          WHERE campaign_id = c.id AND call_lifecycle_status = 'busy') as busy_count,
         
-        (SELECT COUNT(*) 
+        (SELECT COUNT(DISTINCT contact_id) 
          FROM calls 
          WHERE campaign_id = c.id AND call_lifecycle_status = 'no-answer') as no_answer_count,
         
-        (SELECT COUNT(*) 
+        (SELECT COUNT(DISTINCT contact_id) 
          FROM calls 
          WHERE campaign_id = c.id 
          AND call_lifecycle_status IN ('completed', 'in-progress')) as contacted_count,
         
-        (SELECT COUNT(*) 
+        (SELECT COUNT(DISTINCT contact_id) 
          FROM calls 
          WHERE campaign_id = c.id AND call_lifecycle_status = 'failed') as failed_count,
         
-        -- Handled calls: any call with terminal outcome
+        -- Handled contacts: unique contacts with any terminal outcome (for progress %)
+        (SELECT COUNT(DISTINCT contact_id) 
+         FROM calls 
+         WHERE campaign_id = c.id 
+         AND call_lifecycle_status IN ('completed', 'no-answer', 'busy', 'failed', 'call-disconnected')) as handled_contacts,
+        
+        -- Total call attempts (includes retries)
         (SELECT COUNT(*) 
          FROM calls 
          WHERE campaign_id = c.id 
-         AND call_lifecycle_status IN ('completed', 'no-answer', 'busy', 'failed', 'call-disconnected')) as handled_calls,
+         AND call_lifecycle_status IN ('completed', 'no-answer', 'busy', 'failed', 'call-disconnected')) as total_call_attempts,
         
         -- Attempted calls: calls that left queue (have a call record)
         (SELECT COUNT(*) 
@@ -302,7 +315,8 @@ export class CallCampaignModel {
     
     // Calculate metrics
     const totalContacts = row.total_contacts || 0;
-    const handledCalls = parseInt(row.handled_calls) || 0;
+    const handledContacts = parseInt(row.handled_contacts) || 0; // Unique contacts handled
+    const totalCallAttempts = parseInt(row.total_call_attempts) || 0; // Total calls including retries
     const attemptedCalls = parseInt(row.attempted_calls) || 0;
     const contactedCalls = parseInt(row.contacted_count) || 0;
     const busyCount = parseInt(row.busy_count) || 0;
@@ -310,8 +324,9 @@ export class CallCampaignModel {
     const failedCount = parseInt(row.failed_count) || 0;
     const queuedCalls = parseInt(row.queued_calls) || 0;
     
+    // Progress is based on unique contacts handled, not total call attempts
     const progressPercentage = totalContacts > 0 
-      ? (handledCalls / totalContacts * 100) 
+      ? Math.min((handledContacts / totalContacts * 100), 100) // Cap at 100%
       : 0;
     
     const callConnectionRate = attemptedCalls > 0 
@@ -319,7 +334,7 @@ export class CallCampaignModel {
       : 0;
     
     const successRate = row.completed_calls > 0 
-      ? (row.successful_calls / row.completed_calls * 100) 
+      ? (parseInt(row.calculated_successful_calls) / row.completed_calls * 100) 
       : 0;
 
     return {
@@ -327,13 +342,14 @@ export class CallCampaignModel {
       campaign_name: row.campaign_name,
       total_contacts: totalContacts,
       completed_calls: row.completed_calls || 0,
-      successful_calls: row.successful_calls || 0,
+      successful_calls: parseInt(row.calculated_successful_calls) || 0,
       failed_calls: row.failed_calls || 0,
       in_progress: parseInt(row.processing_calls) || 0,
       queued: queuedCalls,
       
-      // Progress metrics
-      handled_calls: handledCalls,
+      // Progress metrics - use unique contacts for progress display
+      handled_calls: handledContacts, // Unique contacts handled (for progress %)
+      total_call_attempts: totalCallAttempts, // Total calls including retries
       progress_percentage: progressPercentage,
       attempted_calls: attemptedCalls,
       contacted_calls: contactedCalls,
@@ -341,7 +357,8 @@ export class CallCampaignModel {
       
       // Success metrics
       success_rate: successRate,
-      average_call_duration: parseFloat(row.avg_call_duration_seconds) || 0,
+      average_call_duration: parseFloat(row.avg_call_duration_seconds) || 0, // Legacy field (seconds)
+      average_duration_seconds: parseFloat(row.avg_call_duration_seconds) || 0,
       total_credits_used: parseInt(row.total_credits_used) || 0,
       
       // Time metrics

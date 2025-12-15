@@ -228,19 +228,66 @@ export const ReportBuilder: React.FC = () => {
         try {
             const result = await adminApiService.generateReport(reportConfig);
 
+            // Handle data response
+            const data = result.data || [];
+            
+            if (data.length === 0) {
+                toast({
+                    title: "No Data",
+                    description: "The report generated no data.",
+                    variant: "default"
+                });
+                return;
+            }
+
+            let blob: Blob;
+            let filename = `${reportConfig.name}`;
+
+            if (reportConfig.format === 'csv') {
+                // Convert to CSV
+                const headers = Object.keys(data[0]);
+                const csvContent = [
+                    headers.join(','),
+                    ...data.map((row: any) => headers.map(header => {
+                        const cell = row[header] === null || row[header] === undefined ? '' : row[header];
+                        return JSON.stringify(cell);
+                    }).join(','))
+                ].join('\n');
+                
+                blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                filename += '.csv';
+            } else {
+                // Default to JSON for other formats for now, or handle accordingly
+                // For PDF/Excel, we would ideally need a library or backend generation
+                // Fallback to JSON if not CSV for this implementation
+                blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                filename += '.json';
+                
+                if (reportConfig.format !== 'json') {
+                     toast({
+                        title: "Format Not Supported",
+                        description: `Client-side generation for ${reportConfig.format.toUpperCase()} is not fully supported. Downloaded as JSON instead.`,
+                        variant: "default"
+                    });
+                }
+            }
+
             // Trigger download
+            const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = result.downloadUrl;
-            link.download = `${reportConfig.name}.${reportConfig.format}`;
+            link.href = url;
+            link.download = filename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url);
 
             toast({
                 title: "Report Generated",
                 description: `Report "${reportConfig.name}" has been generated and downloaded.`
             });
         } catch (error) {
+            console.error("Report generation error:", error);
             toast({
                 title: "Generation Failed",
                 description: "Failed to generate report. Please try again.",

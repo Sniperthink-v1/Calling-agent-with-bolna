@@ -205,3 +205,48 @@ footer::-webkit-scrollbar {
 .dark .thin-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.3);
 }
+
+/* Invisible scrollbar that shows on hover */
+.invisible-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.invisible-scrollbar:hover {
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.invisible-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.invisible-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.invisible-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 3px;
+  transition: background-color 0.3s ease;
+}
+
+.invisible-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+}
+
+.invisible-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.7);
+}
+
+.dark .invisible-scrollbar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.dark .invisible-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.dark .invisible-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+}

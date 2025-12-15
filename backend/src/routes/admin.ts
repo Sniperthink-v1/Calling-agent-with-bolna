@@ -5,11 +5,15 @@ import { requireAdmin, requireSuperAdmin, logAdminAction } from '../middleware/a
 import phoneNumberRoutes from './phoneNumbers';
 import failureLogsRoutes from './admin/failureLogsRoutes';
 import manualTriggersRoutes from './admin/manualTriggersRoutes';
+import reportsRoutes from './admin/reportsRoutes';
 
 const router = Router();
 
 // Apply authentication middleware to all admin routes
 router.use(authenticateToken);
+
+// Register sub-routers
+router.use('/reports', reportsRoutes);
 
 // User management routes (admin access required)
 router.get(

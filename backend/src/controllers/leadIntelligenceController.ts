@@ -24,6 +24,8 @@ export interface LeadGroup {
   followUpStatus?: string;
   demoScheduled?: string; // Now stores ISO date string instead of boolean
   groupType: 'phone' | 'email' | 'individual'; // How leads are grouped
+  // Requirements from complete analysis - aggregated product/business requirements
+  requirements?: string;
 }
 
 export interface LeadTimelineEntry {
@@ -63,6 +65,8 @@ export interface LeadTimelineEntry {
   followUpStatus?: string;
   followUpCompleted?: boolean;
   followUpCallId?: string; // The call that triggered this follow-up
+  // Requirements field - product/business requirements from call
+  requirements?: string;
   // Email-specific fields
   interactionType?: 'call' | 'email'; // Type of interaction
   emailSubject?: string; // Email subject
@@ -128,7 +132,13 @@ export class LeadIntelligenceController {
             COALESCE((SELECT STRING_AGG(DISTINCT a.name, ', ') 
              FROM calls c2 
              LEFT JOIN agents a ON c2.agent_id = a.id 
-             WHERE c2.phone_number = plb.phone AND c2.user_id = $1), '')::text as interacted_agents
+             WHERE c2.phone_number = plb.phone AND c2.user_id = $1), '')::text as interacted_agents,
+            (SELECT la_complete.requirements 
+             FROM lead_analytics la_complete 
+             WHERE la_complete.user_id = $1 
+               AND la_complete.phone_number = plb.phone 
+               AND la_complete.analysis_type = 'complete' 
+             LIMIT 1)::text as requirements
           FROM phone_leads_base plb
           WHERE plb.rn = 1
         ),
@@ -174,7 +184,16 @@ export class LeadIntelligenceController {
              FROM calls c2 
              LEFT JOIN lead_analytics la2 ON c2.id = la2.call_id
              LEFT JOIN agents a ON c2.agent_id = a.id 
-             WHERE la2.extracted_email = elb.email AND c2.user_id = $1), '')::text as interacted_agents
+             WHERE la2.extracted_email = elb.email AND c2.user_id = $1), '')::text as interacted_agents,
+            -- For email-only leads (no phone), get requirements from most recent individual analysis
+            (SELECT la_ind.requirements 
+             FROM lead_analytics la_ind 
+             JOIN calls c_ind ON la_ind.call_id = c_ind.id
+             WHERE la_ind.user_id = $1 
+               AND la_ind.extracted_email = elb.email 
+               AND la_ind.analysis_type = 'individual'
+             ORDER BY c_ind.created_at DESC 
+             LIMIT 1)::text as requirements
           FROM email_leads_base elb
           WHERE elb.rn = 1
         ),
@@ -208,6 +227,7 @@ export class LeadIntelligenceController {
             la.demo_book_datetime as demo_book_datetime,
             1::bigint as interactions,
             COALESCE(a.name, '')::text as interacted_agents,
+            la.requirements::text as requirements,
             1::bigint as rn
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id
@@ -224,7 +244,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, interactions,
-            interacted_agents, rn
+            interacted_agents, requirements, rn
           FROM phone_leads
           UNION ALL
           SELECT 
@@ -232,7 +252,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, interactions,
-            interacted_agents, rn
+            interacted_agents, requirements, rn
           FROM email_leads
           UNION ALL
           SELECT 
@@ -240,7 +260,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, interactions,
-            interacted_agents, rn
+            interacted_agents, requirements, rn
           FROM individual_leads
         )
         SELECT 
@@ -312,7 +332,8 @@ export class LeadIntelligenceController {
         meetingAttendeeEmail: row.meeting_attendee_email, // Email from existing meeting
         meetingTitle: row.meeting_title, // Title from existing meeting
         meetingDescription: row.meeting_description, // Description from existing meeting
-        groupType: row.group_type
+        groupType: row.group_type,
+        requirements: row.requirements // From complete analysis (phone leads) or individual analysis (email/individual leads)
       }));
 
       res.json(leadGroups);
@@ -334,12 +355,90 @@ export class LeadIntelligenceController {
 
       // Parse group ID to get type and key
       const [groupType, ...groupKeyParts] = groupId.split('_');
-      const groupKey = groupKeyParts.join('_');
+      const rawGroupKey = groupKeyParts.join('_');
+      const groupKey = (() => {
+        try {
+          return decodeURIComponent(rawGroupKey);
+        } catch {
+          return rawGroupKey;
+        }
+      })();
+
+      if (!groupType || !groupKey) {
+        res.status(400).json({ error: 'Invalid groupId format' });
+        return;
+      }
 
       let query = '';
       let queryParams: any[] = [userId];
 
       if (groupType === 'phone') {
+        // Some environments do not have the legacy `emails` table.
+        // If it's missing, querying it will cause a 500 even if there are no email rows.
+        const emailsTableExistsResult = await this.pool.query<{ exists: boolean }>(
+          `SELECT (to_regclass('public.emails') IS NOT NULL) AS exists;`
+        );
+        const includeEmailInteractions = Boolean(emailsTableExistsResult.rows?.[0]?.exists);
+
+        const emailInteractionsUnion = includeEmailInteractions
+          ? `
+            UNION ALL
+            
+            -- Email interactions
+            SELECT 
+              e.id,
+              'email'::text as interaction_type,
+              co.name as lead_name,
+              co.email as extracted_email,
+              co.company as company_name,
+              'Email System' as interaction_agent,
+              e.sent_at as interaction_date,
+              'Email' as platform,
+              NULL as call_direction,
+              NULL as hangup_by,
+              NULL as hangup_reason,
+              CASE 
+                WHEN e.status = 'opened' THEN 'Hot'
+                WHEN e.status = 'delivered' THEN 'Warm'
+                WHEN e.status = 'failed' THEN 'Cold'
+                ELSE 'Warm'
+              END as status,
+              e.subject as smart_notification,
+              NULL as requirements,
+              NULL as duration,
+              NULL as engagement_level,
+              NULL as intent_level,
+              NULL as budget_constraint,
+              NULL as timeline_urgency,
+              NULL as fit_alignment,
+              NULL::numeric as total_score,
+              NULL::numeric as intent_score,
+              NULL::numeric as urgency_score,
+              NULL::numeric as budget_score,
+              NULL::numeric as fit_score,
+              NULL::numeric as engagement_score,
+              false as cta_pricing_clicked,
+              false as cta_demo_clicked,
+              false as cta_followup_clicked,
+              false as cta_sample_clicked,
+              false as cta_escalated_to_human,
+              NULL::timestamp as demo_book_datetime,
+              NULL::timestamp as follow_up_date,
+              NULL::text as follow_up_remark,
+              NULL::text as follow_up_status,
+              NULL::boolean as follow_up_completed,
+              NULL::uuid as follow_up_call_id,
+              e.subject as email_subject,
+              e.status as email_status,
+              e.to_email as email_to,
+              e.from_email as email_from
+            FROM emails e
+            LEFT JOIN contacts co ON e.contact_id = co.id
+            WHERE e.user_id = $1
+              AND co.phone_number = $2
+          `
+          : '';
+
         query = `
           SELECT * FROM (
             -- Call interactions
@@ -368,6 +467,7 @@ export class LeadIntelligenceController {
                 ELSE 'Cold'
               END as status,
               la.smart_notification,
+              la.requirements,
               CASE 
                 WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                   LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -411,60 +511,7 @@ export class LeadIntelligenceController {
             )
             WHERE c.user_id = $1 
               AND c.phone_number = $2
-            
-            UNION ALL
-            
-            -- Email interactions
-            SELECT 
-              e.id,
-              'email'::text as interaction_type,
-              co.name as lead_name,
-              co.email as extracted_email,
-              co.company as company_name,
-              'Email System' as interaction_agent,
-              e.sent_at as interaction_date,
-              'Email' as platform,
-              NULL as call_direction,
-              NULL as hangup_by,
-              NULL as hangup_reason,
-              CASE 
-                WHEN e.status = 'opened' THEN 'Hot'
-                WHEN e.status = 'delivered' THEN 'Warm'
-                WHEN e.status = 'failed' THEN 'Cold'
-                ELSE 'Warm'
-              END as status,
-              e.subject as smart_notification,
-              NULL as duration,
-              NULL as engagement_level,
-              NULL as intent_level,
-              NULL as budget_constraint,
-              NULL as timeline_urgency,
-              NULL as fit_alignment,
-              NULL::numeric as total_score,
-              NULL::numeric as intent_score,
-              NULL::numeric as urgency_score,
-              NULL::numeric as budget_score,
-              NULL::numeric as fit_score,
-              NULL::numeric as engagement_score,
-              false as cta_pricing_clicked,
-              false as cta_demo_clicked,
-              false as cta_followup_clicked,
-              false as cta_sample_clicked,
-              false as cta_escalated_to_human,
-              NULL::timestamp as demo_book_datetime,
-              NULL::timestamp as follow_up_date,
-              NULL::text as follow_up_remark,
-              NULL::text as follow_up_status,
-              NULL::boolean as follow_up_completed,
-              NULL::uuid as follow_up_call_id,
-              e.subject as email_subject,
-              e.status as email_status,
-              e.to_email as email_to,
-              e.from_email as email_from
-            FROM emails e
-            LEFT JOIN contacts co ON e.contact_id = co.id
-            WHERE e.user_id = $1
-              AND co.phone_number = $2
+            ${emailInteractionsUnion}
           ) combined
           ORDER BY interaction_date DESC;
         `;
@@ -495,6 +542,7 @@ export class LeadIntelligenceController {
               ELSE 'Cold'
             END as status,
             la.smart_notification,
+            la.requirements,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -563,6 +611,7 @@ export class LeadIntelligenceController {
               ELSE 'Cold'
             END as status,
             la.smart_notification,
+            la.requirements,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -601,6 +650,9 @@ export class LeadIntelligenceController {
           ORDER BY c.created_at DESC;
         `;
         queryParams.push(groupKey);
+      } else {
+        res.status(400).json({ error: 'Unsupported group type' });
+        return;
       }
 
       const result = await this.pool.query(query, queryParams);
@@ -618,6 +670,7 @@ export class LeadIntelligenceController {
         companyName: row.company_name,
         status: row.status || 'Cold',
         smartNotification: row.smart_notification,
+        requirements: row.requirements,
         duration: row.duration,
         engagementLevel: row.engagement_level,
         intentLevel: row.intent_level,

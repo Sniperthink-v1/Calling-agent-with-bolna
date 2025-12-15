@@ -73,6 +73,7 @@ export interface IndividualAnalysis {
     email_address: string | null;
     company_name: string | null;
     smartnotification: string | null;
+    requirements: string | null;
   };
 }
 
@@ -318,6 +319,8 @@ ${transcript}`,
     const response = await this.callResponseAPI(request);
     const analysis = this.parseOpenAIResponse<IndividualAnalysis>(response);
 
+    const requirements = analysis?.extraction?.requirements;
+
     logger.info('Individual call data extracted successfully', {
       executionId,
       totalScore: analysis.total_score,
@@ -325,6 +328,9 @@ ${transcript}`,
       intentScore: analysis.intent_score,
       demo_book_datetime: analysis.demo_book_datetime,
       has_demo_datetime: !!analysis.demo_book_datetime,
+      requirements_is_missing: requirements === undefined,
+      requirements_is_null: requirements === null,
+      requirements_length: typeof requirements === 'string' ? requirements.trim().length : null,
     });
 
     // ⚠️ DEBUG: Log the COMPLETE extracted analysis for debugging
@@ -410,11 +416,16 @@ ${currentTranscript}
     const response = await this.callResponseAPI(request);
     const analysis = this.parseOpenAIResponse<CompleteAnalysis>(response);
 
+    const requirements = analysis?.extraction?.requirements;
+
     logger.info('Complete analysis extracted successfully', {
       userId,
       phoneNumber,
       totalScore: analysis.total_score,
       leadStatusTag: analysis.lead_status_tag,
+      requirements_is_missing: requirements === undefined,
+      requirements_is_null: requirements === null,
+      requirements_length: typeof requirements === 'string' ? requirements.trim().length : null,
     });
 
     return analysis;

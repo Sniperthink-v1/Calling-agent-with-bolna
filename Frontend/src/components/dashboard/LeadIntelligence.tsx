@@ -42,6 +42,7 @@ import {
   Loader2,
   X,
   Megaphone,
+  ChevronRight,
 } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useNavigation } from "@/contexts/NavigationContext";
@@ -79,6 +80,8 @@ interface LeadGroup {
   meetingTitle?: string; // Title from existing meeting
   meetingDescription?: string; // Description from existing meeting
   groupType: 'phone' | 'email' | 'individual';
+  // Requirements from complete analysis - aggregated product/business requirements
+  requirements?: string;
 }
 
 interface LeadTimelineEntry {
@@ -118,6 +121,8 @@ interface LeadTimelineEntry {
   followUpStatus?: string;
   followUpCompleted?: boolean;
   followUpCallId?: string; // The call this follow-up is linked to
+  // Requirements field - product/business requirements from call
+  requirements?: string;
   // Email-specific fields
   interactionType?: 'call' | 'email'; // Type of interaction
   emailSubject?: string; // Email subject
@@ -978,6 +983,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     <TableHead>Duration</TableHead>
                     <TableHead>Analytics</TableHead>
                     <TableHead>CTAs</TableHead>
+                    <TableHead>Requirements</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Follow-up</TableHead>
                   </TableRow>
@@ -985,7 +991,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 <TableBody>
                   {timelineLoading ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center py-8">
+                      <TableCell colSpan={14} className="text-center py-8">
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           <span>Loading timeline...</span>
@@ -994,7 +1000,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     </TableRow>
                   ) : timeline.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
                         No interaction history found
                       </TableCell>
                     </TableRow>
@@ -1137,6 +1143,27 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                             {interaction.ctaEscalatedToHuman && <div>Escalated</div>}
                             {(!interaction.ctaPricingClicked && !interaction.ctaDemoClicked && !interaction.ctaFollowupClicked && !interaction.ctaSampleClicked && !interaction.ctaEscalatedToHuman) && "—"}
                           </div>
+                        </TableCell>
+                        
+                        {/* Requirements - Expandable text */}
+                        <TableCell className="text-xs text-foreground max-w-[200px]">
+                          {interaction.requirements ? (
+                            <details className="cursor-pointer group">
+                              <summary className="list-none flex items-center gap-1 hover:text-primary">
+                                <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+                                <span className="truncate max-w-[150px]" title={interaction.requirements}>
+                                  {interaction.requirements.length > 50 
+                                    ? interaction.requirements.substring(0, 50) + '...' 
+                                    : interaction.requirements}
+                                </span>
+                              </summary>
+                              <div className="mt-2 p-2 bg-muted/50 rounded text-xs whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                                {interaction.requirements}
+                              </div>
+                            </details>
+                          ) : (
+                            "—"
+                          )}
                         </TableCell>
                         
                         {/* Email - Show extracted email to see what AI captured */}
@@ -1383,6 +1410,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
               <TableHead>Budget Constraint</TableHead>
               <TableHead>Urgency</TableHead>
               <TableHead>Fit</TableHead>
+              <TableHead>Requirements</TableHead>
               <TableHead>Escalated</TableHead>
               <TableHead>No. of Interactions</TableHead>
               <TableHead>Interacted Agents</TableHead>
@@ -1490,6 +1518,25 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     <Badge variant="outline" className={getFitColor(contact.recentFitAlignment)}>
                       {contact.recentFitAlignment}
                     </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-xs text-foreground max-w-[240px]">
+                  {contact.requirements ? (
+                    <details className="cursor-pointer group">
+                      <summary className="list-none flex items-center gap-1 hover:text-primary">
+                        <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+                        <span className="truncate max-w-[190px]" title={contact.requirements}>
+                          {contact.requirements.length > 60
+                            ? contact.requirements.substring(0, 60) + '...'
+                            : contact.requirements}
+                        </span>
+                      </summary>
+                      <div className="mt-2 p-2 bg-muted/50 rounded text-xs whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                        {contact.requirements}
+                      </div>
+                    </details>
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}

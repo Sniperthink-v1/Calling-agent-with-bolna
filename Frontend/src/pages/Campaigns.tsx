@@ -34,13 +34,15 @@ const Campaigns: React.FC = () => {
       if (!response.ok) throw new Error('Failed to fetch campaigns');
       return response.json();
     },
+    staleTime: 30000, // Cache for 30 seconds
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
   });
 
   const campaigns = campaignsData?.campaigns || [];
 
   // Fetch analytics for all campaigns
   const { data: analyticsData } = useQuery({
-    queryKey: ['campaigns-analytics', campaigns.map((c: Campaign) => c.id)],
+    queryKey: ['campaigns-analytics', campaigns.map((c: Campaign) => c.id).sort().join(',')],
     queryFn: async () => {
       if (campaigns.length === 0) return {};
       
@@ -65,6 +67,9 @@ const Campaigns: React.FC = () => {
       }, {} as Record<string, CampaignAnalytics>);
     },
     enabled: campaigns.length > 0,
+    staleTime: 30000, // Cache for 30 seconds
+    refetchInterval: 60000, // Auto-refresh every 60 seconds for live updates
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
   });
 
   // Start campaign mutation

@@ -37,6 +37,9 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
       if (!response.ok) throw new Error('Failed to fetch analytics');
       return response.json();
     },
+    staleTime: 30000, // Cache for 30 seconds
+    refetchInterval: 60000, // Auto-refresh every 60 seconds
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
   });
   
   // Navigate to call logs with campaign filter
@@ -49,11 +52,19 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
   };
 
   const calculateProgress = () => {
+    // Use analytics data for accurate progress (unique contacts handled)
+    if (analytics?.progress_percentage !== undefined) {
+      return Math.round(analytics.progress_percentage);
+    }
+    // Fallback to campaign data
     if (campaign.total_contacts === 0) return 0;
-    return Math.round((campaign.completed_calls / campaign.total_contacts) * 100);
+    return Math.min(Math.round((campaign.completed_calls / campaign.total_contacts) * 100), 100);
   };
 
   const calculateSuccessRate = () => {
+    if (analytics?.success_rate !== undefined) {
+      return Math.round(analytics.success_rate);
+    }
     if (campaign.completed_calls === 0) return 0;
     return Math.round((campaign.successful_calls / campaign.completed_calls) * 100);
   };
@@ -72,13 +83,23 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
     return `${minutes}m`;
   };
 
+  const formatDurationSeconds = (seconds: number) => {
+    if (!seconds) return '0s';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
+  };
+
   const progress = calculateProgress();
   const successRate = calculateSuccessRate();
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className={`max-w-4xl ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
-        <DialogHeader>
+      <DialogContent className={`max-w-4xl max-h-[90vh] flex flex-col ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
+        <DialogHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
             <DialogTitle>{campaign.name}</DialogTitle>
             <Badge variant={campaign.status === 'active' ? 'default' : 'secondary'}>
@@ -90,17 +111,17 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-6 overflow-y-auto flex-1 pr-2 invisible-scrollbar">
           {/* Progress Overview */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Overall Progress</span>
               <span className="font-medium">{progress}%</span>
             </div>
-            <Progress value={progress} className="h-2" />
+            <Progress value={Math.min(progress, 100)} className="h-2" />
             <div className="flex justify-between text-xs text-gray-500">
-              <span>{campaign.completed_calls} of {campaign.total_contacts} contacts called</span>
-              <span>{campaign.total_contacts - campaign.completed_calls} remaining</span>
+              <span>{analytics?.handled_calls ?? campaign.completed_calls} of {campaign.total_contacts} contacts called</span>
+              <span>{Math.max(0, campaign.total_contacts - (analytics?.handled_calls ?? campaign.completed_calls))} remaining</span>
             </div>
           </div>
 
@@ -109,9 +130,9 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
             <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
               <div className="flex items-center space-x-2 mb-2">
                 <Phone className="w-4 h-4 text-blue-500" />
-                <span className="text-sm text-gray-500">Total Calls</span>
+                <span className="text-sm text-gray-500">Contacts Handled</span>
               </div>
-              <p className="text-2xl font-bold">{campaign.completed_calls}</p>
+              <p className="text-2xl font-bold">{analytics?.handled_calls ?? campaign.completed_calls}</p>
             </div>
 
             <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-green-50'}`}>
@@ -119,7 +140,7 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <span className="text-sm text-gray-500">Successful</span>
               </div>
-              <p className="text-2xl font-bold text-green-600">{campaign.successful_calls}</p>
+              <p className="text-2xl font-bold text-green-600">{analytics?.successful_calls ?? campaign.successful_calls}</p>
             </div>
 
             <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-red-50'}`}>
@@ -240,7 +261,7 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Average Call Duration:</span>
-                  <span className="font-medium">{analytics.average_duration || 'N/A'}</span>
+                  <span className="font-medium">{formatDurationSeconds(analytics?.average_duration_seconds || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Pending Calls:</span>

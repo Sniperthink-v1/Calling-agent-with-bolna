@@ -51,6 +51,7 @@ class LeadAnalyticsService {
         email_address: analytics.extracted_email || null,
         company_name: analytics.company_name || null,
         smartnotification: analytics.smart_notification || null,
+        requirements: analytics.requirements ?? null,
       },
     };
   }
@@ -118,6 +119,7 @@ class LeadAnalyticsService {
       // Enhanced analytics
       smart_notification: analysis.extraction?.smartnotification ?? undefined,
       demo_book_datetime: analysis.demo_book_datetime ?? undefined,
+      requirements: analysis.extraction?.requirements ?? undefined,
     };
   }
 
@@ -188,6 +190,7 @@ class LeadAnalyticsService {
       // Enhanced analytics
       smart_notification: analysis.extraction?.smartnotification ?? undefined,
       demo_book_datetime: analysis.demo_book_datetime ?? undefined,
+      requirements: analysis.extraction?.requirements ?? undefined,
     };
   }
 
@@ -200,12 +203,16 @@ class LeadAnalyticsService {
     userId: string,
     phoneNumber: string
   ): Promise<LeadAnalyticsInterface> {
+    const requirements = analysis?.extraction?.requirements;
     logger.info('Creating individual analysis', {
       callId,
       userId,
       phoneNumber,
       total_score: analysis.total_score,
       lead_status_tag: analysis.lead_status_tag,
+      requirements_is_missing: requirements === undefined,
+      requirements_is_null: requirements === null,
+      requirements_length: typeof requirements === 'string' ? requirements.trim().length : null,
     });
 
     const analyticsData = this.mapIndividualAnalysis(
@@ -228,6 +235,7 @@ class LeadAnalyticsService {
     phoneNumber: string,
     previousCallsCount: number
   ): Promise<LeadAnalyticsInterface> {
+    const requirements = analysis?.extraction?.requirements;
     logger.info('Upserting complete analysis', {
       latestCallId,
       userId,
@@ -235,6 +243,9 @@ class LeadAnalyticsService {
       previousCallsCount,
       total_score: analysis.total_score,
       lead_status_tag: analysis.lead_status_tag,
+      requirements_is_missing: requirements === undefined,
+      requirements_is_null: requirements === null,
+      requirements_length: typeof requirements === 'string' ? requirements.trim().length : null,
     });
 
     const analyticsData = this.mapCompleteAnalysis(

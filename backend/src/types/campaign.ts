@@ -280,15 +280,17 @@ export interface CampaignAnalytics {
   queued: number;
   
   // Progress metrics
-  handled_calls: number; // Calls with any terminal outcome (completed, busy, no-answer, failed, call-disconnected)
-  progress_percentage: number; // handled_calls / total_contacts * 100
+  handled_calls: number; // Unique contacts with any terminal outcome (for progress %)
+  total_call_attempts?: number; // Total calls including retries (optional, for detailed view)
+  progress_percentage: number; // handled_calls / total_contacts * 100 (capped at 100)
   attempted_calls: number; // Calls that left queue (not counting 'queued' status)
   contacted_calls: number; // Calls where someone picked up (completed, in-progress)
   call_connection_rate: number; // contacted_calls / attempted_calls * 100
   
   // Success metrics
   success_rate: number; // Percentage
-  average_call_duration: number; // Seconds
+  average_call_duration: number; // Seconds (legacy field, kept for compatibility)
+  average_duration_seconds: number; // Seconds (primary field)
   total_credits_used: number;
   
   // Time metrics

@@ -231,7 +231,7 @@ const SortableStageItem: React.FC<SortableStageItemProps> = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex items-center gap-3 p-3 bg-white border rounded-lg",
+        "flex items-center gap-3 p-3 bg-card border border-border rounded-lg",
         "transition-shadow",
         isDragging && "shadow-lg opacity-90 z-50"
       )}
@@ -243,8 +243,8 @@ const SortableStageItem: React.FC<SortableStageItemProps> = ({
         {...listeners}
         className={cn(
           "cursor-grab active:cursor-grabbing p-1 -ml-1 rounded",
-          "hover:bg-gray-100 text-gray-400 hover:text-gray-600",
-          "focus:outline-none focus:ring-2 focus:ring-blue-500"
+          "hover:bg-accent text-muted-foreground hover:text-foreground",
+          "focus:outline-none focus:ring-2 focus:ring-primary"
         )}
       >
         <GripVertical className="w-4 h-4" />
@@ -272,7 +272,7 @@ const SortableStageItem: React.FC<SortableStageItemProps> = ({
         onClick={() => onDelete(stage.id)}
         disabled={isOnly}
         className={cn(
-          "h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50",
+          "h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-500/10",
           isOnly && "opacity-50 cursor-not-allowed"
         )}
       >
@@ -292,15 +292,15 @@ interface DragOverlayItemProps {
 
 const DragOverlayItem: React.FC<DragOverlayItemProps> = ({ stage }) => {
   return (
-    <div className="flex items-center gap-3 p-3 bg-white border rounded-lg shadow-xl">
-      <div className="p-1 -ml-1 text-gray-400">
+    <div className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg shadow-xl">
+      <div className="p-1 -ml-1 text-muted-foreground">
         <GripVertical className="w-4 h-4" />
       </div>
       <div
-        className="w-8 h-8 rounded-md border-2 border-gray-200"
+        className="w-8 h-8 rounded-md border-2 border-border"
         style={{ backgroundColor: stage.color }}
       />
-      <div className="flex-1 h-9 px-3 flex items-center bg-gray-50 rounded-md border">
+      <div className="flex-1 h-9 px-3 flex items-center bg-accent rounded-md border border-border text-foreground">
         {stage.name}
       </div>
       <div className="h-8 w-8" />
@@ -556,7 +556,7 @@ export const LeadStageCustomizer: React.FC<LeadStageCustomizerProps> = ({
               variant="ghost"
               onClick={() => setShowResetConfirm(true)}
               disabled={replacingAll}
-              className="text-gray-600"
+              className="text-muted-foreground hover:text-foreground"
             >
               <RotateCcw className="w-4 h-4 mr-2" />
               Reset to Defaults
