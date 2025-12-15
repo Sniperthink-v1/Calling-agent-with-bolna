@@ -649,21 +649,18 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   // WhatsApp campaign mutation (for creating WhatsApp campaigns via external service)
   const whatsappCampaignMutation = useMutation({
     mutationFn: async (data: {
-      campaign_name: string;
+      name: string;
       phone_number_id: string;
       template_id: string;
-      recipients: Array<{ phone_number: string; variables?: Record<string, string> }>;
-      schedule?: string;
+      contacts: Array<{ phone: string; name?: string; email?: string; company?: string; variables?: Record<string, string> }>;
+      schedule?: { type: 'IMMEDIATE' | 'SCHEDULED'; scheduled_at?: string };
     }) => {
       const response = await fetch(`${WHATSAPP_SERVICE_URL}/api/v1/campaign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          user_id: user?.id,
-          ...data,
-        }),
+        body: JSON.stringify(data),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -1082,10 +1079,212 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
       }
     }
 
-    // Store data and show credit estimator
+    // For WhatsApp campaigns, directly create without credit estimator
+    if (campaignType === 'whatsapp') {
+      setPendingCampaignData(campaignData);
+      // Directly call the WhatsApp campaign creation logic
+      await createWhatsAppCampaignDirectly(campaignData);
+      return;
+    }
+
+    // Store data and show credit estimator for other campaign types
     setEstimatedContactCount(contactCount);
     setPendingCampaignData(campaignData);
     setShowEstimator(true);
+  };
+
+  // Direct WhatsApp campaign creation function (bypasses credit estimator)
+  const createWhatsAppCampaignDirectly = async (campaignData: any) => {
+    if (!campaignData) return;
+
+    try {
+      setIsUploading(true);
+      
+      // Get the selected template to access dashboard_mapping for variable resolution
+      const selectedTemplate = whatsappTemplates.find(t => t.template_id === campaignData.template_id);
+      
+      // For WhatsApp campaigns, we need to get phone numbers from contacts or CSV
+      let contacts: Array<{ phone: string; name?: string; email?: string; company?: string; variables?: Record<string, string> }> = [];
+      
+      if (campaignData.type === 'whatsapp-contacts' && campaignData.contact_ids) {
+        // Fetch contact details to resolve variables per-contact using dashboard_mapping
+        try {
+          // Fetch all contacts needed - use high limit to get all selected contacts
+          const response = await authenticatedFetch(`/api/contacts?limit=1000`);
+          if (response.ok) {
+            const contactsData = await response.json();
+            // API returns { success: true, data: { contacts: [...], pagination: {...} } }
+            const allContacts = contactsData.data?.contacts || contactsData.contacts || [];
+            const selectedContacts = allContacts.filter((c: any) => 
+              campaignData.contact_ids.includes(c.id)
+            );
+            
+            contacts = selectedContacts.map((c: any) => {
+              // Resolve variables using dashboard_mapping for this contact
+              const resolvedVariables: Record<string, string> = {};
+              
+              if (selectedTemplate?.variables) {
+                selectedTemplate.variables.forEach(v => {
+                  const position = v.position.toString();
+                  
+                  // Check if user provided an override in templateVariables
+                  const userOverride = campaignData.template_variables?.[v.variable_name];
+                  if (userOverride && userOverride.trim()) {
+                    resolvedVariables[position] = userOverride;
+                    return;
+                  }
+                  
+                  // Use dashboard_mapping to resolve from contact data
+                  if (v.dashboard_mapping) {
+                    const resolvedValue = resolveVariableFromContactData(v.dashboard_mapping, c);
+                    if (resolvedValue) {
+                      resolvedVariables[position] = resolvedValue;
+                      return;
+                    }
+                  }
+                  
+                  // Fall back to default_value or empty
+                  resolvedVariables[position] = v.default_value || '';
+                });
+              }
+              
+              // Get phone and normalize format (remove spaces for API)
+              const phoneNumber = (c.phone || c.phone_number || c.phoneNumber || '').replace(/\s+/g, '');
+              
+              // Return contact in the format expected by external API
+              return {
+                phone: phoneNumber,
+                name: c.name,
+                email: c.email,
+                company: c.company,
+                variables: resolvedVariables,
+              };
+            });
+          }
+        } catch (err) {
+          console.error('Failed to fetch contacts for WhatsApp campaign:', err);
+          toast({
+            title: 'Error',
+            description: 'Failed to fetch contact details',
+            variant: 'destructive',
+          });
+          setIsUploading(false);
+          return;
+        }
+      } else if (campaignData.type === 'whatsapp-csv' && campaignData.csvFile) {
+        // Parse CSV to get phone numbers and contact data for variable resolution
+        try {
+          const arrayBuffer = await campaignData.csvFile.arrayBuffer();
+          const workbook = XLSX.read(arrayBuffer, { type: 'array', raw: false });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false }) as any[][];
+          
+          if (jsonData.length >= 2) {
+            const headers = jsonData[0].map((h: any) => 
+              h?.toString().toLowerCase().trim().replace(/\s+/g, '_')
+            );
+            const phoneIndex = headers.findIndex((h: string) => 
+              ['phone', 'phone_number', 'mobile', 'cell', 'phonenumber'].includes(h)
+            );
+            
+            if (phoneIndex !== -1) {
+              // Also find name, email, company indexes for CSV
+              const nameIndex = headers.findIndex((h: string) => ['name', 'full_name', 'fullname'].includes(h));
+              const emailIndex = headers.findIndex((h: string) => ['email', 'email_address'].includes(h));
+              const companyIndex = headers.findIndex((h: string) => ['company', 'organization', 'org'].includes(h));
+              
+              for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                const phone = row[phoneIndex]?.toString().trim();
+                if (phone) {
+                  // Build contact data object from CSV row
+                  const contactData: Record<string, any> = {};
+                  headers.forEach((header: string, idx: number) => {
+                    if (row[idx] !== undefined && row[idx] !== null) {
+                      contactData[header] = row[idx].toString().trim();
+                    }
+                  });
+                  
+                  // Resolve variables using dashboard_mapping for this contact
+                  const resolvedVariables: Record<string, string> = {};
+                  
+                  if (selectedTemplate?.variables) {
+                    selectedTemplate.variables.forEach(v => {
+                      const position = v.position.toString();
+                      
+                      // Check if user provided an override in templateVariables
+                      const userOverride = campaignData.template_variables?.[v.variable_name];
+                      if (userOverride && userOverride.trim()) {
+                        resolvedVariables[position] = userOverride;
+                        return;
+                      }
+                      
+                      // Use dashboard_mapping to resolve from contact data
+                      if (v.dashboard_mapping) {
+                        const resolvedValue = resolveVariableFromContactData(v.dashboard_mapping, contactData);
+                        if (resolvedValue) {
+                          resolvedVariables[position] = resolvedValue;
+                          return;
+                        }
+                      }
+                      
+                      // Fall back to default_value or empty
+                      resolvedVariables[position] = v.default_value || '';
+                    });
+                  }
+                  
+                  // Add contact in the format expected by external API (normalize phone - remove spaces)
+                  contacts.push({
+                    phone: phone.replace(/\s+/g, ''),
+                    name: nameIndex !== -1 ? row[nameIndex]?.toString().trim() : undefined,
+                    email: emailIndex !== -1 ? row[emailIndex]?.toString().trim() : undefined,
+                    company: companyIndex !== -1 ? row[companyIndex]?.toString().trim() : undefined,
+                    variables: resolvedVariables,
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to parse CSV for WhatsApp campaign:', err);
+          toast({
+            title: 'Error',
+            description: 'Failed to parse CSV file',
+            variant: 'destructive',
+          });
+          setIsUploading(false);
+          return;
+        }
+      }
+
+      if (contacts.length === 0) {
+        toast({
+          title: 'Error',
+          description: 'No valid contacts found',
+          variant: 'destructive',
+        });
+        setIsUploading(false);
+        return;
+      }
+
+      // Call the WhatsApp campaign mutation with correct API format
+      whatsappCampaignMutation.mutate({
+        name: campaignData.campaign_name,
+        phone_number_id: campaignData.phone_number_id,
+        template_id: campaignData.template_id,
+        contacts,
+        schedule: campaignData.schedule ? { type: 'SCHEDULED', scheduled_at: campaignData.schedule } : { type: 'IMMEDIATE' },
+      });
+    } catch (error) {
+      console.error('Error creating WhatsApp campaign:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create WhatsApp campaign',
+        variant: 'destructive',
+      });
+      setIsUploading(false);
+    }
   };
 
   // New function to handle confirmed campaign creation
@@ -1106,10 +1305,12 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
         if (pendingCampaignData.type === 'whatsapp-contacts' && pendingCampaignData.contact_ids) {
           // Fetch contact details to resolve variables per-contact using dashboard_mapping
           try {
-            const response = await authenticatedFetch('/api/contacts');
+            // Fetch all contacts needed - use high limit to get all selected contacts
+            const response = await authenticatedFetch(`/api/contacts?limit=1000`);
             if (response.ok) {
               const contactsData = await response.json();
-              const allContacts = contactsData.data || contactsData.contacts || contactsData || [];
+              // API returns { success: true, data: { contacts: [...], pagination: {...} } }
+              const allContacts = contactsData.data?.contacts || contactsData.contacts || [];
               const selectedContacts = allContacts.filter((c: any) => 
                 pendingCampaignData.contact_ids.includes(c.id)
               );

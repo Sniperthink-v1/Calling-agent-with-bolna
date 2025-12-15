@@ -651,7 +651,7 @@ export class DashboardAnalyticsService {
           AND c.created_at >= (NOW() AT TIME ZONE $2 - INTERVAL '30 days')
       `;
 
-      const result = await this.executeQueryWithTimeout(query, [userId, userTimezone], this.QUERY_TIMEOUT);
+      const result = await this.executeQueryWithTimeout(query, [userId, tz], this.QUERY_TIMEOUT);
       const row = result.rows[0] || {};
 
       return {

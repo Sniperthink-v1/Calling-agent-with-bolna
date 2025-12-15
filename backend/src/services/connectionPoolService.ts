@@ -34,8 +34,6 @@ export class ConnectionPoolService {
   private healthCheckInterval: any | null = null;
   private config: ConnectionPoolConfig;
   private isShuttingDown: boolean = false;
-  // Session timezone to use for all DB connections; default to UTC for consistent storage
-  private sessionTimeZone: string = (process.env.DB_TIMEZONE || 'UTC').trim();
 
   constructor(config: ConnectionPoolConfig) {
     this.config = {
@@ -81,23 +79,13 @@ export class ConnectionPoolService {
   private setupEventHandlers(): void {
     // Connection established
     this.pool.on('connect', (client: PoolClient) => {
-      logger.info('New database client connected to pool', {
+      logger.debug('New database client connected to pool', {
         totalCount: this.pool.totalCount,
         idleCount: this.pool.idleCount,
         waitingCount: this.pool.waitingCount
       });
-
-      // Enforce session time zone (default UTC). Validate input to avoid SQL issues.
-      const tz = this.sessionTimeZone;
-      const tzIsValid = /^[A-Za-z_\/+-:]{1,64}$/.test(tz);
-      const tzSql = tzIsValid ? tz : 'UTC';
-      if (!tzIsValid) {
-        logger.warn('Invalid DB_TIMEZONE provided, falling back to UTC', { provided: tz });
-      }
-      // Use string literal (not parameterized) since PostgreSQL doesn't support parameters for SET TIME ZONE
-      client.query(`SET TIME ZONE '${tzSql}'`).catch((err) => {
-        logger.warn('Failed to set session time zone', { tz: tzSql, error: err?.message });
-      });
+      // Note: No SET TIME ZONE needed - all data stored in UTC, 
+      // timezone conversion handled via AT TIME ZONE in queries
     });
 
     // Connection error
