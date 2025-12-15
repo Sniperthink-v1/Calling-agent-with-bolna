@@ -447,28 +447,60 @@ class FollowUpEmailService {
         }
       );
 
+      // Log the full response for debugging
+      logger.info('OpenAI API response received', {
+        hasData: !!response.data,
+        hasOutputText: !!response.data?.output_text,
+        hasChoices: !!response.data?.choices,
+        responseKeys: response.data ? Object.keys(response.data) : [],
+        statusCode: response.status
+      });
+
       // Parse the response - handle both Responses API (output_text) 
       // and legacy chat completions format (choices[0].message.content)
       const content = response.data?.output_text || response.data?.choices?.[0]?.message?.content;
       
       if (content) {
+        logger.info('OpenAI content extracted', {
+          contentLength: content.length,
+          contentPreview: content.substring(0, 200)
+        });
+
         try {
           // Expect JSON response with subject and body fields
           const parsed = JSON.parse(content);
+          
+          logger.info('Successfully parsed JSON from OpenAI', {
+            hasSubject: !!parsed.subject,
+            hasBody: !!parsed.body,
+            parsedKeys: Object.keys(parsed)
+          });
+          
           return {
             subject: parsed.subject,
             body: parsed.body
           };
-        } catch {
+        } catch (parseError) {
+          logger.warn('OpenAI response is not valid JSON, treating as plain text body', {
+            parseError: parseError instanceof Error ? parseError.message : 'Unknown',
+            contentPreview: content.substring(0, 100)
+          });
           // If response is not valid JSON, treat it as the email body
           return { body: content };
         }
       }
 
+      logger.warn('No content found in OpenAI response', {
+        responseData: JSON.stringify(response.data).substring(0, 500)
+      });
+      
       return {};
     } catch (error) {
       logger.error('Error generating personalized email content', {
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        promptId,
+        callStatus
       });
       return {};
     }
