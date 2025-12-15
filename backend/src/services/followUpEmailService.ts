@@ -478,14 +478,18 @@ class FollowUpEmailService {
             contentTypes: messageOutput.content.map((c: any) => c.type)
           });
           
-          const textContent = messageOutput.content.find((c: any) => c.type === 'text');
+          // Look for content with type 'text' or 'output_text' (API may return either)
+          const textContent = messageOutput.content.find((c: any) => 
+            c.type === 'text' || c.type === 'output_text'
+          );
           if (textContent?.text) {
             content = textContent.text;
             logger.info('Content extracted from Responses API message output', {
-              contentLength: textContent.text.length
+              contentLength: textContent.text.length,
+              contentType: textContent.type
             });
           } else {
-            logger.warn('No text type content found in message content array', {
+            logger.warn('No text/output_text type content found in message content array', {
               contentItems: messageOutput.content.map((c: any) => ({ type: c.type, hasText: !!c.text }))
             });
           }
