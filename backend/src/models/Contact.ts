@@ -15,6 +15,7 @@ export interface ContactInterface extends BaseModelInterface {
   auto_created_from_call_id?: string;
   is_auto_created: boolean;
   auto_creation_source?: 'webhook' | 'manual' | 'bulk_upload';
+  lead_stage?: string; // Lead pipeline stage (default: 'New Lead')
   tags: string[];
   last_contact_at?: Date;
   call_attempted_busy: number;
@@ -37,6 +38,7 @@ export interface CreateContactData {
   auto_created_from_call_id?: string;
   is_auto_created?: boolean;
   auto_creation_source?: 'webhook' | 'manual' | 'bulk_upload';
+  lead_stage?: string; // Lead pipeline stage (default: 'New Lead')
   tags?: string[];
   last_contact_at?: Date;
   call_attempted_busy?: number;
@@ -53,6 +55,7 @@ export interface UpdateContactData {
   city?: string;
   country?: string;
   business_context?: string;
+  lead_stage?: string | null; // Lead pipeline stage (can be null to clear)
   tags?: string[];
   auto_creation_source?: 'webhook' | 'manual' | 'bulk_upload';
   last_contact_at?: Date;
@@ -99,6 +102,7 @@ export class ContactModel extends BaseModel<ContactInterface> {
     const normalizedData = {
       ...contactData,
       is_auto_created: contactData.is_auto_created ?? false,
+      lead_stage: contactData.lead_stage ?? 'New Lead',
       tags: contactData.tags ?? [],
       call_attempted_busy: contactData.call_attempted_busy ?? 0,
       call_attempted_no_answer: contactData.call_attempted_no_answer ?? 0,
@@ -181,9 +185,9 @@ export class ContactModel extends BaseModel<ContactInterface> {
     const valuePlaceholders: string[] = [];
     
     contactsData.forEach((contact, index) => {
-      const baseIndex = index * 16; // Updated to 16 for call_attempted_failed field
+      const baseIndex = index * 17; // Updated to 17 for lead_stage field
       valuePlaceholders.push(
-        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}, $${baseIndex + 10}, $${baseIndex + 11}, $${baseIndex + 12}, $${baseIndex + 13}, $${baseIndex + 14}, $${baseIndex + 15}, $${baseIndex + 16})`
+        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}, $${baseIndex + 10}, $${baseIndex + 11}, $${baseIndex + 12}, $${baseIndex + 13}, $${baseIndex + 14}, $${baseIndex + 15}, $${baseIndex + 16}, $${baseIndex + 17})`
       );
       values.push(
         contact.user_id,
@@ -197,6 +201,7 @@ export class ContactModel extends BaseModel<ContactInterface> {
         contact.business_context || null,
         contact.is_auto_created ?? false,
         contact.auto_creation_source || null,
+        contact.lead_stage || 'New Lead',
         contact.tags || [],
         contact.last_contact_at || null,
         contact.call_attempted_busy ?? 0,
@@ -208,7 +213,7 @@ export class ContactModel extends BaseModel<ContactInterface> {
     const query = `
       INSERT INTO contacts (
         user_id, name, phone_number, email, company, notes, city, country, business_context,
-        is_auto_created, auto_creation_source, tags, last_contact_at, call_attempted_busy, call_attempted_no_answer, call_attempted_failed
+        is_auto_created, auto_creation_source, lead_stage, tags, last_contact_at, call_attempted_busy, call_attempted_no_answer, call_attempted_failed
       ) VALUES ${valuePlaceholders.join(', ')}
       RETURNING id
     `;

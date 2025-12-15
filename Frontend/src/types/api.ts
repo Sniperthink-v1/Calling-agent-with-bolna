@@ -14,6 +14,37 @@ export type TransactionType = 'purchase' | 'usage' | 'bonus' | 'admin_adjustment
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
 export type NotificationType = 'smart_notification' | 'demo_booking' | 'follow_up' | 'conversion';
 
+// Default lead stages
+export const DEFAULT_LEAD_STAGES = [
+  { name: 'New Lead', color: '#3B82F6' },      // Blue
+  { name: 'Contacted', color: '#8B5CF6' },     // Purple
+  { name: 'Qualified', color: '#F59E0B' },     // Amber
+  { name: 'Proposal Sent', color: '#06B6D4' }, // Cyan
+  { name: 'Negotiation', color: '#EC4899' },   // Pink
+  { name: 'Won', color: '#10B981' },           // Green
+  { name: 'Lost', color: '#EF4444' },          // Red
+] as const;
+
+export type DefaultLeadStageName = typeof DEFAULT_LEAD_STAGES[number]['name'];
+
+// Lead stage interfaces
+export interface LeadStage {
+  name: string;
+  color: string;
+  isCustom: boolean;
+}
+
+export interface CustomLeadStage {
+  name: string;
+  color: string;
+}
+
+export interface LeadStageStats {
+  stageName: string;
+  count: number;
+  color: string;
+}
+
 // ============================================================================
 // API RESPONSE WRAPPER
 // ============================================================================
@@ -255,6 +286,7 @@ export interface Contact {
   callAttemptedNoAnswer: number;
   callAttemptedFailed: number;
   callType: 'inbound' | 'outbound';
+  leadStage?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -269,6 +301,7 @@ export interface CreateContactRequest {
   country?: string;
   businessContext?: string;
   tags?: string[];
+  leadStage?: string;
 }
 
 export interface UpdateContactRequest {
@@ -281,6 +314,7 @@ export interface UpdateContactRequest {
   country?: string;
   businessContext?: string;
   tags?: string[];
+  leadStage?: string | null;
 }
 
 export interface ContactsListOptions {

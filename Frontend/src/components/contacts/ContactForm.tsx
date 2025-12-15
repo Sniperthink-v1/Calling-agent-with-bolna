@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { ValidatedInput, ValidatedTextarea } from '@/components/ui/ValidatedInput';
 import { PhoneNumberInput } from '@/components/ui/PhoneNumberInput';
 import { TagChipInput } from './TagChipInput';
+import { LeadStageDropdown } from '@/components/LeadStageDropdown';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +50,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
     businessContext: '',
     notes: '',
     tags: [] as string[],
+    leadStage: 'New Lead' as string | null,
   });
   
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
@@ -84,6 +87,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
           businessContext: contact.businessContext || '',
           notes: contact.notes || '',
           tags: contact.tags || [],
+          leadStage: contact.leadStage || null,
         });
       } else {
         // Creating new contact - set default country code to India (+91)
@@ -97,6 +101,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
           businessContext: '',
           notes: '',
           tags: [],
+          leadStage: 'New Lead',
         });
       }
       setClientErrors({});
@@ -180,6 +185,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
           businessContext: formData.businessContext.trim() || undefined,
           notes: formData.notes.trim() || undefined,
           tags: formData.tags.length > 0 ? formData.tags : undefined,
+          leadStage: formData.leadStage || undefined,
         };
         
         result = await updateContact(contact.id, updateData);
@@ -195,6 +201,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
           businessContext: formData.businessContext.trim() || undefined,
           notes: formData.notes.trim() || undefined,
           tags: formData.tags.length > 0 ? formData.tags : undefined,
+          leadStage: formData.leadStage || 'New Lead',
         };
         
         result = await createContact(createData);
@@ -228,6 +235,7 @@ export const ContactForm: React.FC<ContactFormProps> = ({
                   businessContext: '',
                   notes: '',
                   tags: [],
+                  leadStage: 'New Lead',
                 });
                 setClientErrors({});
                 setServerErrors({});
@@ -406,6 +414,19 @@ export const ContactForm: React.FC<ContactFormProps> = ({
             />
             <p className="text-xs text-gray-500">
               Add tags to categorize and filter contacts easily
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Lead Stage</Label>
+            <LeadStageDropdown
+              value={formData.leadStage}
+              onChange={(value) => setFormData(prev => ({ ...prev, leadStage: value }))}
+              disabled={isLoading}
+              placeholder="Select lead stage..."
+            />
+            <p className="text-xs text-gray-500">
+              Track where this contact is in your sales pipeline
             </p>
           </div>
 

@@ -12,11 +12,11 @@ import { pool } from '../config/database';
  * Handles incoming lead data from external sources (n8n, Zapier, etc.)
  * and initiates a call to the lead using Bolna.ai
  * 
- * Authentication: Uses agent_id existence in database as authentication
- * The agent_id must exist and be active, and the associated user_id is used for operations
+ * Authentication: Uses bolna_agent_id existence in database as authentication
+ * The bolna_agent_id must exist and agent must be active, the associated user_id is used for operations
  * 
  * Flow:
- * 1. Validate agent_id exists and is active
+ * 1. Validate bolna_agent_id exists and agent is active
  * 2. Get user_id from agent
  * 3. Create or update contact (upsert by phone number)
  * 4. Initiate call using existing CallService
@@ -27,7 +27,7 @@ export class N8nWebhookController {
    * 
    * Expected payload:
    * {
-   *   "agent_id": "uuid",           // Required: Our agent ID (NOT Bolna agent ID)
+   *   "agent_id": "bolna-agent-id", // Required: Bolna agent ID (from Bolna dashboard)
    *   "lead_name": "John Doe",      // Required: Lead's name
    *   "recipient_phone_number": "+919876543210", // Required: Phone number with ISD
    *   "email": "john@example.com",  // Optional
@@ -47,7 +47,7 @@ export class N8nWebhookController {
       
       // Log incoming request
       logger.info(`[${requestId}] n8n webhook received:`, {
-        hasAgentId: !!payload.agent_id,
+        hasBolnaAgentId: !!payload.agent_id,
         hasName: !!payload.lead_name,
         hasPhone: !!payload.recipient_phone_number,
         source: payload.Source || 'not_specified'
@@ -56,12 +56,12 @@ export class N8nWebhookController {
       // ==================== VALIDATION ====================
       
       // 1. Validate required fields
-      const { agent_id, lead_name, recipient_phone_number } = payload;
+      const { agent_id: bolna_agent_id, lead_name, recipient_phone_number } = payload;
       
-      if (!agent_id) {
+      if (!bolna_agent_id) {
         res.status(400).json({
           success: false,
-          error: 'Missing required field: agent_id',
+          error: 'Missing required field: agent_id (bolna_agent_id)',
           request_id: requestId
         });
         return;
@@ -85,11 +85,11 @@ export class N8nWebhookController {
         return;
       }
 
-      // 2. Validate agent exists and is active (this is our authentication)
-      const agent = await Agent.findById(agent_id);
+      // 2. Validate agent exists by bolna_agent_id and is active (this is our authentication)
+      const agent = await Agent.findByBolnaId(bolna_agent_id);
       
       if (!agent) {
-        logger.warn(`[${requestId}] Invalid agent_id provided: ${agent_id}`);
+        logger.warn(`[${requestId}] Invalid bolna_agent_id provided: ${bolna_agent_id}`);
         res.status(401).json({
           success: false,
           error: 'Invalid agent_id - agent not found',
@@ -99,7 +99,7 @@ export class N8nWebhookController {
       }
 
       if (!agent.is_active) {
-        logger.warn(`[${requestId}] Inactive agent used: ${agent_id}`);
+        logger.warn(`[${requestId}] Inactive agent used: ${bolna_agent_id}`);
         res.status(401).json({
           success: false,
           error: 'Agent is not active',
@@ -108,15 +108,8 @@ export class N8nWebhookController {
         return;
       }
 
-      if (!agent.bolna_agent_id) {
-        logger.warn(`[${requestId}] Agent not configured for Bolna: ${agent_id}`);
-        res.status(400).json({
-          success: false,
-          error: 'Agent is not configured for calling',
-          request_id: requestId
-        });
-        return;
-      }
+      // Agent already has bolna_agent_id since we found it by that field
+      const agentDbId = agent.id; // Our internal agent UUID
 
       const userId = agent.user_id;
       logger.info(`[${requestId}] Agent authenticated, user_id: ${userId}`);
@@ -196,7 +189,7 @@ export class N8nWebhookController {
       logger.info(`[${requestId}] Initiating call to ${normalizedPhone}`);
       
       const callRequest: CallInitiationRequest = {
-        agentId: agent_id,
+        agentId: agentDbId,  // Use internal database agent ID
         phoneNumber: normalizedPhone,
         userId: userId,
         contactId: contact.id,

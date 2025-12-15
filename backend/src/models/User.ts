@@ -41,6 +41,14 @@ export interface UserInterface extends BaseModelInterface {
   timezone_auto_detected?: boolean;
   timezone_manually_set?: boolean;
   timezone_updated_at?: Date | null;
+  // Custom lead stages
+  custom_lead_stages?: CustomLeadStage[];
+}
+
+// Custom lead stage interface
+export interface CustomLeadStage {
+  name: string;
+  color: string;
 }
 
 export class UserModel extends BaseModel<UserInterface> {
