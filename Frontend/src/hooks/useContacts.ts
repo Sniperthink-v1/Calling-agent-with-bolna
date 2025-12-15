@@ -53,6 +53,9 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
   // Helper function to handle API errors
   const handleError = (error: unknown, operation: string): string => {
     console.error(`Error in ${operation}:`, error);
@@ -101,7 +104,10 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
 
       // Convert snake_case keys to camelCase
       if (contactsData.contacts) {
-        contactsData.contacts = contactsData.contacts.map(contact => toCamelCase(contact));
+        contactsData.contacts = contactsData.contacts
+          .map((raw) => (isRecord(raw) && 'contact' in raw ? raw.contact : raw))
+          .filter((value): value is Record<string, unknown> => isRecord(value))
+          .map((contact) => toCamelCase(contact as unknown as Contact));
       }
 
       return contactsData;
@@ -138,8 +144,8 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
       const response = await apiService.createContact(data);
       // Backend returns: { success: true, data: { contact } }
       const maybeWrapped = response.data as unknown;
-      const contact = (maybeWrapped && typeof maybeWrapped === 'object' && 'contact' in (maybeWrapped as any))
-        ? (maybeWrapped as any).contact
+      const contact = (isRecord(maybeWrapped) && 'contact' in maybeWrapped)
+        ? maybeWrapped.contact
         : maybeWrapped;
 
       if (!contact || typeof contact !== 'object') {
@@ -197,8 +203,8 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
       const response = await apiService.updateContact(id, data);
       // Backend returns: { success: true, data: { contact } }
       const maybeWrapped = response.data as unknown;
-      const contact = (maybeWrapped && typeof maybeWrapped === 'object' && 'contact' in (maybeWrapped as any))
-        ? (maybeWrapped as any).contact
+      const contact = (isRecord(maybeWrapped) && 'contact' in maybeWrapped)
+        ? maybeWrapped.contact
         : maybeWrapped;
 
       if (!contact || typeof contact !== 'object') {

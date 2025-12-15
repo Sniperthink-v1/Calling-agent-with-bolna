@@ -115,7 +115,12 @@ export class ContactModel extends BaseModel<ContactInterface> {
    * Update contact
    */
   async updateContact(contactId: string, updateData: UpdateContactData): Promise<ContactInterface | null> {
-    return await this.update(contactId, updateData);
+    // Convert null lead_stage to undefined (database will interpret as no change)
+    const normalizedData = {
+      ...updateData,
+      lead_stage: updateData.lead_stage === null ? undefined : updateData.lead_stage,
+    };
+    return await this.update(contactId, normalizedData);
   }
 
   /**

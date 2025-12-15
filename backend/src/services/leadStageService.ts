@@ -178,7 +178,7 @@ export class LeadStageService {
     newStageName?: string,
     newColor?: string
   ): Promise<CustomLeadStage[]> {
-    const client = await pool.connect();
+    const client = await pool.getClient();
     
     try {
       await client.query('BEGIN');
@@ -265,7 +265,7 @@ export class LeadStageService {
     userId: string, 
     stageName: string
   ): Promise<CustomLeadStage[]> {
-    const client = await pool.connect();
+    const client = await pool.getClient();
     
     try {
       await client.query('BEGIN');
@@ -341,7 +341,7 @@ export class LeadStageService {
       const allStages = await this.getAllStages(userId);
       const stageColorMap = new Map(allStages.map(s => [s.name.toLowerCase(), s.color]));
       
-      return result.rows.map(row => ({
+      return result.rows.map((row: { stage_name: string; count: string }) => ({
         stageName: row.stage_name,
         count: parseInt(row.count, 10),
         color: stageColorMap.get(row.stage_name.toLowerCase()) || '#6B7280', // Gray for unassigned
