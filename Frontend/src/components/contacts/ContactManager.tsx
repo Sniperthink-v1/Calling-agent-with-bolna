@@ -2,13 +2,18 @@ import React, { useState } from 'react';
 import ContactList from './ContactList';
 import ContactDetails from './ContactDetails';
 import ContactForm from './ContactForm';
+import PipelineView from './PipelineView';
 import { useContacts } from '@/hooks/useContacts';
 import { useToast } from '@/components/ui/use-toast';
 import { useSuccessFeedback } from '@/contexts/SuccessFeedbackContext';
 import { confirmationPresets } from '@/hooks/useConfirmation';
+import { Button } from '@/components/ui/button';
+import { LayoutGrid, Kanban } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { Contact } from '@/types';
 
-type ViewMode = 'list' | 'details' | 'form';
+type ViewMode = 'list' | 'pipeline' | 'details' | 'form';
+type DisplayMode = 'table' | 'pipeline';
 
 export const ContactManager: React.FC = () => {
   const { toast } = useToast();
@@ -16,6 +21,7 @@ export const ContactManager: React.FC = () => {
   const { showSuccess, confirm } = useSuccessFeedback();
   
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('table');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -98,14 +104,94 @@ export const ContactManager: React.FC = () => {
       
       case 'list':
       default:
+        // Show either table or pipeline based on displayMode
+        if (displayMode === 'pipeline') {
+          return (
+            <div className="h-full flex flex-col">
+              {/* View Toggle Header */}
+              <div className="flex-shrink-0 px-6 py-3 border-b bg-background flex items-center justify-end gap-2">
+                <div className="flex items-center rounded-lg border bg-muted p-1">
+                  <Button
+                    variant={displayMode === 'table' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className={cn(
+                      'h-8 px-3',
+                      displayMode === 'table' && 'shadow-sm'
+                    )}
+                    onClick={() => setDisplayMode('table')}
+                  >
+                    <LayoutGrid className="h-4 w-4 mr-2" />
+                    Table
+                  </Button>
+                  <Button
+                    variant={displayMode === 'pipeline' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className={cn(
+                      'h-8 px-3',
+                      displayMode === 'pipeline' && 'shadow-sm'
+                    )}
+                    onClick={() => setDisplayMode('pipeline')}
+                  >
+                    <Kanban className="h-4 w-4 mr-2" />
+                    Pipeline
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Pipeline View */}
+              <div className="flex-1 overflow-hidden">
+                <PipelineView
+                  onContactSelect={handleContactSelect}
+                  onContactEdit={handleContactEdit}
+                />
+              </div>
+            </div>
+          );
+        }
+        
         return (
-          <ContactList
-            onContactSelect={handleContactSelect}
-            onContactEdit={handleContactEdit}
-            onContactCreate={handleContactCreate}
-            enableInfiniteScroll={true}
-            initialPageSize={20}
-          />
+          <div className="h-full flex flex-col">
+            {/* View Toggle Header for Table View */}
+            <div className="flex-shrink-0 px-6 py-3 border-b bg-background flex items-center justify-end gap-2">
+              <div className="flex items-center rounded-lg border bg-muted p-1">
+                <Button
+                  variant={displayMode === 'table' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className={cn(
+                    'h-8 px-3',
+                    displayMode === 'table' && 'shadow-sm'
+                  )}
+                  onClick={() => setDisplayMode('table')}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-2" />
+                  Table
+                </Button>
+                <Button
+                  variant={displayMode === 'pipeline' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className={cn(
+                    'h-8 px-3',
+                    displayMode === 'pipeline' && 'shadow-sm'
+                  )}
+                  onClick={() => setDisplayMode('pipeline')}
+                >
+                  <Kanban className="h-4 w-4 mr-2" />
+                  Pipeline
+                </Button>
+              </div>
+            </div>
+            
+            {/* Table View */}
+            <div className="flex-1 overflow-hidden">
+              <ContactList
+                onContactSelect={handleContactSelect}
+                onContactEdit={handleContactEdit}
+                onContactCreate={handleContactCreate}
+                enableInfiniteScroll={true}
+                initialPageSize={20}
+              />
+            </div>
+          </div>
         );
     }
   };

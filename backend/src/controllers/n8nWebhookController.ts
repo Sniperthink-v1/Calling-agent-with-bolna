@@ -193,6 +193,7 @@ export class N8nWebhookController {
         phoneNumber: normalizedPhone,
         userId: userId,
         contactId: contact.id,
+        fromPhoneNumber: payload.from_phone_number || undefined, // Pass direct from_phone_number if provided
         metadata: {
           source: payload.Source || 'n8n_webhook',
           request_id: requestId,

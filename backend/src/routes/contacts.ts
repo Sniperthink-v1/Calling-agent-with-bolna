@@ -16,6 +16,9 @@ router.get('/', authenticateToken, requireAuth, ContactController.getContacts);
 router.post('/', authenticateToken, requireAuth, ContactController.createContact);
 router.get('/stats', authenticateToken, requireAuth, ContactController.getContactStats);
 
+// Pipeline view endpoint (optimized for kanban view with quality badges)
+router.get('/pipeline', authenticateToken, requireAuth, ContactController.getPipelineContacts);
+
 // Bulk upload endpoints (must be before /:id route)
 router.get('/template', ContactController.downloadTemplate);
 

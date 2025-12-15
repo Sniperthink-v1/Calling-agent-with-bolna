@@ -1060,4 +1060,114 @@ export class ContactService {
       throw new Error('Failed to generate Excel template');
     }
   }
+
+  /**
+   * Get contacts with quality badges for pipeline view
+   * Joins contacts with lead_analytics to get Hot/Warm/Cold status
+   */
+  static async getContactsWithQuality(
+    userId: string, 
+    options: { search?: string } = {}
+  ): Promise<{ 
+    contacts: Array<ContactInterface & { 
+      qualityBadge?: 'Hot' | 'Warm' | 'Cold' | null;
+      totalScore?: number;
+    }>; 
+    total: number 
+  }> {
+    try {
+      const { search } = options;
+
+      // Query contacts with their most recent lead_analytics quality badge
+      // Uses the 'complete' analysis type which aggregates across all calls for a contact
+      const query = `
+        SELECT 
+          c.*,
+          -- Quality badge from complete analysis (aggregated across all calls)
+          COALESCE(
+            (SELECT la.lead_status_tag 
+             FROM lead_analytics la
+             JOIN calls cl ON la.call_id = cl.id
+             WHERE cl.contact_id = c.id 
+               AND la.user_id = $1
+               AND la.analysis_type = 'complete'
+             ORDER BY la.analysis_timestamp DESC
+             LIMIT 1),
+            -- Fallback to individual analysis if no complete analysis exists
+            (SELECT la.lead_status_tag 
+             FROM lead_analytics la
+             JOIN calls cl ON la.call_id = cl.id
+             WHERE cl.contact_id = c.id 
+               AND la.user_id = $1
+               AND la.analysis_type = 'individual'
+             ORDER BY la.created_at DESC
+             LIMIT 1)
+          ) as quality_badge,
+          -- Total score for sorting/display
+          COALESCE(
+            (SELECT la.total_score 
+             FROM lead_analytics la
+             JOIN calls cl ON la.call_id = cl.id
+             WHERE cl.contact_id = c.id 
+               AND la.user_id = $1
+             ORDER BY la.analysis_timestamp DESC, la.created_at DESC
+             LIMIT 1),
+            0
+          ) as total_score
+        FROM contacts c
+        WHERE c.user_id = $1
+        ${search ? `AND (
+          c.name ILIKE $2 
+          OR c.phone_number LIKE $2 
+          OR c.email ILIKE $2 
+          OR c.company ILIKE $2
+          OR c.notes ILIKE $2
+          OR EXISTS (SELECT 1 FROM unnest(c.tags) tag WHERE tag ILIKE $2)
+        )` : ''}
+        ORDER BY 
+          CASE c.lead_stage
+            WHEN 'New Lead' THEN 1
+            WHEN 'Contacted' THEN 2
+            WHEN 'Qualified' THEN 3
+            WHEN 'Proposal Sent' THEN 4
+            WHEN 'Negotiation' THEN 5
+            WHEN 'Won' THEN 6
+            WHEN 'Lost' THEN 7
+            ELSE 8
+          END,
+          c.lead_stage_updated_at DESC NULLS LAST,
+          c.created_at DESC
+      `;
+
+      const params = search ? [userId, `%${search}%`] : [userId];
+      const result = await ContactModel.query(query, params);
+      
+      // Map quality_badge to typed qualityBadge
+      const contacts = result.rows.map((row: any) => ({
+        ...row,
+        qualityBadge: this.normalizeQualityBadge(row.quality_badge),
+        totalScore: row.total_score ? parseInt(row.total_score) : undefined
+      }));
+
+      return { 
+        contacts, 
+        total: contacts.length 
+      };
+    } catch (error) {
+      logger.error('Error getting contacts with quality:', error);
+      throw new Error('Failed to retrieve pipeline contacts');
+    }
+  }
+
+  /**
+   * Normalize quality badge to Hot/Warm/Cold
+   */
+  private static normalizeQualityBadge(badge: string | null): 'Hot' | 'Warm' | 'Cold' | null {
+    if (!badge) return null;
+    const lower = badge.toLowerCase();
+    if (lower.includes('hot')) return 'Hot';
+    if (lower.includes('warm')) return 'Warm';
+    if (lower.includes('cold')) return 'Cold';
+    return null;
+  }
 }

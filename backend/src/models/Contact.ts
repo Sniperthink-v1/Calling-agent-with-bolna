@@ -14,8 +14,9 @@ export interface ContactInterface extends BaseModelInterface {
   business_context?: string;
   auto_created_from_call_id?: string;
   is_auto_created: boolean;
-  auto_creation_source?: 'webhook' | 'manual' | 'bulk_upload';
+  auto_creation_source?: string; // Custom source strings like 'TradeIndia', 'n8n_webhook', etc.
   lead_stage?: string; // Lead pipeline stage (default: 'New Lead')
+  lead_stage_updated_at?: Date; // When lead stage was last changed (for days in stage calculation)
   tags: string[];
   last_contact_at?: Date;
   call_attempted_busy: number;
@@ -37,8 +38,9 @@ export interface CreateContactData {
   business_context?: string;
   auto_created_from_call_id?: string;
   is_auto_created?: boolean;
-  auto_creation_source?: 'webhook' | 'manual' | 'bulk_upload';
+  auto_creation_source?: string; // Custom source strings like 'TradeIndia', 'n8n_webhook', etc.
   lead_stage?: string; // Lead pipeline stage (default: 'New Lead')
+  lead_stage_updated_at?: Date; // When lead stage was last changed
   tags?: string[];
   last_contact_at?: Date;
   call_attempted_busy?: number;
@@ -56,8 +58,9 @@ export interface UpdateContactData {
   country?: string;
   business_context?: string;
   lead_stage?: string | null; // Lead pipeline stage (can be null to clear)
+  lead_stage_updated_at?: Date; // When lead stage was last changed
   tags?: string[];
-  auto_creation_source?: 'webhook' | 'manual' | 'bulk_upload';
+  auto_creation_source?: string; // Custom source strings like 'TradeIndia', 'n8n_webhook', etc.
   last_contact_at?: Date;
   call_attempted_busy?: number;
   call_attempted_no_answer?: number;

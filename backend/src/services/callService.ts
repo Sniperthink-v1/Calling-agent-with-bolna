@@ -93,7 +93,8 @@ export interface CallInitiationRequest {
   phoneNumber: string;
   userId: string;
   contactId?: string;
-  callerPhoneNumberId?: string; // Optional: user-selected phone number to call from
+  callerPhoneNumberId?: string; // Optional: user-selected phone number ID to call from
+  fromPhoneNumber?: string; // Optional: direct phone number string to call from (bypasses ID lookup)
   metadata?: any;
 }
 
@@ -565,9 +566,24 @@ export class CallService {
             
             // Determine which phone number to use for the call
             let callerPhoneNumber: any = null;
+            let directFromPhoneNumber: string | null = null;
             
+            // Priority 0: Use direct from_phone_number string if provided (e.g., from n8n webhook)
+            if (callRequest.fromPhoneNumber) {
+              directFromPhoneNumber = callRequest.fromPhoneNumber;
+              logger.info(`Using direct from_phone_number from request: ${directFromPhoneNumber}`);
+              
+              Sentry.addBreadcrumb({
+                category: 'call',
+                message: 'Using direct from_phone_number from request',
+                level: 'info',
+                data: {
+                  fromPhoneNumber: directFromPhoneNumber
+                }
+              });
+            }
             // Priority 1: Use user-selected phone number if provided
-            if (callRequest.callerPhoneNumberId) {
+            else if (callRequest.callerPhoneNumberId) {
               callerPhoneNumber = await PhoneNumber.findById(callRequest.callerPhoneNumberId);
               
               // Verify the phone number belongs to the user
@@ -640,8 +656,13 @@ export class CallService {
               }
             };
 
-            // Add from_phone_number if a phone number is available
-            if (callerPhoneNumber && callerPhoneNumber.phone_number) {
+            // Add from_phone_number - Priority order:
+            // 1. Direct from_phone_number string (from n8n webhook)
+            // 2. Phone number from database lookup (callerPhoneNumberId, agent assignment, or user pool)
+            if (directFromPhoneNumber) {
+              bolnaCallData.from_phone_number = directFromPhoneNumber;
+              logger.info(`Call will use direct from_phone_number: ${directFromPhoneNumber}`);
+            } else if (callerPhoneNumber && callerPhoneNumber.phone_number) {
               bolnaCallData.from_phone_number = callerPhoneNumber.phone_number;
               logger.info(`Call will use from_phone_number: ${callerPhoneNumber.phone_number} (${callerPhoneNumber.name})`);
             } else {
@@ -654,10 +675,11 @@ export class CallService {
             
             Sentry.addBreadcrumb({
               category: 'call',
-              message: callerPhoneNumber ? 'Phone number configured' : 'No phone number - using Bolna default',
-              level: callerPhoneNumber ? 'info' : 'warning',
+              message: (directFromPhoneNumber || callerPhoneNumber) ? 'Phone number configured' : 'No phone number - using Bolna default',
+              level: (directFromPhoneNumber || callerPhoneNumber) ? 'info' : 'warning',
               data: {
-                hasPhoneNumber: !!callerPhoneNumber,
+                hasPhoneNumber: !!(directFromPhoneNumber || callerPhoneNumber),
+                directFromPhoneNumber: directFromPhoneNumber || undefined,
                 phoneNumberId: callerPhoneNumber?.id
               }
             });

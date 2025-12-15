@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { LeadStageService, DEFAULT_LEAD_STAGES } from '../services/leadStageService';
+import { LeadStageService, LeadStage, PREDEFINED_LEAD_STAGES } from '../services/leadStageService';
 import { authenticateToken } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
@@ -7,7 +7,7 @@ const router = Router();
 
 /**
  * @route   GET /api/lead-stages
- * @desc    Get all lead stages (default + custom) for the authenticated user
+ * @desc    Get all lead stages for the authenticated user (sorted by order)
  * @access  Private
  */
 router.get('/', authenticateToken, async (req: Request, res: Response): Promise<any> => {
@@ -23,36 +23,13 @@ router.get('/', authenticateToken, async (req: Request, res: Response): Promise<
       success: true,
       data: {
         stages,
-        defaults: DEFAULT_LEAD_STAGES,
+        // Include predefined stages for reference (e.g., reset to defaults)
+        predefinedStages: PREDEFINED_LEAD_STAGES,
       },
     });
   } catch (error) {
     logger.error('Error getting lead stages:', error);
     return res.status(500).json({ error: 'Failed to get lead stages' });
-  }
-});
-
-/**
- * @route   GET /api/lead-stages/custom
- * @desc    Get only custom lead stages for the authenticated user
- * @access  Private
- */
-router.get('/custom', authenticateToken, async (req: Request, res: Response): Promise<any> => {
-  try {
-    const userId = (req as any).userId;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const customStages = await LeadStageService.getCustomStages(userId);
-    
-    return res.json({
-      success: true,
-      data: customStages,
-    });
-  } catch (error) {
-    logger.error('Error getting custom lead stages:', error);
-    return res.status(500).json({ error: 'Failed to get custom lead stages' });
   }
 });
 
@@ -81,12 +58,12 @@ router.get('/stats', authenticateToken, async (req: Request, res: Response): Pro
 });
 
 /**
- * @route   POST /api/lead-stages/custom
- * @desc    Add a new custom lead stage
+ * @route   POST /api/lead-stages
+ * @desc    Add a new lead stage
  * @access  Private
  * @body    { name: string, color?: string }
  */
-router.post('/custom', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+router.post('/', authenticateToken, async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = (req as any).userId;
     if (!userId) {
@@ -103,15 +80,15 @@ router.post('/custom', authenticateToken, async (req: Request, res: Response): P
       return res.status(400).json({ error: 'Stage name must be 100 characters or less' });
     }
 
-    const updatedStages = await LeadStageService.addCustomStage(userId, name.trim(), color);
+    const updatedStages = await LeadStageService.addStage(userId, name.trim(), color);
     
     return res.status(201).json({
       success: true,
-      message: `Custom stage "${name}" created successfully`,
+      message: `Stage "${name}" created successfully`,
       data: updatedStages,
     });
   } catch (error: any) {
-    logger.error('Error adding custom stage:', error);
+    logger.error('Error adding stage:', error);
     
     if (error.message?.includes('already exists')) {
       return res.status(409).json({ error: error.message });
@@ -120,95 +97,122 @@ router.post('/custom', authenticateToken, async (req: Request, res: Response): P
       return res.status(400).json({ error: error.message });
     }
     
-    return res.status(500).json({ error: 'Failed to add custom stage' });
+    return res.status(500).json({ error: 'Failed to add stage' });
   }
 });
 
 /**
- * @route   PUT /api/lead-stages/custom/:name
- * @desc    Update a custom lead stage (rename and/or change color)
+ * @route   PUT /api/lead-stages/reorder
+ * @desc    Reorder all stages (for drag-and-drop)
  * @access  Private
- * @body    { newName?: string, color?: string }
+ * @body    { orderedStageNames: string[] }
+ * NOTE: This route MUST be defined BEFORE /:name to avoid route conflicts
  */
-router.put('/custom/:name', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+router.put('/reorder', authenticateToken, async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = (req as any).userId;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const oldName = decodeURIComponent(req.params.name);
-    const { newName, color } = req.body;
+    const { orderedStageNames } = req.body;
 
-    if (!newName && !color) {
-      return res.status(400).json({ error: 'Either newName or color must be provided' });
+    if (!Array.isArray(orderedStageNames) || orderedStageNames.length === 0) {
+      return res.status(400).json({ error: 'orderedStageNames must be a non-empty array' });
     }
 
-    if (newName && newName.trim().length > 100) {
-      return res.status(400).json({ error: 'Stage name must be 100 characters or less' });
-    }
-
-    const updatedStages = await LeadStageService.updateCustomStage(
-      userId,
-      oldName,
-      newName?.trim(),
-      color
-    );
+    const updatedStages = await LeadStageService.reorderStages(userId, orderedStageNames);
     
     return res.json({
       success: true,
-      message: `Custom stage updated successfully`,
+      message: 'Stages reordered successfully',
       data: updatedStages,
     });
   } catch (error: any) {
-    logger.error('Error updating custom stage:', error);
+    logger.error('Error reordering stages:', error);
     
-    if (error.message?.includes('Cannot edit default stages')) {
-      return res.status(403).json({ error: error.message });
-    }
-    if (error.message?.includes('not found')) {
-      return res.status(404).json({ error: error.message });
-    }
-    if (error.message?.includes('already exists')) {
-      return res.status(409).json({ error: error.message });
+    if (error.message?.includes('not found') || error.message?.includes('All stages must be included')) {
+      return res.status(400).json({ error: error.message });
     }
     
-    return res.status(500).json({ error: 'Failed to update custom stage' });
+    return res.status(500).json({ error: 'Failed to reorder stages' });
   }
 });
 
 /**
- * @route   DELETE /api/lead-stages/custom/:name
- * @desc    Delete a custom lead stage (sets contacts to NULL)
+ * @route   PUT /api/lead-stages/replace-all
+ * @desc    Replace all stages at once (full update from customizer popup)
  * @access  Private
+ * @body    { stages: LeadStage[] }
+ * NOTE: This route MUST be defined BEFORE /:name to avoid route conflicts
  */
-router.delete('/custom/:name', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+router.put('/replace-all', authenticateToken, async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = (req as any).userId;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const stageName = decodeURIComponent(req.params.name);
+    const { stages } = req.body;
 
-    const updatedStages = await LeadStageService.deleteCustomStage(userId, stageName);
+    if (!Array.isArray(stages)) {
+      return res.status(400).json({ error: 'stages must be an array' });
+    }
+
+    // Validate each stage has required fields
+    for (const stage of stages) {
+      if (!stage.name || typeof stage.name !== 'string' || stage.name.trim().length === 0) {
+        return res.status(400).json({ error: 'Each stage must have a valid name' });
+      }
+      if (stage.name.trim().length > 100) {
+        return res.status(400).json({ error: 'Stage names must be 100 characters or less' });
+      }
+      if (!stage.color || !/^#[0-9A-Fa-f]{6}$/.test(stage.color)) {
+        return res.status(400).json({ error: `Invalid color format for stage "${stage.name}". Use hex format like #FF5733` });
+      }
+    }
+
+    const updatedStages = await LeadStageService.replaceAllStages(userId, stages);
     
     return res.json({
       success: true,
-      message: `Custom stage "${stageName}" deleted. Contacts with this stage have been unassigned.`,
+      message: 'All stages updated successfully',
       data: updatedStages,
     });
   } catch (error: any) {
-    logger.error('Error deleting custom stage:', error);
+    logger.error('Error replacing all stages:', error);
     
-    if (error.message?.includes('Cannot delete default stages')) {
-      return res.status(403).json({ error: error.message });
-    }
-    if (error.message?.includes('not found')) {
-      return res.status(404).json({ error: error.message });
+    if (error.message?.includes('Duplicate') || error.message?.includes('cannot be empty') || error.message?.includes('Invalid color')) {
+      return res.status(400).json({ error: error.message });
     }
     
-    return res.status(500).json({ error: 'Failed to delete custom stage' });
+    return res.status(500).json({ error: 'Failed to update stages' });
+  }
+});
+
+/**
+ * @route   POST /api/lead-stages/reset-to-defaults
+ * @desc    Reset stages to predefined defaults
+ * @access  Private
+ * NOTE: This route MUST be defined BEFORE /:name to avoid route conflicts
+ */
+router.post('/reset-to-defaults', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const updatedStages = await LeadStageService.replaceAllStages(userId, PREDEFINED_LEAD_STAGES);
+    
+    return res.json({
+      success: true,
+      message: 'Stages reset to defaults successfully',
+      data: updatedStages,
+    });
+  } catch (error: any) {
+    logger.error('Error resetting stages to defaults:', error);
+    return res.status(500).json({ error: 'Failed to reset stages to defaults' });
   }
 });
 
@@ -217,6 +221,7 @@ router.delete('/custom/:name', authenticateToken, async (req: Request, res: Resp
  * @desc    Bulk update lead stage for multiple contacts
  * @access  Private
  * @body    { contactIds: string[], stage: string | null }
+ * NOTE: This route MUST be defined BEFORE /:name to avoid route conflicts
  */
 router.post('/bulk-update', authenticateToken, async (req: Request, res: Response): Promise<any> => {
   try {
@@ -254,6 +259,93 @@ router.post('/bulk-update', authenticateToken, async (req: Request, res: Respons
     }
     
     return res.status(500).json({ error: 'Failed to bulk update lead stage' });
+  }
+});
+
+/**
+ * @route   PUT /api/lead-stages/:name
+ * @desc    Update a lead stage (rename and/or change color)
+ * @access  Private
+ * @body    { newName?: string, color?: string }
+ * NOTE: This wildcard route MUST be defined AFTER all specific PUT routes (/reorder, /replace-all)
+ */
+router.put('/:name', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const oldName = decodeURIComponent(req.params.name);
+    const { newName, color } = req.body;
+
+    if (!newName && !color) {
+      return res.status(400).json({ error: 'Either newName or color must be provided' });
+    }
+
+    if (newName && newName.trim().length > 100) {
+      return res.status(400).json({ error: 'Stage name must be 100 characters or less' });
+    }
+
+    const updatedStages = await LeadStageService.updateStage(
+      userId,
+      oldName,
+      newName?.trim(),
+      color
+    );
+    
+    return res.json({
+      success: true,
+      message: `Stage updated successfully`,
+      data: updatedStages,
+    });
+  } catch (error: any) {
+    logger.error('Error updating stage:', error);
+    
+    if (error.message?.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.message?.includes('already exists')) {
+      return res.status(409).json({ error: error.message });
+    }
+    if (error.message?.includes('Invalid color format')) {
+      return res.status(400).json({ error: error.message });
+    }
+    
+    return res.status(500).json({ error: 'Failed to update stage' });
+  }
+});
+
+/**
+ * @route   DELETE /api/lead-stages/:name
+ * @desc    Delete a lead stage (sets contacts to NULL)
+ * @access  Private
+ * NOTE: This wildcard route MUST be defined AFTER all specific DELETE routes
+ */
+router.delete('/:name', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const stageName = decodeURIComponent(req.params.name);
+
+    const updatedStages = await LeadStageService.deleteStage(userId, stageName);
+    
+    return res.json({
+      success: true,
+      message: `Stage "${stageName}" deleted. Contacts with this stage have been unassigned.`,
+      data: updatedStages,
+    });
+  } catch (error: any) {
+    logger.error('Error deleting stage:', error);
+    
+    if (error.message?.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    
+    return res.status(500).json({ error: 'Failed to delete stage' });
   }
 });
 

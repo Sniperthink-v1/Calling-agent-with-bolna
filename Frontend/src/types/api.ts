@@ -14,29 +14,28 @@ export type TransactionType = 'purchase' | 'usage' | 'bonus' | 'admin_adjustment
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
 export type NotificationType = 'smart_notification' | 'demo_booking' | 'follow_up' | 'conversion';
 
-// Default lead stages
-export const DEFAULT_LEAD_STAGES = [
-  { name: 'New Lead', color: '#3B82F6' },      // Blue
-  { name: 'Contacted', color: '#8B5CF6' },     // Purple
-  { name: 'Qualified', color: '#F59E0B' },     // Amber
-  { name: 'Proposal Sent', color: '#06B6D4' }, // Cyan
-  { name: 'Negotiation', color: '#EC4899' },   // Pink
-  { name: 'Won', color: '#10B981' },           // Green
-  { name: 'Lost', color: '#EF4444' },          // Red
-] as const;
+// Predefined lead stages - these are used to auto-populate new users and as reset defaults
+// Users can fully customize their stages including renaming, recoloring, reordering, or deleting
+export const PREDEFINED_LEAD_STAGES: LeadStage[] = [
+  { name: 'New Lead', color: '#3B82F6', order: 0 },      // Blue
+  { name: 'Contacted', color: '#8B5CF6', order: 1 },     // Purple
+  { name: 'Qualified', color: '#F59E0B', order: 2 },     // Amber
+  { name: 'Proposal Sent', color: '#06B6D4', order: 3 }, // Cyan
+  { name: 'Negotiation', color: '#EC4899', order: 4 },   // Pink
+  { name: 'Won', color: '#10B981', order: 5 },           // Green
+  { name: 'Lost', color: '#EF4444', order: 6 },          // Red
+];
 
-export type DefaultLeadStageName = typeof DEFAULT_LEAD_STAGES[number]['name'];
+// @deprecated Use PREDEFINED_LEAD_STAGES instead - kept for backward compatibility
+export const DEFAULT_LEAD_STAGES = PREDEFINED_LEAD_STAGES;
 
-// Lead stage interfaces
+export type PredefinedLeadStageName = typeof PREDEFINED_LEAD_STAGES[number]['name'];
+
+// Lead stage interface - unified structure for all stages (no more isCustom flag)
 export interface LeadStage {
   name: string;
   color: string;
-  isCustom: boolean;
-}
-
-export interface CustomLeadStage {
-  name: string;
-  color: string;
+  order: number;
 }
 
 export interface LeadStageStats {
@@ -275,7 +274,7 @@ export interface Contact {
   businessContext?: string;
   autoCreatedFromCallId?: string;
   isAutoCreated: boolean;
-  autoCreationSource?: 'webhook' | 'manual' | 'bulk_upload';
+  autoCreationSource?: string; // Custom source strings like 'TradeIndia', 'n8n_webhook', etc.
   linkedCallId?: string;
   callLinkType?: 'auto_created' | 'manually_linked' | 'not_linked';
   callCreatedAt?: string;
@@ -287,6 +286,7 @@ export interface Contact {
   callAttemptedFailed: number;
   callType: 'inbound' | 'outbound';
   leadStage?: string;
+  leadStageUpdatedAt?: string; // When lead stage was last changed (for days in stage calculation)
   createdAt: string;
   updatedAt: string;
 }

@@ -732,4 +732,35 @@ export class ContactController {
       });
     }
   }
+
+  /**
+   * Get contacts with pipeline view data (quality badges from lead_analytics)
+   * Optimized endpoint for kanban/pipeline view
+   */
+  static async getPipelineContacts(req: Request, res: Response): Promise<Response | void> {
+    try {
+      const userId = (req.user as any)?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const { search } = req.query;
+      
+      const result = await ContactService.getContactsWithQuality(userId, { search: search as string });
+      
+      res.json({
+        success: true,
+        data: {
+          contacts: result.contacts,
+          total: result.total
+        }
+      });
+    } catch (error) {
+      logger.error('Error in getPipelineContacts:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve pipeline contacts',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 }

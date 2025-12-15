@@ -34,6 +34,7 @@ import {
   Loader2,
   PhoneIncoming,
   ArrowUpDown,
+  Settings2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ import { useContacts } from '@/hooks/useContacts';
 import { useToast } from '@/components/ui/use-toast';
 import DeleteContactDialog from './DeleteContactDialog';
 import BulkContactUpload from './BulkContactUpload';
+import { LeadStageCustomizer } from './LeadStageCustomizer';
 import { CallAgentModal } from './CallAgentModal';
 import { SendWhatsAppModal } from './SendWhatsAppModal';
 import { SendEmailModal } from './SendEmailModal';
@@ -91,6 +93,7 @@ export const ContactList: React.FC<ContactListProps> = ({
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [isLeadStageCustomizerOpen, setIsLeadStageCustomizerOpen] = useState(false);
   const [allLoadedContacts, setAllLoadedContacts] = useState<Contact[]>([]);
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
@@ -541,9 +544,15 @@ export const ContactList: React.FC<ContactListProps> = ({
   // Helper: Map source to display name
   const getSourceLabel = (contact: Contact) => {
     // If auto_creation_source is explicitly set, use it
-    if (contact.autoCreationSource === 'webhook') return 'Inbound Call';
-    if (contact.autoCreationSource === 'bulk_upload') return 'Excel Upload';
-    if (contact.autoCreationSource === 'manual') return 'Manual Entry';
+    if (contact.autoCreationSource) {
+      // Handle known system sources
+      if (contact.autoCreationSource === 'webhook') return 'Inbound Call';
+      if (contact.autoCreationSource === 'bulk_upload') return 'Excel Upload';
+      if (contact.autoCreationSource === 'manual') return 'Manual Entry';
+      if (contact.autoCreationSource === 'n8n_webhook') return 'n8n Webhook';
+      // For custom sources (e.g., 'TradeIndia', 'Zapier', etc.), display as-is
+      return contact.autoCreationSource;
+    }
     
     // If contact was auto-created (from inbound call) but source is null
     if (contact.isAutoCreated) return 'Inbound Call';
@@ -617,6 +626,14 @@ export const ContactList: React.FC<ContactListProps> = ({
                   Create Campaign ({selectedContactIds.size})
                 </Button>
               )}
+              <Button
+                onClick={() => setIsLeadStageCustomizerOpen(true)}
+                variant="outline"
+                size="sm"
+              >
+                <Settings2 className="w-4 h-4 mr-2" />
+                Lead Stages
+              </Button>
               <Button
                 onClick={() => setIsBulkUploadOpen(true)}
                 variant="outline"
@@ -1351,6 +1368,11 @@ export const ContactList: React.FC<ContactListProps> = ({
         isOpen={isBulkUploadOpen}
         onOpenChange={setIsBulkUploadOpen}
         onUploadComplete={handleBulkUploadSuccess}
+      />
+
+      <LeadStageCustomizer
+        open={isLeadStageCustomizerOpen}
+        onOpenChange={setIsLeadStageCustomizerOpen}
       />
 
       {selectedContact && (

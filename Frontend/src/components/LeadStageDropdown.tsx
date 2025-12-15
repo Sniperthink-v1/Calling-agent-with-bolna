@@ -6,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
   SelectGroup,
-  SelectLabel,
   SelectSeparator,
 } from './ui/select';
 import {
@@ -34,7 +33,6 @@ import { Badge } from './ui/badge';
 import { useLeadStages } from '../hooks/useLeadStages';
 import { Plus, Pencil, Trash2, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { DEFAULT_LEAD_STAGES } from '../types/api';
 
 // Color palette for custom stages (excluding default stage colors)
 const CUSTOM_STAGE_COLORS = [
@@ -83,10 +81,9 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
     creating,
     updating,
     deleting,
-    addCustomStage,
-    updateCustomStage,
-    deleteCustomStage,
-    isDefaultStage,
+    addStage,
+    updateStage,
+    deleteStage,
   } = useLeadStages();
 
   const [stageModal, setStageModal] = useState<StageModalState>({
@@ -100,10 +97,6 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
     stageName: string;
   }>({ isOpen: false, stageName: '' });
   const [isManaging, setIsManaging] = useState(false);
-
-  // Get default and custom stages separately
-  const defaultStages = stages.filter(s => !s.isCustom);
-  const customStages = stages.filter(s => s.isCustom);
 
   const handleValueChange = useCallback((newValue: string) => {
     if (newValue === '__manage__') {
@@ -143,12 +136,12 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
       return;
     }
 
-    const result = await addCustomStage(stageName.trim(), stageColor);
+    const result = await addStage(stageName.trim(), stageColor);
     if (result) {
-      toast.success('Custom stage created');
+      toast.success('Stage created successfully');
       setStageModal({ ...stageModal, isOpen: false });
     } else {
-      toast.error('Failed to create custom stage');
+      toast.error('Failed to create stage');
     }
   };
 
@@ -172,7 +165,7 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
       return;
     }
 
-    const result = await updateCustomStage(
+    const result = await updateStage(
       originalName,
       stageName.trim() !== originalName ? stageName.trim() : undefined,
       stageColor
@@ -188,7 +181,7 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
   const handleDeleteStage = async () => {
     const { stageName } = deleteConfirm;
     
-    const result = await deleteCustomStage(stageName);
+    const result = await deleteStage(stageName);
     if (result) {
       toast.success('Stage deleted');
       setDeleteConfirm({ isOpen: false, stageName: '' });
@@ -269,10 +262,9 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
             </>
           )}
 
-          {/* Default stages */}
+          {/* All stages (sorted by order) */}
           <SelectGroup>
-            <SelectLabel>Default Stages</SelectLabel>
-            {defaultStages.map((stage) => (
+            {stages.map((stage) => (
               <SelectItem key={stage.name} value={stage.name}>
                 <span className="flex items-center">
                   <ColorDot color={stage.color} />
@@ -281,24 +273,6 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
               </SelectItem>
             ))}
           </SelectGroup>
-
-          {/* Custom stages */}
-          {customStages.length > 0 && (
-            <>
-              <SelectSeparator />
-              <SelectGroup>
-                <SelectLabel>Custom Stages</SelectLabel>
-                {customStages.map((stage) => (
-                  <SelectItem key={stage.name} value={stage.name}>
-                    <span className="flex items-center">
-                      <ColorDot color={stage.color} />
-                      {stage.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </>
-          )}
 
           {/* Management options */}
           {showManageOption && (
@@ -310,11 +284,11 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
                   Add new stage
                 </span>
               </SelectItem>
-              {customStages.length > 0 && (
+              {stages.length > 0 && (
                 <SelectItem value="__manage__" className="text-muted-foreground">
                   <span className="flex items-center">
                     <Pencil className="w-3 h-3 mr-2" />
-                    Manage custom stages
+                    Manage stages
                   </span>
                 </SelectItem>
               )}
@@ -331,11 +305,11 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {stageModal.mode === 'create' ? 'Create Custom Stage' : 'Edit Custom Stage'}
+              {stageModal.mode === 'create' ? 'Create Stage' : 'Edit Stage'}
             </DialogTitle>
             <DialogDescription>
               {stageModal.mode === 'create' 
-                ? 'Add a new custom stage to your lead pipeline.'
+                ? 'Add a new stage to your lead pipeline.'
                 : 'Update the stage name or color. All contacts with this stage will be updated.'}
             </DialogDescription>
           </DialogHeader>
@@ -413,9 +387,9 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
           </DialogHeader>
 
           <div className="py-4">
-            {customStages.length === 0 ? (
+            {stages.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <p>No custom stages yet.</p>
+                <p>No stages yet.</p>
                 <Button
                   variant="outline"
                   className="mt-4"
@@ -435,7 +409,7 @@ export const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
               </div>
             ) : (
               <div className="space-y-2">
-                {customStages.map((stage) => (
+                {stages.map((stage) => (
                   <div
                     key={stage.name}
                     className="flex items-center justify-between p-3 rounded-lg border bg-card"

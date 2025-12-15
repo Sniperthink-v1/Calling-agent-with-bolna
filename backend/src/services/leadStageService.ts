@@ -1,98 +1,84 @@
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
-import { CustomLeadStage } from '../models/User';
 
-// Default lead stages with their colors
-export const DEFAULT_LEAD_STAGES: { name: string; color: string }[] = [
-  { name: 'New Lead', color: '#3B82F6' },      // Blue
-  { name: 'Contacted', color: '#8B5CF6' },     // Purple
-  { name: 'Qualified', color: '#F59E0B' },     // Amber
-  { name: 'Proposal Sent', color: '#06B6D4' }, // Cyan
-  { name: 'Negotiation', color: '#EC4899' },   // Pink
-  { name: 'Won', color: '#10B981' },           // Green
-  { name: 'Lost', color: '#EF4444' },          // Red
+/**
+ * Lead Stage structure - All stages are user-customizable
+ * Stages are stored in users.custom_lead_stages as JSONB array
+ * New users are auto-populated with predefined stages via database trigger
+ */
+export interface LeadStage {
+  name: string;
+  color: string;
+  order: number;
+}
+
+// Predefined stages for new users (also used in migration)
+// These are auto-populated via database trigger trg_initialize_user_lead_stages
+export const PREDEFINED_LEAD_STAGES: LeadStage[] = [
+  { name: 'New Lead', color: '#3B82F6', order: 0 },      // Blue
+  { name: 'Contacted', color: '#8B5CF6', order: 1 },     // Purple
+  { name: 'Qualified', color: '#F59E0B', order: 2 },     // Amber
+  { name: 'Proposal Sent', color: '#06B6D4', order: 3 }, // Cyan
+  { name: 'Negotiation', color: '#EC4899', order: 4 },   // Pink
+  { name: 'Won', color: '#10B981', order: 5 },           // Green
+  { name: 'Lost', color: '#EF4444', order: 6 },          // Red
 ];
 
-// Generate a random color (not from default palette) for custom stages
+// Generate a random vibrant color
 function generateRandomColor(): string {
-  const defaultColors = DEFAULT_LEAD_STAGES.map(s => s.color.toLowerCase());
-  let color: string;
+  // Generate a vibrant color using HSL with high saturation
+  const hue = Math.floor(Math.random() * 360);
+  const saturation = 60 + Math.floor(Math.random() * 25); // 60-85%
+  const lightness = 45 + Math.floor(Math.random() * 15);  // 45-60%
   
-  // Keep generating until we get a color not in default palette
-  do {
-    // Generate a vibrant color using HSL with high saturation
-    const hue = Math.floor(Math.random() * 360);
-    const saturation = 60 + Math.floor(Math.random() * 25); // 60-85%
-    const lightness = 45 + Math.floor(Math.random() * 15);  // 45-60%
-    
-    // Convert HSL to hex
-    const h = hue / 360;
-    const s = saturation / 100;
-    const l = lightness / 100;
-    
-    const hue2rgb = (p: number, q: number, t: number) => {
-      if (t < 0) t += 1;
-      if (t > 1) t -= 1;
-      if (t < 1/6) return p + (q - p) * 6 * t;
-      if (t < 1/2) return q;
-      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-      return p;
-    };
-    
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    const r = Math.round(hue2rgb(p, q, h + 1/3) * 255);
-    const g = Math.round(hue2rgb(p, q, h) * 255);
-    const b = Math.round(hue2rgb(p, q, h - 1/3) * 255);
-    
-    color = '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
-  } while (defaultColors.includes(color.toLowerCase()));
+  // Convert HSL to hex
+  const h = hue / 360;
+  const s = saturation / 100;
+  const l = lightness / 100;
   
-  return color.toUpperCase();
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const r = Math.round(hue2rgb(p, q, h + 1/3) * 255);
+  const g = Math.round(hue2rgb(p, q, h) * 255);
+  const b = Math.round(hue2rgb(p, q, h - 1/3) * 255);
+  
+  return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 export class LeadStageService {
   /**
-   * Get the color for a lead stage (either default or custom)
+   * Get the color for a lead stage
    */
-  static getStageColor(stageName: string, customStages: CustomLeadStage[] = []): string | null {
-    // First check default stages
-    const defaultStage = DEFAULT_LEAD_STAGES.find(
+  static getStageColor(stageName: string, userStages: LeadStage[] = []): string | null {
+    const stage = userStages.find(
       s => s.name.toLowerCase() === stageName.toLowerCase()
     );
-    if (defaultStage) {
-      return defaultStage.color;
-    }
-    
-    // Then check custom stages
-    const customStage = customStages.find(
-      s => s.name.toLowerCase() === stageName.toLowerCase()
-    );
-    if (customStage) {
-      return customStage.color;
-    }
-    
-    return null;
+    return stage?.color || null;
   }
 
   /**
-   * Get all available stages for a user (default + custom)
+   * Get all stages for a user (sorted by order)
    */
-  static async getAllStages(userId: string): Promise<{ name: string; color: string; isCustom: boolean }[]> {
+  static async getAllStages(userId: string): Promise<LeadStage[]> {
     try {
-      // Get user's custom stages
       const result = await pool.query(
         'SELECT custom_lead_stages FROM users WHERE id = $1',
         [userId]
       );
       
-      const customStages: CustomLeadStage[] = result.rows[0]?.custom_lead_stages || [];
+      const stages: LeadStage[] = result.rows[0]?.custom_lead_stages || [];
       
-      // Combine default and custom stages
-      return [
-        ...DEFAULT_LEAD_STAGES.map(s => ({ ...s, isCustom: false })),
-        ...customStages.map(s => ({ ...s, isCustom: true })),
-      ];
+      // Sort by order field
+      return stages.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
     } catch (error) {
       logger.error('Error getting all stages:', error);
       throw error;
@@ -100,37 +86,19 @@ export class LeadStageService {
   }
 
   /**
-   * Get only custom stages for a user
+   * Add a new stage for a user
    */
-  static async getCustomStages(userId: string): Promise<CustomLeadStage[]> {
-    try {
-      const result = await pool.query(
-        'SELECT custom_lead_stages FROM users WHERE id = $1',
-        [userId]
-      );
-      
-      return result.rows[0]?.custom_lead_stages || [];
-    } catch (error) {
-      logger.error('Error getting custom stages:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Add a new custom stage for a user
-   */
-  static async addCustomStage(
+  static async addStage(
     userId: string, 
     stageName: string, 
     color?: string
-  ): Promise<CustomLeadStage[]> {
+  ): Promise<LeadStage[]> {
     try {
-      // Get existing custom stages
-      const customStages = await this.getCustomStages(userId);
+      // Get existing stages
+      const stages = await this.getAllStages(userId);
       
-      // Check if stage name already exists (default or custom)
-      const allStages = await this.getAllStages(userId);
-      const existingStage = allStages.find(
+      // Check if stage name already exists
+      const existingStage = stages.find(
         s => s.name.toLowerCase() === stageName.toLowerCase()
       );
       
@@ -146,13 +114,17 @@ export class LeadStageService {
         throw new Error('Invalid color format. Use hex format like #FF5733');
       }
       
+      // Determine order (add to end)
+      const maxOrder = stages.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
+      
       // Add new stage
-      const newStage: CustomLeadStage = {
+      const newStage: LeadStage = {
         name: stageName.trim(),
         color: stageColor.toUpperCase(),
+        order: maxOrder + 1,
       };
       
-      const updatedStages = [...customStages, newStage];
+      const updatedStages = [...stages, newStage];
       
       // Save to database
       await pool.query(
@@ -160,79 +132,74 @@ export class LeadStageService {
         [JSON.stringify(updatedStages), userId]
       );
       
-      logger.info(`Custom stage added for user ${userId}: ${stageName}`);
+      logger.info(`Stage added for user ${userId}: ${stageName}`);
       return updatedStages;
     } catch (error) {
-      logger.error('Error adding custom stage:', error);
+      logger.error('Error adding stage:', error);
       throw error;
     }
   }
 
   /**
-   * Update a custom stage (rename and/or change color)
+   * Update a stage (rename and/or change color)
    * Also updates all contacts that have this stage
    */
-  static async updateCustomStage(
+  static async updateStage(
     userId: string,
     oldStageName: string,
     newStageName?: string,
     newColor?: string
-  ): Promise<CustomLeadStage[]> {
+  ): Promise<LeadStage[]> {
     const client = await pool.getClient();
     
     try {
       await client.query('BEGIN');
       
-      // Get existing custom stages
+      // Get existing stages
       const result = await client.query(
         'SELECT custom_lead_stages FROM users WHERE id = $1',
         [userId]
       );
-      const customStages: CustomLeadStage[] = result.rows[0]?.custom_lead_stages || [];
+      const stages: LeadStage[] = result.rows[0]?.custom_lead_stages || [];
       
       // Find the stage to update
-      const stageIndex = customStages.findIndex(
+      const stageIndex = stages.findIndex(
         s => s.name.toLowerCase() === oldStageName.toLowerCase()
       );
       
       if (stageIndex === -1) {
-        // Check if it's a default stage (can't edit default stages)
-        const isDefault = DEFAULT_LEAD_STAGES.some(
-          s => s.name.toLowerCase() === oldStageName.toLowerCase()
-        );
-        if (isDefault) {
-          throw new Error('Cannot edit default stages');
-        }
         throw new Error(`Stage "${oldStageName}" not found`);
       }
       
       // Update stage name if provided
-      const actualNewName = newStageName?.trim() || customStages[stageIndex].name;
+      const actualNewName = newStageName?.trim() || stages[stageIndex].name;
       
       // Check if new name conflicts with existing stages
       if (newStageName && newStageName.toLowerCase() !== oldStageName.toLowerCase()) {
-        const allStages = [
-          ...DEFAULT_LEAD_STAGES,
-          ...customStages.filter((_, i) => i !== stageIndex),
-        ];
-        const nameConflict = allStages.some(
-          s => s.name.toLowerCase() === actualNewName.toLowerCase()
+        const nameConflict = stages.some(
+          (s, i) => i !== stageIndex && s.name.toLowerCase() === actualNewName.toLowerCase()
         );
         if (nameConflict) {
           throw new Error(`Stage "${actualNewName}" already exists`);
         }
       }
       
+      // Validate color format if provided
+      if (newColor && !/^#[0-9A-Fa-f]{6}$/.test(newColor)) {
+        throw new Error('Invalid color format. Use hex format like #FF5733');
+      }
+      
       // Update the stage
-      customStages[stageIndex] = {
+      stages[stageIndex] = {
         name: actualNewName,
-        color: newColor?.toUpperCase() || customStages[stageIndex].color,
+        color: newColor?.toUpperCase() || stages[stageIndex].color,
+        order: stages[stageIndex].order,
       };
       
       // Save updated stages to users table
       await client.query(
         'UPDATE users SET custom_lead_stages = $1::jsonb, updated_at = NOW() WHERE id = $2',
-        [JSON.stringify(customStages), userId]
+        [JSON.stringify(stages), userId]
       );
       
       // Update all contacts with the old stage name (if name changed)
@@ -246,11 +213,11 @@ export class LeadStageService {
       
       await client.query('COMMIT');
       
-      logger.info(`Custom stage updated for user ${userId}: ${oldStageName} -> ${actualNewName}`);
-      return customStages;
+      logger.info(`Stage updated for user ${userId}: ${oldStageName} -> ${actualNewName}`);
+      return stages.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
     } catch (error) {
       await client.query('ROLLBACK');
-      logger.error('Error updating custom stage:', error);
+      logger.error('Error updating stage:', error);
       throw error;
     } finally {
       client.release();
@@ -258,48 +225,45 @@ export class LeadStageService {
   }
 
   /**
-   * Delete a custom stage
+   * Delete a stage
    * Sets lead_stage to NULL for all contacts that had this stage
    */
-  static async deleteCustomStage(
+  static async deleteStage(
     userId: string, 
     stageName: string
-  ): Promise<CustomLeadStage[]> {
+  ): Promise<LeadStage[]> {
     const client = await pool.getClient();
     
     try {
       await client.query('BEGIN');
       
-      // Get existing custom stages
+      // Get existing stages
       const result = await client.query(
         'SELECT custom_lead_stages FROM users WHERE id = $1',
         [userId]
       );
-      const customStages: CustomLeadStage[] = result.rows[0]?.custom_lead_stages || [];
+      const stages: LeadStage[] = result.rows[0]?.custom_lead_stages || [];
       
       // Find the stage to delete
-      const stageIndex = customStages.findIndex(
+      const stageIndex = stages.findIndex(
         s => s.name.toLowerCase() === stageName.toLowerCase()
       );
       
       if (stageIndex === -1) {
-        // Check if it's a default stage (can't delete default stages)
-        const isDefault = DEFAULT_LEAD_STAGES.some(
-          s => s.name.toLowerCase() === stageName.toLowerCase()
-        );
-        if (isDefault) {
-          throw new Error('Cannot delete default stages');
-        }
         throw new Error(`Stage "${stageName}" not found`);
       }
       
       // Remove the stage
-      customStages.splice(stageIndex, 1);
+      stages.splice(stageIndex, 1);
+      
+      // Re-normalize order values
+      stages.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      stages.forEach((s, i) => { s.order = i; });
       
       // Save updated stages to users table
       await client.query(
         'UPDATE users SET custom_lead_stages = $1::jsonb, updated_at = NOW() WHERE id = $2',
-        [JSON.stringify(customStages), userId]
+        [JSON.stringify(stages), userId]
       );
       
       // Set lead_stage to NULL for all contacts with this stage
@@ -310,11 +274,142 @@ export class LeadStageService {
       
       await client.query('COMMIT');
       
-      logger.info(`Custom stage deleted for user ${userId}: ${stageName}. Affected contacts: ${updateResult.rowCount}`);
-      return customStages;
+      logger.info(`Stage deleted for user ${userId}: ${stageName}. Affected contacts: ${updateResult.rowCount}`);
+      return stages;
     } catch (error) {
       await client.query('ROLLBACK');
-      logger.error('Error deleting custom stage:', error);
+      logger.error('Error deleting stage:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Reorder stages (used for drag-and-drop reordering)
+   * @param orderedStageNames - Array of stage names in new order
+   */
+  static async reorderStages(
+    userId: string,
+    orderedStageNames: string[]
+  ): Promise<LeadStage[]> {
+    try {
+      // Get existing stages
+      const stages = await this.getAllStages(userId);
+      
+      // Validate all stage names exist
+      const stageMap = new Map(stages.map(s => [s.name.toLowerCase(), s]));
+      
+      for (const name of orderedStageNames) {
+        if (!stageMap.has(name.toLowerCase())) {
+          throw new Error(`Stage "${name}" not found`);
+        }
+      }
+      
+      // Check no stages are missing
+      if (orderedStageNames.length !== stages.length) {
+        throw new Error('All stages must be included in the reorder request');
+      }
+      
+      // Create reordered stages array
+      const reorderedStages: LeadStage[] = orderedStageNames.map((name, index) => {
+        const stage = stageMap.get(name.toLowerCase())!;
+        return {
+          ...stage,
+          order: index,
+        };
+      });
+      
+      // Save to database
+      await pool.query(
+        'UPDATE users SET custom_lead_stages = $1::jsonb, updated_at = NOW() WHERE id = $2',
+        [JSON.stringify(reorderedStages), userId]
+      );
+      
+      logger.info(`Stages reordered for user ${userId}`);
+      return reorderedStages;
+    } catch (error) {
+      logger.error('Error reordering stages:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Replace all stages at once (full update)
+   * Used by the customizer popup to save all changes atomically
+   */
+  static async replaceAllStages(
+    userId: string,
+    newStages: LeadStage[]
+  ): Promise<LeadStage[]> {
+    const client = await pool.getClient();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Get existing stages for comparison
+      const result = await client.query(
+        'SELECT custom_lead_stages FROM users WHERE id = $1',
+        [userId]
+      );
+      const oldStages: LeadStage[] = result.rows[0]?.custom_lead_stages || [];
+      
+      // Validate new stages
+      const seenNames = new Set<string>();
+      for (const stage of newStages) {
+        // Check for duplicates
+        const lowerName = stage.name.toLowerCase();
+        if (seenNames.has(lowerName)) {
+          throw new Error(`Duplicate stage name: "${stage.name}"`);
+        }
+        seenNames.add(lowerName);
+        
+        // Validate name
+        if (!stage.name || stage.name.trim().length === 0) {
+          throw new Error('Stage name cannot be empty');
+        }
+        
+        // Validate color format
+        if (!stage.color || !/^#[0-9A-Fa-f]{6}$/.test(stage.color)) {
+          throw new Error(`Invalid color format for stage "${stage.name}". Use hex format like #FF5733`);
+        }
+      }
+      
+      // Normalize order values and colors
+      const normalizedStages: LeadStage[] = newStages.map((stage, index) => ({
+        name: stage.name.trim(),
+        color: stage.color.toUpperCase(),
+        order: index,
+      }));
+      
+      // Find deleted stages (in old but not in new)
+      const newStageNames = new Set(normalizedStages.map(s => s.name.toLowerCase()));
+      const deletedStages = oldStages.filter(s => !newStageNames.has(s.name.toLowerCase()));
+      
+      // Find renamed stages (by comparing old and new names)
+      const oldStageNames = new Set(oldStages.map(s => s.name.toLowerCase()));
+      
+      // Save new stages
+      await client.query(
+        'UPDATE users SET custom_lead_stages = $1::jsonb, updated_at = NOW() WHERE id = $2',
+        [JSON.stringify(normalizedStages), userId]
+      );
+      
+      // Set lead_stage to NULL for contacts with deleted stages
+      for (const deletedStage of deletedStages) {
+        await client.query(
+          'UPDATE contacts SET lead_stage = NULL, updated_at = NOW() WHERE user_id = $1 AND LOWER(lead_stage) = LOWER($2)',
+          [userId, deletedStage.name]
+        );
+      }
+      
+      await client.query('COMMIT');
+      
+      logger.info(`All stages replaced for user ${userId}. Deleted ${deletedStages.length} stages.`);
+      return normalizedStages;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error replacing all stages:', error);
       throw error;
     } finally {
       client.release();
