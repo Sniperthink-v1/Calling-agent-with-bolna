@@ -469,7 +469,7 @@ class FollowUpEmailService {
           if (textContent?.text) {
             content = textContent.text;
             logger.info('Content extracted from Responses API output format', {
-              contentLength: content.length
+              contentLength: textContent.text.length
             });
           }
         }
@@ -477,16 +477,17 @@ class FollowUpEmailService {
       
       // Fallback to legacy chat completions format
       if (!content && response.data?.choices?.[0]?.message?.content) {
-        content = response.data.choices[0].message.content;
+        const legacyContent = response.data.choices[0].message.content;
+        content = legacyContent;
         logger.info('Content extracted from legacy choices format', {
-          contentLength: content.length
+          contentLength: legacyContent.length
         });
       }
       
       if (content) {
         logger.info('OpenAI content extracted', {
-          contentLength: content.length,
-          contentPreview: content.substring(0, 200)
+          contentLength: content?.length,
+          contentPreview: content?.substring(0, 200)
         });
 
         try {
