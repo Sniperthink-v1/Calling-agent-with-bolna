@@ -398,8 +398,11 @@ export class ContactService {
   /**
    * Normalize phone number format to [ISD code] [space] [rest of the number]
    * Takes last 10 digits as number and other digits at front as ISD codes
+   * 
+   * Note: Made public to allow external services (webhooks) to normalize phone numbers
+   *       before checking for existing contacts
    */
-  private static normalizePhoneNumber(phoneNumber: string): string {
+  static normalizePhoneNumber(phoneNumber: string): string {
     // Remove all non-digit characters except +
     const cleaned = phoneNumber.replace(/[^\d+]/g, '');
     
