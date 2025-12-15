@@ -91,9 +91,16 @@ class ChatAgentUserSyncService {
       return;
     }
 
-    logger.info('🚀 Initializing Chat Agent User Sync Service');
+    // Skip periodic polling in serverless mode - prevents database connections from staying alive
+    // Users are synced on-demand when they sign up (via syncUserToAgentServer)
+    if (process.env.SERVERLESS === 'true') {
+      logger.info('🌐 Chat Agent User Sync Service initialized in serverless mode (on-demand only)');
+      return;
+    }
+
+    logger.info('🚀 Initializing Chat Agent User Sync Service with periodic retry checks');
     
-    // Start periodic retry check
+    // Start periodic retry check (non-serverless only)
     this.retryCheckInterval = setInterval(() => {
       this.processRetryQueue().catch(error => {
         logger.error('❌ Error processing user sync retry queue', { error: error.message });

@@ -463,15 +463,34 @@ class FollowUpEmailService {
       
       // Try new Responses API format first
       if (response.data?.output && Array.isArray(response.data.output)) {
+        logger.info('Inspecting output array', {
+          outputLength: response.data.output.length,
+          firstOutputKeys: response.data.output[0] ? Object.keys(response.data.output[0]) : [],
+          firstOutputType: response.data.output[0]?.type
+        });
+        
         const firstOutput = response.data.output[0];
         if (firstOutput?.content && Array.isArray(firstOutput.content)) {
+          logger.info('Inspecting content array', {
+            contentLength: firstOutput.content.length,
+            contentTypes: firstOutput.content.map((c: any) => c.type)
+          });
+          
           const textContent = firstOutput.content.find((c: any) => c.type === 'text');
           if (textContent?.text) {
             content = textContent.text;
             logger.info('Content extracted from Responses API output format', {
               contentLength: textContent.text.length
             });
+          } else {
+            logger.warn('No text type content found in content array', {
+              contentItems: firstOutput.content.map((c: any) => ({ type: c.type, hasText: !!c.text }))
+            });
           }
+        } else {
+          logger.warn('No content array found in first output', {
+            firstOutput: JSON.stringify(firstOutput).substring(0, 500)
+          });
         }
       }
       
