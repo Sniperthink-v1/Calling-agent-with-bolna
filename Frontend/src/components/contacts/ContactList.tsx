@@ -194,8 +194,11 @@ export const ContactList: React.FC<ContactListProps> = ({
     }
   }, [displayContacts]);
 
-  // Apply filter
+  // Apply filter - with null safety check
   const filteredContacts = displayContacts.filter(contact => {
+    // Skip null/undefined contacts
+    if (!contact || !contact.id) return false;
+    
     // Tag filter
     if (selectedTags.length > 0) {
       const contactTags = contact.tags || [];
@@ -245,30 +248,32 @@ export const ContactList: React.FC<ContactListProps> = ({
     }
 
     if (currentOffset === 0) {
-      // Initial load
-      console.log('✅ Initial batch loaded:', contacts.length);
-      setAllLoadedContacts(contacts);
+      // Initial load - filter out any null contacts
+      const validContacts = contacts.filter(c => c != null && c.id);
+      console.log('✅ Initial batch loaded:', validContacts.length);
+      setAllLoadedContacts(validContacts);
       lastLoadedOffsetRef.current = 0;
       setIsLoadingMore(false);
     } else {
       // Append new batch
       setAllLoadedContacts(prev => {
-        const existingIds = new Set(prev.map(c => c.id));
-        const newContacts = contacts.filter(c => !existingIds.has(c.id));
+        const validPrev = prev.filter(c => c != null && c.id);
+        const existingIds = new Set(validPrev.map(c => c.id));
+        const newContacts = contacts.filter(c => c != null && c.id && !existingIds.has(c.id));
         
         if (newContacts.length > 0) {
           console.log('➕ Appending batch:', {
-            previous: prev.length,
+            previous: validPrev.length,
             new: newContacts.length,
-            total: prev.length + newContacts.length,
+            total: validPrev.length + newContacts.length,
           });
           lastLoadedOffsetRef.current = currentOffset;
           setIsLoadingMore(false);
-          return [...prev, ...newContacts];
+          return [...validPrev, ...newContacts];
         }
         
         setIsLoadingMore(false);
-        return prev;
+        return validPrev;
       });
     }
   }, [contacts, currentOffset, enableInfiniteScroll, allLoadedContacts.length]);
@@ -396,7 +401,7 @@ export const ContactList: React.FC<ContactListProps> = ({
       // Update local state immediately for infinite scroll
       if (enableInfiniteScroll) {
         setAllLoadedContacts(prev => 
-          prev.map(contact => 
+          prev.filter(c => c != null).map(contact => 
             contact.id === contactId 
               ? { ...contact, notes, updatedAt: new Date().toISOString() }
               : contact
@@ -429,7 +434,7 @@ export const ContactList: React.FC<ContactListProps> = ({
       // Update local state immediately for infinite scroll
       if (enableInfiniteScroll) {
         setAllLoadedContacts(prev => 
-          prev.map(contact => 
+          prev.filter(c => c != null).map(contact => 
             contact.id === contactId 
               ? { ...contact, notes, updatedAt: new Date().toISOString() }
               : contact
@@ -458,7 +463,7 @@ export const ContactList: React.FC<ContactListProps> = ({
       // Update local state immediately for infinite scroll
       if (enableInfiniteScroll) {
         setAllLoadedContacts(prev => 
-          prev.map(contact => 
+          prev.filter(c => c != null).map(contact => 
             contact.id === contactId 
               ? { ...contact, businessContext, updatedAt: new Date().toISOString() }
               : contact
@@ -834,6 +839,9 @@ export const ContactList: React.FC<ContactListProps> = ({
               </thead>
               <tbody>
                 {filteredContacts.map((contact, index) => {
+                  // Safety check - skip null contacts
+                  if (!contact || !contact.id) return null;
+                  
                   // Place trigger element near the end
                   const isTriggerPosition = index === triggerPosition;
                   
