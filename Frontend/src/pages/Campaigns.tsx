@@ -407,6 +407,9 @@ const Campaigns: React.FC = () => {
                     not_attempted: 0,
                   };
                   
+                  // Use main failed_calls field for completed but failed calls
+                  const failedCalls = analytics?.failed_calls || 0;
+                  
                   return (
                     <tr key={campaign.id} className={`${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}>
                       {/* Name Column */}
@@ -464,7 +467,7 @@ const Campaigns: React.FC = () => {
                             Busy: {attemptDist.busy}
                           </div>
                           <div className={theme === 'dark' ? 'text-red-400' : 'text-red-600'}>
-                            Failed: {attemptDist.failed}
+                            Failed: {failedCalls}
                           </div>
                         </div>
                       </td>
