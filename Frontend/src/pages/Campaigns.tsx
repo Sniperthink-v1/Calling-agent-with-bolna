@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ const Campaigns: React.FC = () => {
     refetchOnWindowFocus: false, // Don't refetch when window regains focus
   });
 
-  const campaigns = campaignsData?.campaigns || [];
+  const campaigns = useMemo(() => campaignsData?.campaigns || [], [campaignsData?.campaigns]);
 
   // Fetch analytics for all campaigns
   const { data: analyticsData } = useQuery({
@@ -83,6 +83,7 @@ const Campaigns: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns-analytics'] });
       toast({
         title: 'Campaign Started',
         description: 'Campaign has been started successfully',
@@ -112,6 +113,7 @@ const Campaigns: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns-analytics'] });
       toast({
         title: 'Campaign Paused',
         description: 'Campaign has been paused',
@@ -141,6 +143,7 @@ const Campaigns: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns-analytics'] });
       toast({
         title: 'Campaign Resumed',
         description: 'Campaign has been resumed',
@@ -170,6 +173,7 @@ const Campaigns: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns-analytics'] });
       toast({
         title: 'Campaign Cancelled',
         description: 'Campaign has been cancelled',
@@ -195,6 +199,7 @@ const Campaigns: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns-analytics'] });
       toast({
         title: 'Campaign Deleted',
         description: 'Campaign has been deleted',

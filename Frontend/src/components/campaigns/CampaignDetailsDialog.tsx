@@ -30,7 +30,7 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
   const navigate = useNavigate();
 
   // Fetch detailed analytics
-  const { data: analytics, isLoading } = useQuery({
+  const { data: analyticsResponse, isLoading } = useQuery({
     queryKey: ['campaign-analytics', campaign.id],
     queryFn: async () => {
       const response = await authenticatedFetch(`/api/campaigns/${campaign.id}/analytics`);
@@ -41,6 +41,9 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
     refetchInterval: 60000, // Auto-refresh every 60 seconds
     refetchOnWindowFocus: false, // Don't refetch when window regains focus
   });
+  
+  // Extract the nested analytics object from the API response
+  const analytics = analyticsResponse?.analytics;
   
   // Navigate to call logs with campaign filter
   const handleViewCallLogs = () => {
