@@ -167,6 +167,7 @@ import {
 } from '../utils/retryMechanism';
 import { dataFlowDebugger } from '../utils/dataFlowDebugger';
 import { validateApiResponse, detectMockData } from '../utils/typeValidation';
+import { toSnakeCase } from '../utils/caseConverter';
 
 // Utility function to delay execution
 function delay(ms: number): Promise<void> {
@@ -1072,16 +1073,20 @@ class ApiService {
   }
 
   async createContact(contactData: CreateContactRequest): Promise<ApiResponse<Contact>> {
+    // Convert camelCase keys to snake_case for backend compatibility
+    const snakeCaseData = toSnakeCase(contactData);
     return this.request<Contact>(API_ENDPOINTS.CONTACTS.CREATE, {
       method: 'POST',
-      body: JSON.stringify(contactData),
+      body: JSON.stringify(snakeCaseData),
     });
   }
 
   async updateContact(id: string, contactData: UpdateContactRequest): Promise<ApiResponse<Contact>> {
+    // Convert camelCase keys to snake_case for backend compatibility
+    const snakeCaseData = toSnakeCase(contactData);
     return this.request<Contact>(API_ENDPOINTS.CONTACTS.UPDATE(id), {
       method: 'PUT',
-      body: JSON.stringify(contactData),
+      body: JSON.stringify(snakeCaseData),
     });
   }
 

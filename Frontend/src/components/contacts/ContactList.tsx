@@ -924,14 +924,14 @@ export const ContactList: React.FC<ContactListProps> = ({
                               </Button>
                             </div>
                           ) : (
-                            contact.notes ? (
+                            contact.notes && contact.notes.length > 0 ? (
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <div
                                     className="text-sm cursor-pointer hover:text-blue-600 transition-colors max-w-[180px] truncate"
                                     title="Click to view/edit notes"
                                   >
-                                    {contact.notes.length > 50 ? `${contact.notes.substring(0, 50)}...` : contact.notes}
+                                    {(contact.notes?.length ?? 0) > 50 ? `${contact.notes?.substring(0, 50)}...` : contact.notes}
                                   </div>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80 max-h-[400px] overflow-y-auto">
@@ -1061,14 +1061,14 @@ export const ContactList: React.FC<ContactListProps> = ({
                           )}
                         </td>
                         <td className="p-4 align-middle">
-                          {contact.businessContext ? (
+                          {contact.businessContext && contact.businessContext.length > 0 ? (
                             <Popover>
                               <PopoverTrigger asChild>
                                 <div
                                   className="text-sm cursor-pointer hover:text-blue-600 transition-colors max-w-[140px] truncate"
                                   title="Click to view/edit business context"
                                 >
-                                  {contact.businessContext.length > 50 ? `${contact.businessContext.substring(0, 50)}...` : contact.businessContext}
+                                  {(contact.businessContext?.length ?? 0) > 50 ? `${contact.businessContext?.substring(0, 50)}...` : contact.businessContext}
                                 </div>
                               </PopoverTrigger>
                               <PopoverContent className="w-80 max-h-[400px] overflow-y-auto">
