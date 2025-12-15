@@ -462,34 +462,37 @@ class FollowUpEmailService {
       let content: string | undefined;
       
       // Try new Responses API format first
+      // The output array may contain multiple items: 'reasoning' type first, then 'message' type with actual content
       if (response.data?.output && Array.isArray(response.data.output)) {
         logger.info('Inspecting output array', {
           outputLength: response.data.output.length,
-          firstOutputKeys: response.data.output[0] ? Object.keys(response.data.output[0]) : [],
-          firstOutputType: response.data.output[0]?.type
+          outputTypes: response.data.output.map((o: any) => o.type)
         });
         
-        const firstOutput = response.data.output[0];
-        if (firstOutput?.content && Array.isArray(firstOutput.content)) {
-          logger.info('Inspecting content array', {
-            contentLength: firstOutput.content.length,
-            contentTypes: firstOutput.content.map((c: any) => c.type)
+        // Find the 'message' type output which contains the actual content
+        const messageOutput = response.data.output.find((o: any) => o.type === 'message');
+        
+        if (messageOutput?.content && Array.isArray(messageOutput.content)) {
+          logger.info('Found message output with content array', {
+            contentLength: messageOutput.content.length,
+            contentTypes: messageOutput.content.map((c: any) => c.type)
           });
           
-          const textContent = firstOutput.content.find((c: any) => c.type === 'text');
+          const textContent = messageOutput.content.find((c: any) => c.type === 'text');
           if (textContent?.text) {
             content = textContent.text;
-            logger.info('Content extracted from Responses API output format', {
+            logger.info('Content extracted from Responses API message output', {
               contentLength: textContent.text.length
             });
           } else {
-            logger.warn('No text type content found in content array', {
-              contentItems: firstOutput.content.map((c: any) => ({ type: c.type, hasText: !!c.text }))
+            logger.warn('No text type content found in message content array', {
+              contentItems: messageOutput.content.map((c: any) => ({ type: c.type, hasText: !!c.text }))
             });
           }
         } else {
-          logger.warn('No content array found in first output', {
-            firstOutput: JSON.stringify(firstOutput).substring(0, 500)
+          logger.warn('No message type output found or no content array', {
+            outputTypes: response.data.output.map((o: any) => o.type),
+            hasMessageOutput: !!messageOutput
           });
         }
       }
