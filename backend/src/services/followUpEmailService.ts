@@ -450,15 +450,38 @@ class FollowUpEmailService {
       // Log the full response for debugging
       logger.info('OpenAI API response received', {
         hasData: !!response.data,
-        hasOutputText: !!response.data?.output_text,
+        hasOutput: !!response.data?.output,
         hasChoices: !!response.data?.choices,
         responseKeys: response.data ? Object.keys(response.data) : [],
-        statusCode: response.status
+        statusCode: response.status,
+        responseStatus: response.data?.status
       });
 
-      // Parse the response - handle both Responses API (output_text) 
-      // and legacy chat completions format (choices[0].message.content)
-      const content = response.data?.output_text || response.data?.choices?.[0]?.message?.content;
+      // Parse the response - OpenAI Responses API structure:
+      // response.data.output[0].content[0].text contains the generated content
+      let content: string | undefined;
+      
+      // Try new Responses API format first
+      if (response.data?.output && Array.isArray(response.data.output)) {
+        const firstOutput = response.data.output[0];
+        if (firstOutput?.content && Array.isArray(firstOutput.content)) {
+          const textContent = firstOutput.content.find((c: any) => c.type === 'text');
+          if (textContent?.text) {
+            content = textContent.text;
+            logger.info('Content extracted from Responses API output format', {
+              contentLength: content.length
+            });
+          }
+        }
+      }
+      
+      // Fallback to legacy chat completions format
+      if (!content && response.data?.choices?.[0]?.message?.content) {
+        content = response.data.choices[0].message.content;
+        logger.info('Content extracted from legacy choices format', {
+          contentLength: content.length
+        });
+      }
       
       if (content) {
         logger.info('OpenAI content extracted', {
