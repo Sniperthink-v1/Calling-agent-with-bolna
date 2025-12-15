@@ -93,9 +93,7 @@ const result = await pool.query('SELECT * FROM table WHERE id = $1', [id]);
 ```
 
 ### ⚠️ CRITICAL: Database Column Names - DO NOT HALLUCINATE
-**ALWAYS verify exact column names before writing or modifying SQL queries.**
-
-Reference the **[database.md](../database.md)** file for the complete schema with exact column names.
+**When writing SQL queries, use the `read_file` tool to check `database.md` for exact column names.**
 
 **Common mistakes to avoid:**
 | ❌ Wrong | ✅ Correct | Table |
@@ -108,26 +106,10 @@ Reference the **[database.md](../database.md)** file for the complete schema wit
 | `updated` | `updated_at` | all tables |
 
 **Before writing any SQL query:**
-1. Check `database.md` for exact column names
+1. Use `read_file` to verify exact column names from `database.md`
 2. Use table aliases consistently (e.g., `c.` for calls, `co.` for contacts, `la.` for lead_analytics)
 3. When joining tables, verify the join column exists in BOTH tables
 4. Never assume a column exists - verify first
-
-**Key table column quick reference:**
-```
-contacts: id, user_id, name, phone_number, email, company, notes, tags[], 
-          is_customer, is_auto_created, auto_creation_source, 
-          last_contact_at, call_attempted_busy, call_attempted_no_answer,
-          call_attempted_failed, city, country, business_context
-
-calls: id, user_id, agent_id, contact_id, phone_number, status, 
-       duration_seconds, duration_minutes, transcript, recording_url,
-       bolna_execution_id, lead_type, hangup_by, hangup_reason
-
-lead_analytics: id, user_id, call_id, phone_number, analysis_type,
-                extracted_name, extracted_email, company_name,
-                lead_status_tag, total_score, intent_score, etc.
-```
 
 ### Frontend Service Pattern
 All API calls go through `Frontend/src/services/apiService.ts` which handles:

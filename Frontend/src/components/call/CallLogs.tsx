@@ -984,23 +984,25 @@ const CallLogs: React.FC<CallLogsProps> = ({
               </Card>
             ))
           )}
+          
+          {/* End of list message - inside scroll container */}
+          {useLazyLoading && hasReachedEnd && filteredCalls.length > 0 && (
+            <p className="text-xs text-gray-400 text-center pt-4 pb-2">
+              You've reached the end of the call logs ({filteredCalls.length} total calls)
+            </p>
+          )}
         </div>
 
         {/* Pagination or Infinite Scroll Loading */}
         {filteredCalls.length > 0 && (
           useLazyLoading ? (
-            <div className="flex flex-col items-center space-y-4 py-4">
+            <>
               {(isLoadingMore || loading) && (
-                <div className="flex items-center justify-center space-x-2">
+                <div className="flex items-center justify-center space-x-2 py-3">
                   <Loader2 className="h-5 w-5 animate-spin" />
                   <span className="text-sm text-gray-500">
                     {currentPage === 1 ? 'Loading calls...' : 'Loading more calls...'}
                   </span>
-                </div>
-              )}
-              {hasReachedEnd && filteredCalls.length > 0 && (
-                <div className="text-sm text-gray-500 text-center">
-                  You've reached the end of the call logs ({filteredCalls.length} total calls)
                 </div>
               )}
               {hasMore && !hasReachedEnd && !loading && !isLoadingMore && filteredCalls.length > 0 && (
@@ -1011,7 +1013,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
                   threshold={200}
                 />
               )}
-            </div>
+            </>
           ) : (
             totalPages > 1 && (
               <Pagination
