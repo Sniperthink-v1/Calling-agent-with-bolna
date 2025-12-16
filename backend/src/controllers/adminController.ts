@@ -450,20 +450,22 @@ export class AdminController {
       }
 
       // Log admin action
-      await logAdminActionManual({
-        adminId: req.adminUser?.id || 'unknown',
-        action: 'ADJUST_CHAT_CREDITS',
-        resource: 'users',
-        resourceId: userId,
-        details: {
-          amount: adjustmentAmount,
-          operation,
-          reason: adjustmentReason,
-          newBalance: result.data?.newBalance,
-          previousBalance: result.data?.previousBalance,
-        },
-        ipAddress: req.ip,
-      });
+      await logAdminActionManual(
+        req.adminUser?.id || 'unknown',
+        'ADJUST_CHAT_CREDITS',
+        'users',
+        {
+          resource_id: userId,
+          details: {
+            amount: adjustmentAmount,
+            operation,
+            reason: adjustmentReason,
+            newBalance: result.data?.newBalance,
+            previousBalance: result.data?.previousBalance,
+          },
+          ip_address: req.ip,
+        }
+      );
 
       res.json({
         success: true,
@@ -1700,8 +1702,8 @@ export class AdminController {
           bolnaAgentId: agent.bolna_agent_id,
           bolnaStatus: bolnaAgent ? 'healthy' : 'not_found',
           bolnaAgentData: bolnaAgent ? {
-            id: bolnaAgent.id,
-            name: bolnaAgent.name,
+            id: bolnaAgent.agent_id,
+            status: bolnaAgent.status,
             created_at: bolnaAgent.created_at,
           } : null,
         },
