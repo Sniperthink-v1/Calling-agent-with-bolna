@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { LeadStageService, LeadStage, PREDEFINED_LEAD_STAGES } from '../services/leadStageService';
+import { LeadStageService, LeadStage, PREDEFINED_LEAD_STAGES, FIXED_STAGE_NAMES, isFixedStage } from '../services/leadStageService';
 import { authenticateToken } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { queryCache } from '../services/queryCacheService';
 
 const router = Router();
 
@@ -19,12 +20,20 @@ router.get('/', authenticateToken, async (req: Request, res: Response): Promise<
 
     const stages = await LeadStageService.getAllStages(userId);
     
+    // Mark stages with isFixed property based on name
+    const stagesWithFixed = stages.map(stage => ({
+      ...stage,
+      isFixed: isFixedStage(stage.name)
+    }));
+    
     return res.json({
       success: true,
       data: {
-        stages,
+        stages: stagesWithFixed,
         // Include predefined stages for reference (e.g., reset to defaults)
         predefinedStages: PREDEFINED_LEAD_STAGES,
+        // Include fixed stage names so frontend knows which ones cannot be deleted/renamed
+        fixedStageNames: FIXED_STAGE_NAMES,
       },
     });
   } catch (error) {
@@ -245,6 +254,9 @@ router.post('/bulk-update', authenticateToken, async (req: Request, res: Respons
       contactIds,
       stage || null
     );
+    
+    // Invalidate contacts cache so the contacts list refreshes with updated stages
+    queryCache.invalidateTable('contacts');
     
     return res.json({
       success: true,

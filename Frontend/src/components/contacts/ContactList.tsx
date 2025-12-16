@@ -35,11 +35,14 @@ import {
   PhoneIncoming,
   ArrowUpDown,
   Settings2,
+  Check,
+  X,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -60,6 +63,91 @@ import { SendWhatsAppModal } from './SendWhatsAppModal';
 import { SendEmailModal } from './SendEmailModal';
 import CreateCampaignModal from '@/components/campaigns/CreateCampaignModal';
 import type { Contact, ContactsListOptions } from '@/types';
+
+// Column filter interface for Excel-like filtering
+interface ColumnFilters {
+  tags: string[];
+  lastStatus: string[];
+  callType: string[];
+  source: string[];
+  city: string[];
+  country: string[];
+  leadStage: string[];
+}
+
+// Excel-like Column Filter Component
+interface ExcelFilterProps {
+  title: string;
+  options: string[];
+  selectedValues: string[];
+  onSelectionChange: (values: string[]) => void;
+  showAllLabel?: string;
+}
+
+const ExcelColumnFilter = ({ title, options, selectedValues, onSelectionChange, showAllLabel = "All" }: ExcelFilterProps) => {
+  const isAllSelected = selectedValues.length === 0;
+  const hasActiveFilter = selectedValues.length > 0;
+
+  const handleToggleAll = () => {
+    onSelectionChange([]);
+  };
+
+  const handleToggleOption = (option: string) => {
+    if (selectedValues.includes(option)) {
+      onSelectionChange(selectedValues.filter(v => v !== option));
+    } else {
+      onSelectionChange([...selectedValues, option]);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-1 hover:text-primary transition-colors font-medium text-muted-foreground">
+          <span>{title}</span>
+          <Filter className={`w-3 h-3 ${hasActiveFilter ? 'text-primary fill-primary/20' : 'text-muted-foreground'}`} />
+          {hasActiveFilter && (
+            <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+              {selectedValues.length}
+            </span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48 max-h-80 overflow-y-auto">
+        <DropdownMenuItem onClick={handleToggleAll} className="flex items-center gap-2">
+          <div className={`w-4 h-4 border rounded flex items-center justify-center ${isAllSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+            {isAllSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+          </div>
+          <span className="font-medium">{showAllLabel}</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {options.map((option) => {
+          const isSelected = selectedValues.includes(option);
+          return (
+            <DropdownMenuItem 
+              key={option} 
+              onClick={() => handleToggleOption(option)}
+              className="flex items-center gap-2"
+            >
+              <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+              </div>
+              <span>{option || '(Empty)'}</span>
+            </DropdownMenuItem>
+          );
+        })}
+        {selectedValues.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleToggleAll} className="text-muted-foreground">
+              Clear filter
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 interface ContactListProps {
   onContactSelect?: (contact: Contact) => void;
@@ -101,13 +189,16 @@ export const ContactList: React.FC<ContactListProps> = ({
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  // New filters
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedLastStatus, setSelectedLastStatus] = useState<string>('all');
-  const [selectedSource, setSelectedSource] = useState<string>('all');
-  const [selectedCallType, setSelectedCallType] = useState<string>('all');
-  const [selectedCity, setSelectedCity] = useState<string>('all');
-  const [selectedCountry, setSelectedCountry] = useState<string>('all');
+  // New column filters state (Excel-like multi-select)
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
+    tags: [],
+    lastStatus: [],
+    callType: [],
+    source: [],
+    city: [],
+    country: [],
+    leadStage: [],
+  });
   const [editingNotes, setEditingNotes] = useState<{ contactId: string; notes: string } | null>(null);
   const [editingNotesPopover, setEditingNotesPopover] = useState<{ contactId: string; notes: string } | null>(null);
   const [editingBusinessContext, setEditingBusinessContext] = useState<{ contactId: string; businessContext: string } | null>(null);
@@ -203,31 +294,54 @@ export const ContactList: React.FC<ContactListProps> = ({
     // Skip null/undefined contacts
     if (!contact || !contact.id) return false;
     
-    // Tag filter
-    if (selectedTags.length > 0) {
+    // Tag filter (multi-select)
+    if (columnFilters.tags.length > 0) {
       const contactTags = contact.tags || [];
-      const hasMatchingTag = selectedTags.some(tag => contactTags.includes(tag));
+      const hasMatchingTag = columnFilters.tags.some(tag => contactTags.includes(tag));
       if (!hasMatchingTag) return false;
     }
     
-    // Last Status filter
-    if (selectedLastStatus !== 'all' && contact.lastCallStatus !== selectedLastStatus) {
-      return false;
+    // Last Status filter (multi-select)
+    if (columnFilters.lastStatus.length > 0) {
+      if (!contact.lastCallStatus || !columnFilters.lastStatus.includes(contact.lastCallStatus)) {
+        return false;
+      }
     }
     
-    // Call Type filter
-    if (selectedCallType !== 'all' && contact.callType !== selectedCallType) {
-      return false;
+    // Call Type filter (multi-select)
+    if (columnFilters.callType.length > 0) {
+      if (!contact.callType || !columnFilters.callType.includes(contact.callType)) {
+        return false;
+      }
     }
     
-    // City filter
-    if (selectedCity !== 'all' && contact.city !== selectedCity) {
-      return false;
+    // Source filter (multi-select)
+    if (columnFilters.source.length > 0) {
+      const contactSource = contact.autoCreationSource || (contact.isAutoCreated ? 'webhook' : 'manual');
+      if (!columnFilters.source.includes(contactSource)) {
+        return false;
+      }
     }
     
-    // Country filter
-    if (selectedCountry !== 'all' && contact.country !== selectedCountry) {
-      return false;
+    // City filter (multi-select)
+    if (columnFilters.city.length > 0) {
+      if (!contact.city || !columnFilters.city.includes(contact.city)) {
+        return false;
+      }
+    }
+    
+    // Country filter (multi-select)
+    if (columnFilters.country.length > 0) {
+      if (!contact.country || !columnFilters.country.includes(contact.country)) {
+        return false;
+      }
+    }
+    
+    // Lead Stage filter (multi-select)
+    if (columnFilters.leadStage.length > 0) {
+      if (!contact.leadStage || !columnFilters.leadStage.includes(contact.leadStage)) {
+        return false;
+      }
     }
     
     return true;
@@ -606,6 +720,46 @@ export const ContactList: React.FC<ContactListProps> = ({
     return Array.from(countrySet).sort();
   }, [displayContacts]);
 
+  // Helper: Get all unique sources
+  const allUniqueSources = React.useMemo(() => {
+    const sourceSet = new Set<string>();
+    displayContacts.forEach(contact => {
+      const source = contact.autoCreationSource || (contact.isAutoCreated ? 'webhook' : 'manual');
+      sourceSet.add(source);
+    });
+    return Array.from(sourceSet).sort();
+  }, [displayContacts]);
+
+  // Helper: Get all unique lead stages
+  const allUniqueLeadStages = React.useMemo(() => {
+    const stageSet = new Set<string>();
+    displayContacts.forEach(contact => {
+      if (contact.leadStage) stageSet.add(contact.leadStage);
+    });
+    return Array.from(stageSet).sort();
+  }, [displayContacts]);
+
+  // Helper to update a specific column filter
+  const updateColumnFilter = (column: keyof ColumnFilters, values: string[]) => {
+    setColumnFilters(prev => ({ ...prev, [column]: values }));
+  };
+
+  // Check if any column filters are active
+  const hasActiveColumnFilters = Object.values(columnFilters).some(arr => arr.length > 0);
+
+  // Clear all column filters
+  const clearAllColumnFilters = () => {
+    setColumnFilters({
+      tags: [],
+      lastStatus: [],
+      callType: [],
+      source: [],
+      city: [],
+      country: [],
+      leadStage: [],
+    });
+  };
+
   // Calculate trigger position (10 items before end)
   const triggerPosition = Math.max(0, filteredContacts.length - LOAD_TRIGGER_OFFSET);
 
@@ -652,9 +806,9 @@ export const ContactList: React.FC<ContactListProps> = ({
             </div>
           </div>
 
-          {/* Search and Filters */}
+          {/* Search and Active Filters Summary */}
           <div className="space-y-3">
-            {/* Search and Filters in One Row */}
+            {/* Search and Clear Filters */}
             <div className="flex gap-2 flex-wrap items-center">
               {/* Search Input */}
               <div className="relative flex-1 min-w-[200px]">
@@ -667,140 +821,82 @@ export const ContactList: React.FC<ContactListProps> = ({
                 />
               </div>
 
-              {/* Tags Filter */}
-              <Select
-                value={selectedTags.length > 0 ? selectedTags[0] : 'all'}
-                onValueChange={(value) => {
-                  if (value === 'all') {
-                    setSelectedTags([]);
-                  } else {
-                    setSelectedTags([value]);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-36 h-9">
-                  <SelectValue placeholder="Tags" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Tags</SelectItem>
-                  {allUniqueTags.map((tag) => (
-                    <SelectItem key={tag} value={tag}>
-                      #{tag}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Last Status Filter */}
-              <Select
-                value={selectedLastStatus}
-                onValueChange={setSelectedLastStatus}
-              >
-                <SelectTrigger className="w-36 h-9">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  {allUniqueStatuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Source Filter */}
-              <Select
-                value={selectedSource}
-                onValueChange={setSelectedSource}
-              >
-                <SelectTrigger className="w-36 h-9">
-                  <SelectValue placeholder="Source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="webhook">Inbound Call</SelectItem>
-                  <SelectItem value="manual">Manual Entry</SelectItem>
-                  <SelectItem value="bulk_upload">Excel Upload</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Call Type Filter */}
-              <Select
-                value={selectedCallType}
-                onValueChange={setSelectedCallType}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by Call Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Call Types</SelectItem>
-                  {allUniqueCallTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* City Filter */}
-              {allUniqueCities.length > 0 && (
-                <Select
-                  value={selectedCity}
-                  onValueChange={setSelectedCity}
-                >
-                  <SelectTrigger className="w-36 h-9">
-                    <SelectValue placeholder="City" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Cities</SelectItem>
-                    {allUniqueCities.map((city) => (
-                      <SelectItem key={city} value={city}>
-                        {city}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {/* Country Filter */}
-              {allUniqueCountries.length > 0 && (
-                <Select
-                  value={selectedCountry}
-                  onValueChange={setSelectedCountry}
-                >
-                  <SelectTrigger className="w-36 h-9">
-                    <SelectValue placeholder="Country" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Countries</SelectItem>
-                    {allUniqueCountries.map((country) => (
-                      <SelectItem key={country} value={country}>
-                        {country}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {/* Clear Filters Button */}
-              {(selectedTags.length > 0 || selectedLastStatus !== 'all' || selectedSource !== 'all' || selectedCallType !== 'all' || selectedCity !== 'all' || selectedCountry !== 'all') && (
+              {/* Clear All Column Filters Button */}
+              {hasActiveColumnFilters && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setSelectedTags([]);
-                    setSelectedLastStatus('all');
-                    setSelectedSource('all');
-                    setSelectedCallType('all');
-                    setSelectedCity('all');
-                    setSelectedCountry('all');
-                  }}
+                  onClick={clearAllColumnFilters}
+                  className="h-9"
                 >
+                  <X className="w-4 h-4 mr-2" />
                   Clear Filters
                 </Button>
               )}
             </div>
+
+            {/* Active Column Filters Summary */}
+            {hasActiveColumnFilters && (
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-sm text-muted-foreground">Active filters:</span>
+                {columnFilters.tags.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    Tags: {columnFilters.tags.join(', ')}
+                    <button onClick={() => updateColumnFilter('tags', [])} className="ml-1 hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+                {columnFilters.lastStatus.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    Status: {columnFilters.lastStatus.join(', ')}
+                    <button onClick={() => updateColumnFilter('lastStatus', [])} className="ml-1 hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+                {columnFilters.callType.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    Call Type: {columnFilters.callType.join(', ')}
+                    <button onClick={() => updateColumnFilter('callType', [])} className="ml-1 hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+                {columnFilters.source.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    Source: {columnFilters.source.join(', ')}
+                    <button onClick={() => updateColumnFilter('source', [])} className="ml-1 hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+                {columnFilters.city.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    City: {columnFilters.city.join(', ')}
+                    <button onClick={() => updateColumnFilter('city', [])} className="ml-1 hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+                {columnFilters.country.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    Country: {columnFilters.country.join(', ')}
+                    <button onClick={() => updateColumnFilter('country', [])} className="ml-1 hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+                {columnFilters.leadStage.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    Lead Stage: {columnFilters.leadStage.join(', ')}
+                    <button onClick={() => updateColumnFilter('leadStage', [])} className="ml-1 hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </CardHeader>
 
@@ -862,13 +958,136 @@ export const ContactList: React.FC<ContactListProps> = ({
                   >
                     Contact Details
                   </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Call Type</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Last Status</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Lead Stage</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                    <ExcelColumnFilter
+                      title="Call Type"
+                      options={allUniqueCallTypes}
+                      selectedValues={columnFilters.callType}
+                      onSelectionChange={(values) => updateColumnFilter('callType', values)}
+                      showAllLabel="All Call Types"
+                    />
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                    <ExcelColumnFilter
+                      title="Last Status"
+                      options={allUniqueStatuses}
+                      selectedValues={columnFilters.lastStatus}
+                      onSelectionChange={(values) => updateColumnFilter('lastStatus', values)}
+                      showAllLabel="All Status"
+                    />
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                    <ExcelColumnFilter
+                      title="Lead Stage"
+                      options={allUniqueLeadStages}
+                      selectedValues={columnFilters.leadStage}
+                      onSelectionChange={(values) => updateColumnFilter('leadStage', values)}
+                      showAllLabel="All Stages"
+                    />
+                  </th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[200px]" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Notes</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Source</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Tags</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Location</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                    <ExcelColumnFilter
+                      title="Source"
+                      options={allUniqueSources}
+                      selectedValues={columnFilters.source}
+                      onSelectionChange={(values) => updateColumnFilter('source', values)}
+                      showAllLabel="All Sources"
+                    />
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                    <ExcelColumnFilter
+                      title="Tags"
+                      options={allUniqueTags}
+                      selectedValues={columnFilters.tags}
+                      onSelectionChange={(values) => updateColumnFilter('tags', values)}
+                      showAllLabel="All Tags"
+                    />
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex items-center gap-1 hover:text-primary transition-colors font-medium text-muted-foreground">
+                          <span>Location</span>
+                          <Filter className={`w-3 h-3 ${(columnFilters.city.length > 0 || columnFilters.country.length > 0) ? 'text-primary fill-primary/20' : 'text-muted-foreground'}`} />
+                          {(columnFilters.city.length > 0 || columnFilters.country.length > 0) && (
+                            <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                              {columnFilters.city.length + columnFilters.country.length}
+                            </span>
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-56">
+                        {allUniqueCities.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">Cities</div>
+                            {allUniqueCities.map((city) => {
+                              const isSelected = columnFilters.city.includes(city);
+                              return (
+                                <DropdownMenuItem 
+                                  key={`city-${city}`} 
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      updateColumnFilter('city', columnFilters.city.filter(v => v !== city));
+                                    } else {
+                                      updateColumnFilter('city', [...columnFilters.city, city]);
+                                    }
+                                  }}
+                                  className="flex items-center gap-2"
+                                >
+                                  <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                                    {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                                  </div>
+                                  <span>{city}</span>
+                                </DropdownMenuItem>
+                              );
+                            })}
+                            <DropdownMenuSeparator />
+                          </>
+                        )}
+                        {allUniqueCountries.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">Countries</div>
+                            {allUniqueCountries.map((country) => {
+                              const isSelected = columnFilters.country.includes(country);
+                              return (
+                                <DropdownMenuItem 
+                                  key={`country-${country}`} 
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      updateColumnFilter('country', columnFilters.country.filter(v => v !== country));
+                                    } else {
+                                      updateColumnFilter('country', [...columnFilters.country, country]);
+                                    }
+                                  }}
+                                  className="flex items-center gap-2"
+                                >
+                                  <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                                    {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                                  </div>
+                                  <span>{country}</span>
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </>
+                        )}
+                        {(columnFilters.city.length > 0 || columnFilters.country.length > 0) && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => {
+                                updateColumnFilter('city', []);
+                                updateColumnFilter('country', []);
+                              }} 
+                              className="text-muted-foreground"
+                            >
+                              Clear location filter
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[150px]" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Business Context</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Last Contact</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground" style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))' }}>Call Attempted</th>

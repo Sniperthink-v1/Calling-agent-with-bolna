@@ -36,6 +36,7 @@ export interface LeadStage {
   name: string;
   color: string;
   order: number;
+  isFixed?: boolean; // True for system fixed stages (New Lead, Attempted to Contact, Contacted)
 }
 
 export interface LeadStageStats {

@@ -318,7 +318,7 @@ class WebhookService {
 
   /**
    * Stage 3: In Progress
-   * Call answered
+   * Call answered - Auto-progress lead stage to "Contacted"
    */
   private async handleInProgress(payload: BolnaWebhookPayload): Promise<void> {
     const executionId = payload.id;
@@ -329,6 +329,34 @@ class WebhookService {
       call_lifecycle_status: 'in-progress',
       call_answered_at: new Date()
     });
+
+    // Auto-progress lead stage to "Contacted" since call was answered
+    const call = await Call.findByExecutionId(executionId);
+    if (call && call.contact_id) {
+      try {
+        const { LeadStageService } = await import('./leadStageService');
+        const newStage = await LeadStageService.autoProgressStage(
+          call.contact_id,
+          call.user_id,
+          'answered'
+        );
+        
+        if (newStage) {
+          logger.info('📈 Lead stage auto-progressed on call answered', {
+            execution_id: executionId,
+            contact_id: call.contact_id,
+            new_stage: newStage
+          });
+        }
+      } catch (error) {
+        logger.error('Failed to auto-progress lead stage on call answered', {
+          execution_id: executionId,
+          contact_id: call.contact_id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        // Don't fail webhook - stage update is non-critical
+      }
+    }
 
     logger.info('✅ In-progress status updated', { execution_id: executionId });
   }
@@ -1399,6 +1427,34 @@ class WebhookService {
             execution_id: executionId,
             error_message: payload.error_message
           });
+        }
+        
+        // Auto-progress lead stage to "Attempted to Contact" for failed calls
+        // Only if current stage is "New Lead" - will not downgrade from "Contacted"
+        try {
+          const { LeadStageService } = await import('./leadStageService');
+          const callOutcome = status as 'busy' | 'no-answer' | 'failed';
+          const newStage = await LeadStageService.autoProgressStage(
+            call.contact_id,
+            call.user_id,
+            callOutcome
+          );
+          
+          if (newStage) {
+            logger.info('📈 Lead stage auto-progressed on failed call', {
+              execution_id: executionId,
+              contact_id: call.contact_id,
+              call_outcome: status,
+              new_stage: newStage
+            });
+          }
+        } catch (stageError) {
+          logger.error('Failed to auto-progress lead stage on failed call', {
+            execution_id: executionId,
+            contact_id: call.contact_id,
+            error: stageError instanceof Error ? stageError.message : String(stageError)
+          });
+          // Don't fail webhook - stage update is non-critical
         }
       } catch (error) {
         logger.error('Failed to update contact counters', {

@@ -131,19 +131,28 @@ export const usePipelineContacts = (searchTerm?: string): UsePipelineContactsRet
     return contact.leadStage ?? null;
   };
 
-  // Find unassigned contacts first (no stage or stage no longer exists)
+  // Find unassigned contacts (no stage or stage no longer exists) - assign them to first stage
   const unassignedContacts = contacts.filter(contact => {
     const stage = getContactStage(contact);
     return !stage || !leadStages.some(s => s.name === stage);
   });
 
-  // Build pipeline data with "Not Assigned" first, then user's custom stages sorted by order
+  // Get the first stage name (should be "New Lead" which is fixed)
+  const firstStageName = leadStages.length > 0 ? leadStages[0].name : null;
+
+  // Build pipeline data with all user's custom stages sorted by order
   const pipelineData: PipelineData = {
-    // Always show "Not Assigned" as the first column
-    'Not Assigned': unassignedContacts,
-    // Then add all user's custom stages
+    // Add all user's custom stages
     ...leadStages.reduce((acc, stage) => {
-      acc[stage.name] = contacts.filter(contact => getContactStage(contact) === stage.name);
+      // Include unassigned contacts in the first stage
+      if (stage.name === firstStageName) {
+        acc[stage.name] = [
+          ...unassignedContacts,
+          ...contacts.filter(contact => getContactStage(contact) === stage.name)
+        ];
+      } else {
+        acc[stage.name] = contacts.filter(contact => getContactStage(contact) === stage.name);
+      }
       return acc;
     }, {} as PipelineData),
   };
@@ -151,11 +160,9 @@ export const usePipelineContacts = (searchTerm?: string): UsePipelineContactsRet
   // Move contact mutation (using the existing bulk update endpoint)
   const moveContactMutation = useMutation({
     mutationFn: async ({ contactId, newStage }: { contactId: string; newStage: string }) => {
-      // If moving to "Not Assigned", set stage to null
-      const stageValue = newStage === 'Not Assigned' ? null : newStage;
       const response = await apiService.post<{ success: boolean; data: { updatedCount: number } }>(
         '/lead-stages/bulk-update',
-        { contactIds: [contactId], stage: stageValue }
+        { contactIds: [contactId], stage: newStage }
       );
       // API returns { success: true, data: { updatedCount: N } }
       return response.data?.data?.updatedCount ?? response.data?.updatedCount ?? 0;
@@ -167,8 +174,7 @@ export const usePipelineContacts = (searchTerm?: string): UsePipelineContactsRet
       // Snapshot the previous value
       const previousData = queryClient.getQueryData(['pipeline-contacts', user?.id, searchTerm]);
       
-      // Optimistically update the cache (set to null if "Not Assigned")
-      const actualStage = newStage === 'Not Assigned' ? null : newStage;
+      // Optimistically update the cache
       queryClient.setQueryData(
         ['pipeline-contacts', user?.id, searchTerm],
         (old: PipelineApiResponse | PipelineContact[] | undefined) => {
@@ -194,7 +200,7 @@ export const usePipelineContacts = (searchTerm?: string): UsePipelineContactsRet
           
           const updatedContacts = oldContacts.map(contact =>
             contact.id === contactId
-              ? { ...contact, leadStage: actualStage, leadStageUpdatedAt: new Date().toISOString() }
+              ? { ...contact, leadStage: newStage, leadStageUpdatedAt: new Date().toISOString() }
               : contact
           );
           
@@ -254,9 +260,8 @@ export const usePipelineContacts = (searchTerm?: string): UsePipelineContactsRet
     return (pipelineData[stageName] || []).length;
   };
 
-  // Include "Not Assigned" as a virtual stage at the beginning
-  const NOT_ASSIGNED_STAGE: LeadStage = { name: 'Not Assigned', color: '#6B7280', order: -1 };
-  const allStages = [NOT_ASSIGNED_STAGE, ...leadStages];
+  // Return the user's configured stages (no virtual "Not Assigned" stage)
+  const allStages = leadStages;
 
   return {
     contacts,

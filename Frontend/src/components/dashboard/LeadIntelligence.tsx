@@ -43,7 +43,17 @@ import {
   X,
   Megaphone,
   ChevronRight,
+  Filter,
+  Check,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { ContactDisplay } from "@/components/contacts/ContactDisplay";
@@ -51,6 +61,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { apiService } from "@/services/apiService";
 import { useToast } from "@/hooks/use-toast";
+import { useLeadStages } from "@/hooks/useLeadStages";
 import type { Lead, LeadAnalyticsData } from "@/pages/Dashboard";
 
 // API interfaces
@@ -82,6 +93,11 @@ interface LeadGroup {
   groupType: 'phone' | 'email' | 'individual';
   // Requirements from complete analysis - aggregated product/business requirements
   requirements?: string;
+  // Custom CTA - call-to-action strings extracted from analysis
+  customCta?: string;
+  // Lead stage for pipeline tracking
+  leadStage?: string;
+  contactId?: string; // Contact ID for updating lead stage
 }
 
 interface LeadTimelineEntry {
@@ -123,6 +139,8 @@ interface LeadTimelineEntry {
   followUpCallId?: string; // The call this follow-up is linked to
   // Requirements field - product/business requirements from call
   requirements?: string;
+  // Custom CTA - call-to-action strings extracted from analysis
+  customCta?: string;
   // Email-specific fields
   interactionType?: 'call' | 'email'; // Type of interaction
   emailSubject?: string; // Email subject
@@ -144,13 +162,114 @@ interface LeadIntelligenceProps {
   onOpenProfile: (contact: Lead) => void;
 }
 
+// Column filter interface
+interface ColumnFilters {
+  leadTag: string[];
+  leadStage: string[];
+  engagement: string[];
+  intent: string[];
+  budget: string[];
+  urgency: string[];
+  fit: string[];
+  cta: string[];
+}
+
+// Excel-like Column Filter Component
+interface ExcelFilterProps {
+  title: string;
+  options: string[];
+  selectedValues: string[];
+  onSelectionChange: (values: string[]) => void;
+  showAllLabel?: string;
+}
+
+const ExcelColumnFilter = ({ title, options, selectedValues, onSelectionChange, showAllLabel = "All" }: ExcelFilterProps) => {
+  const isAllSelected = selectedValues.length === 0;
+  const hasActiveFilter = selectedValues.length > 0;
+
+  const handleToggleAll = () => {
+    onSelectionChange([]);
+  };
+
+  const handleToggleOption = (option: string) => {
+    if (selectedValues.includes(option)) {
+      onSelectionChange(selectedValues.filter(v => v !== option));
+    } else {
+      onSelectionChange([...selectedValues, option]);
+    }
+  };
+
+  const handleSelectOnly = (option: string) => {
+    onSelectionChange([option]);
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-1 hover:text-primary transition-colors">
+          <span>{title}</span>
+          <Filter className={`w-3 h-3 ${hasActiveFilter ? 'text-primary fill-primary/20' : 'text-muted-foreground'}`} />
+          {hasActiveFilter && (
+            <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+              {selectedValues.length}
+            </span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48 max-h-80 overflow-y-auto">
+        <DropdownMenuItem onClick={handleToggleAll} className="flex items-center gap-2">
+          <div className={`w-4 h-4 border rounded flex items-center justify-center ${isAllSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+            {isAllSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+          </div>
+          <span className="font-medium">{showAllLabel}</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {options.map((option) => {
+          const isSelected = selectedValues.includes(option);
+          return (
+            <DropdownMenuItem 
+              key={option} 
+              onClick={() => handleToggleOption(option)}
+              className="flex items-center gap-2"
+            >
+              <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+              </div>
+              <span>{option || '(Empty)'}</span>
+            </DropdownMenuItem>
+          );
+        })}
+        {selectedValues.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleToggleAll} className="text-muted-foreground">
+              Clear filter
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const { theme } = useTheme();
   const { targetLeadIdentifier, clearTargetLeadId } = useNavigation();
   const { toast } = useToast();
+  const { stages, bulkUpdateLeadStage, getStageColor } = useLeadStages();
   const [searchTerm, setSearchTerm] = useState("");
-  const [leadTypeFilter, setLeadTypeFilter] = useState("all");
-  const [tagFilter, setTagFilter] = useState("all");
+  
+  // Column filters state (Excel-like multi-select)
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
+    leadTag: [],
+    leadStage: [],
+    engagement: [],
+    intent: [],
+    budget: [],
+    urgency: [],
+    fit: [],
+    cta: [],
+  });
   const [selectedContact, setSelectedContact] = useState<LeadGroup | null>(null);
   const [contacts, setContacts] = useState<LeadGroup[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
@@ -158,6 +277,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const [loading, setLoading] = useState(true);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updatingStageId, setUpdatingStageId] = useState<string | null>(null);
   
   // Interaction details modal state
   const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false);
@@ -294,15 +414,67 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     }
   }, [targetLeadIdentifier, contacts, selectedContact, clearTargetLeadId]);
 
+  // Extract unique values for filter options
+  const filterOptions = {
+    leadTag: [...new Set(contacts.map(c => c.recentLeadTag).filter(Boolean))],
+    leadStage: [...new Set(contacts.map(c => c.leadStage).filter(Boolean))],
+    engagement: [...new Set(contacts.map(c => c.recentEngagementLevel).filter(Boolean))],
+    intent: [...new Set(contacts.map(c => c.recentIntentLevel).filter(Boolean))],
+    budget: [...new Set(contacts.map(c => c.recentBudgetConstraint).filter(Boolean))],
+    urgency: [...new Set(contacts.map(c => c.recentTimelineUrgency).filter(Boolean))],
+    fit: [...new Set(contacts.map(c => c.recentFitAlignment).filter(Boolean))],
+    cta: [...new Set(contacts.flatMap(c => c.customCta ? c.customCta.split(',').map(s => s.trim()) : []).filter(Boolean))],
+  };
+
+  // Helper to update a specific column filter
+  const updateColumnFilter = (column: keyof ColumnFilters, values: string[]) => {
+    setColumnFilters(prev => ({ ...prev, [column]: values }));
+  };
+
+  // Check if any column filters are active
+  const hasActiveColumnFilters = Object.values(columnFilters).some(arr => arr.length > 0);
+
+  // Clear all column filters
+  const clearAllColumnFilters = () => {
+    setColumnFilters({
+      leadTag: [],
+      leadStage: [],
+      engagement: [],
+      intent: [],
+      budget: [],
+      urgency: [],
+      fit: [],
+      cta: [],
+    });
+  };
+
   const filteredContacts = contacts.filter((contact) => {
     const matchesSearch = contact.name
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
-    const matchesLeadType =
-      leadTypeFilter === "all" || contact.leadType === leadTypeFilter;
-    const matchesTag =
-      tagFilter === "all" || contact.recentLeadTag === tagFilter;
-    return matchesSearch && matchesLeadType && matchesTag;
+    
+    // Column filter matching
+    const matchesLeadTagFilter = columnFilters.leadTag.length === 0 || 
+      columnFilters.leadTag.includes(contact.recentLeadTag);
+    const matchesLeadStageFilter = columnFilters.leadStage.length === 0 || 
+      (contact.leadStage && columnFilters.leadStage.includes(contact.leadStage));
+    const matchesEngagementFilter = columnFilters.engagement.length === 0 || 
+      (contact.recentEngagementLevel && columnFilters.engagement.includes(contact.recentEngagementLevel));
+    const matchesIntentFilter = columnFilters.intent.length === 0 || 
+      (contact.recentIntentLevel && columnFilters.intent.includes(contact.recentIntentLevel));
+    const matchesBudgetFilter = columnFilters.budget.length === 0 || 
+      (contact.recentBudgetConstraint && columnFilters.budget.includes(contact.recentBudgetConstraint));
+    const matchesUrgencyFilter = columnFilters.urgency.length === 0 || 
+      (contact.recentTimelineUrgency && columnFilters.urgency.includes(contact.recentTimelineUrgency));
+    const matchesFitFilter = columnFilters.fit.length === 0 || 
+      (contact.recentFitAlignment && columnFilters.fit.includes(contact.recentFitAlignment));
+    const matchesCtaFilter = columnFilters.cta.length === 0 || 
+      (contact.customCta && columnFilters.cta.some(cta => contact.customCta?.toLowerCase().includes(cta.toLowerCase())));
+    
+    return matchesSearch && 
+      matchesLeadTagFilter && matchesLeadStageFilter && matchesEngagementFilter && 
+      matchesIntentFilter && matchesBudgetFilter && matchesUrgencyFilter && 
+      matchesFitFilter && matchesCtaFilter;
   });
 
   const handleContactClick = async (contact: LeadGroup) => {
@@ -753,6 +925,71 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     }
   };
 
+  const handleLeadStageChange = async (contact: LeadGroup, newStage: string) => {
+    if (!contact.contactId) {
+      toast({
+        title: "Cannot update stage",
+        description: "No contact associated with this lead",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setUpdatingStageId(contact.id);
+      
+      // Optimistically update the local state
+      setContacts(prevContacts => 
+        prevContacts.map(c => 
+          c.id === contact.id 
+            ? { ...c, leadStage: newStage }
+            : c
+        )
+      );
+      
+      // Call API to update lead stage
+      const result = await bulkUpdateLeadStage([contact.contactId], newStage);
+      
+      if (result !== null && result > 0) {
+        toast({
+          title: "Stage updated",
+          description: `Lead stage changed to "${newStage}"`,
+        });
+      } else {
+        // Revert on failure
+        setContacts(prevContacts => 
+          prevContacts.map(c => 
+            c.id === contact.id 
+              ? { ...c, leadStage: contact.leadStage }
+              : c
+          )
+        );
+        toast({
+          title: "Failed to update stage",
+          description: "Please try again",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error updating lead stage:', error);
+      // Revert the optimistic update on error
+      setContacts(prevContacts => 
+        prevContacts.map(c => 
+          c.id === contact.id 
+            ? { ...c, leadStage: contact.leadStage }
+            : c
+        )
+      );
+      toast({
+        title: "Error",
+        description: "Failed to update lead stage",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingStageId(null);
+    }
+  };
+
   const handleToggleFollowUpStatus = async (contact: LeadGroup, completed: boolean) => {
     try {
       const status = completed ? 'completed' : 'scheduled';
@@ -984,6 +1221,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     <TableHead>Analytics</TableHead>
                     <TableHead>CTAs</TableHead>
                     <TableHead>Requirements</TableHead>
+                    <TableHead>CTA</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Follow-up</TableHead>
                   </TableRow>
@@ -991,7 +1229,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 <TableBody>
                   {timelineLoading ? (
                     <TableRow>
-                      <TableCell colSpan={14} className="text-center py-8">
+                      <TableCell colSpan={15} className="text-center py-8">
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           <span>Loading timeline...</span>
@@ -1000,7 +1238,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     </TableRow>
                   ) : timeline.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
                         No interaction history found
                       </TableCell>
                     </TableRow>
@@ -1161,6 +1399,25 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                                 {interaction.requirements}
                               </div>
                             </details>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        
+                        {/* CTA - Custom call-to-action as comma-separated badges */}
+                        <TableCell className="text-xs">
+                          {interaction.customCta ? (
+                            <div className="flex flex-wrap gap-1">
+                              {interaction.customCta.split(',').map((cta, idx) => (
+                                <Badge 
+                                  key={idx} 
+                                  variant="secondary" 
+                                  className="text-[10px] px-1.5 py-0"
+                                >
+                                  {cta.trim()}
+                                </Badge>
+                              ))}
+                            </div>
                           ) : (
                             "—"
                           )}
@@ -1349,27 +1606,6 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
           />
         </div>
         <div className="flex items-center space-x-2">
-          <Select value={leadTypeFilter} onValueChange={setLeadTypeFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Lead Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="inbound">Inbound</SelectItem>
-              <SelectItem value="outbound">Outbound</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={tagFilter} onValueChange={setTagFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Lead Tag" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tags</SelectItem>
-              <SelectItem value="Hot">Hot</SelectItem>
-              <SelectItem value="Warm">Warm</SelectItem>
-              <SelectItem value="Cold">Cold</SelectItem>
-            </SelectContent>
-          </Select>
           {selectedContacts.length > 0 && (
             <Button 
               onClick={handleCreateCampaignFromLeads}
@@ -1379,12 +1615,72 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
               Create Campaign ({selectedContacts.length})
             </Button>
           )}
+          {hasActiveColumnFilters && (
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={clearAllColumnFilters}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4 mr-1" />
+              Clear Filters
+            </Button>
+          )}
           <Button variant="outline">
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
         </div>
       </div>
+
+      {/* Active filter summary */}
+      {hasActiveColumnFilters && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-shrink-0">
+          <Filter className="w-4 h-4" />
+          <span>Active filters:</span>
+          {columnFilters.leadTag.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              Tag: {columnFilters.leadTag.join(', ')}
+            </Badge>
+          )}
+          {columnFilters.leadStage.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              Stage: {columnFilters.leadStage.join(', ')}
+            </Badge>
+          )}
+          {columnFilters.engagement.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              Engagement: {columnFilters.engagement.join(', ')}
+            </Badge>
+          )}
+          {columnFilters.intent.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              Intent: {columnFilters.intent.join(', ')}
+            </Badge>
+          )}
+          {columnFilters.budget.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              Budget: {columnFilters.budget.join(', ')}
+            </Badge>
+          )}
+          {columnFilters.urgency.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              Urgency: {columnFilters.urgency.join(', ')}
+            </Badge>
+          )}
+          {columnFilters.fit.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              Fit: {columnFilters.fit.join(', ')}
+            </Badge>
+          )}
+          {columnFilters.cta.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              CTA: {columnFilters.cta.join(', ')}
+            </Badge>
+          )}
+          <span className="text-xs">({filteredContacts.length} results)</span>
+        </div>
+      )}
 
       {/* Table */}
       <div className="border rounded-lg overflow-x-auto invisible-scrollbar flex-1 min-h-0 bg-background">
@@ -1403,14 +1699,80 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                   <span>Contact</span>
                 </div>
               </TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="Lead Stage"
+                  options={filterOptions.leadStage.length > 0 ? filterOptions.leadStage : stages.map(s => s.name)}
+                  selectedValues={columnFilters.leadStage}
+                  onSelectionChange={(values) => updateColumnFilter('leadStage', values)}
+                  showAllLabel="All Stages"
+                />
+              </TableHead>
               <TableHead>Lead Type</TableHead>
-              <TableHead>Recent Lead Tag</TableHead>
-              <TableHead>Engagement</TableHead>
-              <TableHead>Intent</TableHead>
-              <TableHead>Budget Constraint</TableHead>
-              <TableHead>Urgency</TableHead>
-              <TableHead>Fit</TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="Lead Tag"
+                  options={filterOptions.leadTag.length > 0 ? filterOptions.leadTag : ['Hot', 'Warm', 'Cold']}
+                  selectedValues={columnFilters.leadTag}
+                  onSelectionChange={(values) => updateColumnFilter('leadTag', values)}
+                  showAllLabel="All Tags"
+                />
+              </TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="Engagement"
+                  options={filterOptions.engagement.length > 0 ? filterOptions.engagement : ['High', 'Medium', 'Low']}
+                  selectedValues={columnFilters.engagement}
+                  onSelectionChange={(values) => updateColumnFilter('engagement', values)}
+                  showAllLabel="All Levels"
+                />
+              </TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="Intent"
+                  options={filterOptions.intent.length > 0 ? filterOptions.intent : ['High', 'Medium', 'Low']}
+                  selectedValues={columnFilters.intent}
+                  onSelectionChange={(values) => updateColumnFilter('intent', values)}
+                  showAllLabel="All Levels"
+                />
+              </TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="Budget"
+                  options={filterOptions.budget.length > 0 ? filterOptions.budget : ['Low', 'Medium', 'High']}
+                  selectedValues={columnFilters.budget}
+                  onSelectionChange={(values) => updateColumnFilter('budget', values)}
+                  showAllLabel="All"
+                />
+              </TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="Urgency"
+                  options={filterOptions.urgency.length > 0 ? filterOptions.urgency : ['Urgent', 'Soon', 'Flexible']}
+                  selectedValues={columnFilters.urgency}
+                  onSelectionChange={(values) => updateColumnFilter('urgency', values)}
+                  showAllLabel="All"
+                />
+              </TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="Fit"
+                  options={filterOptions.fit.length > 0 ? filterOptions.fit : ['Excellent', 'Good', 'Fair', 'Poor']}
+                  selectedValues={columnFilters.fit}
+                  onSelectionChange={(values) => updateColumnFilter('fit', values)}
+                  showAllLabel="All"
+                />
+              </TableHead>
               <TableHead>Requirements</TableHead>
+              <TableHead>
+                <ExcelColumnFilter
+                  title="CTA"
+                  options={filterOptions.cta}
+                  selectedValues={columnFilters.cta}
+                  onSelectionChange={(values) => updateColumnFilter('cta', values)}
+                  showAllLabel="All CTAs"
+                />
+              </TableHead>
               <TableHead>Escalated</TableHead>
               <TableHead>No. of Interactions</TableHead>
               <TableHead>Interacted Agents</TableHead>
@@ -1466,6 +1828,47 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                       </div>
                     </div>
                   </div>
+                </TableCell>
+                {/* Lead Stage dropdown */}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  {contact.contactId ? (
+                    <Select
+                      value={contact.leadStage || ""}
+                      onValueChange={(value) => handleLeadStageChange(contact, value)}
+                      disabled={updatingStageId === contact.id}
+                    >
+                      <SelectTrigger className="w-[140px] h-8">
+                        <SelectValue placeholder="Select stage">
+                          {contact.leadStage ? (
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-2 h-2 rounded-full" 
+                                style={{ backgroundColor: getStageColor(contact.leadStage) }}
+                              />
+                              <span className="truncate">{contact.leadStage}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Select stage</span>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stages.map((stage) => (
+                          <SelectItem key={stage.name} value={stage.name}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-2 h-2 rounded-full" 
+                                style={{ backgroundColor: stage.color }}
+                              />
+                              {stage.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">-</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="capitalize">
@@ -1537,6 +1940,24 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         {contact.requirements}
                       </div>
                     </details>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                {/* CTA - Custom call-to-action as comma-separated badges */}
+                <TableCell className="text-xs">
+                  {contact.customCta ? (
+                    <div className="flex flex-wrap gap-1">
+                      {contact.customCta.split(',').map((cta, idx) => (
+                        <Badge 
+                          key={idx} 
+                          variant="secondary" 
+                          className="text-[10px] px-1.5 py-0"
+                        >
+                          {cta.trim()}
+                        </Badge>
+                      ))}
+                    </div>
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}

@@ -26,6 +26,11 @@ export interface LeadGroup {
   groupType: 'phone' | 'email' | 'individual'; // How leads are grouped
   // Requirements from complete analysis - aggregated product/business requirements
   requirements?: string;
+  // Custom CTA string from extraction (e.g., "proposal required, demo booked")
+  customCta?: string;
+  // Lead stage for pipeline tracking
+  leadStage?: string;
+  contactId?: string; // Contact ID for updating lead stage
 }
 
 export interface LeadTimelineEntry {
@@ -67,6 +72,8 @@ export interface LeadTimelineEntry {
   followUpCallId?: string; // The call that triggered this follow-up
   // Requirements field - product/business requirements from call
   requirements?: string;
+  // Custom CTA string from extraction (e.g., "proposal required, demo booked")
+  customCta?: string;
   // Email-specific fields
   interactionType?: 'call' | 'email'; // Type of interaction
   emailSubject?: string; // Email subject
@@ -116,6 +123,8 @@ export class LeadIntelligenceController {
             FIRST_VALUE(COALESCE(la.cta_escalated_to_human, false)) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as escalated_to_human,
             FIRST_VALUE(c.created_at) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as last_contact,
             FIRST_VALUE(la.demo_book_datetime) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as demo_book_datetime,
+            FIRST_VALUE(co.lead_stage) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as lead_stage,
+            FIRST_VALUE(co.id) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as contact_id,
             COUNT(*) FILTER (WHERE la.analysis_type = 'individual' OR la.analysis_type IS NULL) OVER (PARTITION BY c.phone_number)::bigint as interactions,
             ROW_NUMBER() OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::bigint as rn
           FROM calls c
@@ -138,7 +147,13 @@ export class LeadIntelligenceController {
              WHERE la_complete.user_id = $1 
                AND la_complete.phone_number = plb.phone 
                AND la_complete.analysis_type = 'complete' 
-             LIMIT 1)::text as requirements
+             LIMIT 1)::text as requirements,
+            (SELECT la_complete.custom_cta 
+             FROM lead_analytics la_complete 
+             WHERE la_complete.user_id = $1 
+               AND la_complete.phone_number = plb.phone 
+               AND la_complete.analysis_type = 'complete' 
+             LIMIT 1)::text as custom_cta
           FROM phone_leads_base plb
           WHERE plb.rn = 1
         ),
@@ -166,6 +181,8 @@ export class LeadIntelligenceController {
             FIRST_VALUE(COALESCE(la.cta_escalated_to_human, false)) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as escalated_to_human,
             FIRST_VALUE(c.created_at) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as last_contact,
             FIRST_VALUE(la.demo_book_datetime) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as demo_book_datetime,
+            FIRST_VALUE(co.lead_stage) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::text as lead_stage,
+            FIRST_VALUE(co.id) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::text as contact_id,
             COUNT(*) FILTER (WHERE la.analysis_type = 'individual' OR la.analysis_type IS NULL) OVER (PARTITION BY la.extracted_email)::bigint as interactions,
             ROW_NUMBER() OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::bigint as rn
           FROM calls c
@@ -193,7 +210,16 @@ export class LeadIntelligenceController {
                AND la_ind.extracted_email = elb.email 
                AND la_ind.analysis_type = 'individual'
              ORDER BY c_ind.created_at DESC 
-             LIMIT 1)::text as requirements
+             LIMIT 1)::text as requirements,
+            -- For email-only leads (no phone), get custom_cta from most recent individual analysis
+            (SELECT la_ind.custom_cta 
+             FROM lead_analytics la_ind 
+             JOIN calls c_ind ON la_ind.call_id = c_ind.id
+             WHERE la_ind.user_id = $1 
+               AND la_ind.extracted_email = elb.email 
+               AND la_ind.analysis_type = 'individual'
+             ORDER BY c_ind.created_at DESC 
+             LIMIT 1)::text as custom_cta
           FROM email_leads_base elb
           WHERE elb.rn = 1
         ),
@@ -225,9 +251,12 @@ export class LeadIntelligenceController {
             COALESCE(la.cta_escalated_to_human, false) as escalated_to_human,
             c.created_at as last_contact,
             la.demo_book_datetime as demo_book_datetime,
+            co.lead_stage::text as lead_stage,
+            co.id::text as contact_id,
             1::bigint as interactions,
             COALESCE(a.name, '')::text as interacted_agents,
             la.requirements::text as requirements,
+            la.custom_cta::text as custom_cta,
             1::bigint as rn
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id
@@ -243,24 +272,24 @@ export class LeadIntelligenceController {
             group_key, group_type, phone, email, name, company, lead_type,
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
-            escalated_to_human, last_contact, demo_book_datetime, interactions,
-            interacted_agents, requirements, rn
+            escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
+            interacted_agents, requirements, custom_cta, rn
           FROM phone_leads
           UNION ALL
           SELECT 
             group_key, group_type, phone, email, name, company, lead_type,
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
-            escalated_to_human, last_contact, demo_book_datetime, interactions,
-            interacted_agents, requirements, rn
+            escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
+            interacted_agents, requirements, custom_cta, rn
           FROM email_leads
           UNION ALL
           SELECT 
             group_key, group_type, phone, email, name, company, lead_type,
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
-            escalated_to_human, last_contact, demo_book_datetime, interactions,
-            interacted_agents, requirements, rn
+            escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
+            interacted_agents, requirements, custom_cta, rn
           FROM individual_leads
         )
         SELECT 
@@ -333,7 +362,10 @@ export class LeadIntelligenceController {
         meetingTitle: row.meeting_title, // Title from existing meeting
         meetingDescription: row.meeting_description, // Description from existing meeting
         groupType: row.group_type,
-        requirements: row.requirements // From complete analysis (phone leads) or individual analysis (email/individual leads)
+        requirements: row.requirements, // From complete analysis (phone leads) or individual analysis (email/individual leads)
+        customCta: row.custom_cta, // Custom CTA string from extraction
+        leadStage: row.lead_stage, // Lead stage for pipeline tracking
+        contactId: row.contact_id // Contact ID for updating lead stage
       }));
 
       res.json(leadGroups);
@@ -405,6 +437,7 @@ export class LeadIntelligenceController {
               END as status,
               e.subject as smart_notification,
               NULL as requirements,
+              NULL as custom_cta,
               NULL as duration,
               NULL as engagement_level,
               NULL as intent_level,
@@ -468,6 +501,7 @@ export class LeadIntelligenceController {
               END as status,
               la.smart_notification,
               la.requirements,
+              la.custom_cta,
               CASE 
                 WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                   LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -543,6 +577,7 @@ export class LeadIntelligenceController {
             END as status,
             la.smart_notification,
             la.requirements,
+            la.custom_cta,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -612,6 +647,7 @@ export class LeadIntelligenceController {
             END as status,
             la.smart_notification,
             la.requirements,
+            la.custom_cta,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -671,6 +707,7 @@ export class LeadIntelligenceController {
         status: row.status || 'Cold',
         smartNotification: row.smart_notification,
         requirements: row.requirements,
+        customCta: row.custom_cta,
         duration: row.duration,
         engagementLevel: row.engagement_level,
         intentLevel: row.intent_level,

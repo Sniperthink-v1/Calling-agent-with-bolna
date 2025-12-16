@@ -203,6 +203,7 @@ interface SortableStageItemProps {
   onColorChange: (id: string, color: string) => void;
   onDelete: (id: string) => void;
   isOnly: boolean;
+  isFixed?: boolean;
 }
 
 const SortableStageItem: React.FC<SortableStageItemProps> = ({
@@ -211,6 +212,7 @@ const SortableStageItem: React.FC<SortableStageItemProps> = ({
   onColorChange,
   onDelete,
   isOnly,
+  isFixed = false,
 }) => {
   const {
     attributes,
@@ -254,15 +256,28 @@ const SortableStageItem: React.FC<SortableStageItemProps> = ({
       <ColorPicker
         value={stage.color}
         onChange={(color) => onColorChange(stage.id, color)}
+        disabled={isFixed}
       />
 
       {/* Stage name input */}
-      <Input
-        value={stage.name}
-        onChange={(e) => onNameChange(stage.id, e.target.value)}
-        placeholder="Stage name"
-        className="flex-1 h-9"
-      />
+      <div className="flex-1 relative">
+        <Input
+          value={stage.name}
+          onChange={(e) => onNameChange(stage.id, e.target.value)}
+          placeholder="Stage name"
+          className={cn(
+            "h-9",
+            isFixed && "bg-muted cursor-not-allowed"
+          )}
+          disabled={isFixed}
+          readOnly={isFixed}
+        />
+        {isFixed && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground bg-muted-foreground/10 px-1.5 py-0.5 rounded">
+            Fixed
+          </span>
+        )}
+      </div>
 
       {/* Delete button */}
       <Button
@@ -270,11 +285,12 @@ const SortableStageItem: React.FC<SortableStageItemProps> = ({
         variant="ghost"
         size="icon"
         onClick={() => onDelete(stage.id)}
-        disabled={isOnly}
+        disabled={isOnly || isFixed}
         className={cn(
           "h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-500/10",
-          isOnly && "opacity-50 cursor-not-allowed"
+          (isOnly || isFixed) && "opacity-50 cursor-not-allowed"
         )}
+        title={isFixed ? "Cannot delete fixed stage" : "Delete stage"}
       >
         <Trash2 className="w-4 h-4" />
       </Button>
@@ -504,6 +520,7 @@ export const LeadStageCustomizer: React.FC<LeadStageCustomizerProps> = ({
             <DialogTitle>Customize Lead Stages</DialogTitle>
             <DialogDescription>
               Drag to reorder, edit names and colors. Changes apply to pipeline view and dropdowns.
+              <span className="block mt-1 text-xs">Fixed stages cannot be renamed or deleted.</span>
             </DialogDescription>
           </DialogHeader>
 
@@ -528,6 +545,7 @@ export const LeadStageCustomizer: React.FC<LeadStageCustomizerProps> = ({
                       onColorChange={handleColorChange}
                       onDelete={handleDelete}
                       isOnly={editableStages.length === 1}
+                      isFixed={stage.isFixed}
                     />
                   ))}
                 </div>

@@ -11,6 +11,7 @@ import {
   Filter,
   X,
   Loader2,
+  Check,
 } from "lucide-react";
 import { CallSourceIndicator, getCallSourceFromData } from "@/components/call/CallSourceIndicator";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   Tooltip,
@@ -41,6 +49,88 @@ import { useCalls } from "@/hooks/useCalls";
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { Call, CallListOptions } from "@/types";
 import { apiService } from "@/services/apiService";
+
+// Column filter interface for Excel-like filtering
+interface ColumnFilters {
+  agents: string[];
+  campaigns: string[];
+  status: string[];
+  leadType: string[];
+}
+
+// Excel-like Column Filter Component for Call Logs
+interface ExcelFilterProps {
+  title: string;
+  options: Array<{ value: string; label: string }>;
+  selectedValues: string[];
+  onSelectionChange: (values: string[]) => void;
+  showAllLabel?: string;
+}
+
+const ExcelColumnFilter = ({ title, options, selectedValues, onSelectionChange, showAllLabel = "All" }: ExcelFilterProps) => {
+  const isAllSelected = selectedValues.length === 0;
+  const hasActiveFilter = selectedValues.length > 0;
+
+  const handleToggleAll = () => {
+    onSelectionChange([]);
+  };
+
+  const handleToggleOption = (value: string) => {
+    if (selectedValues.includes(value)) {
+      onSelectionChange(selectedValues.filter(v => v !== value));
+    } else {
+      onSelectionChange([...selectedValues, value]);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-2 px-3 py-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors">
+          <Filter className={`w-4 h-4 ${hasActiveFilter ? 'text-primary fill-primary/20' : 'text-muted-foreground'}`} />
+          <span className="text-sm">{title}</span>
+          {hasActiveFilter && (
+            <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+              {selectedValues.length}
+            </span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto">
+        <DropdownMenuItem onClick={handleToggleAll} className="flex items-center gap-2">
+          <div className={`w-4 h-4 border rounded flex items-center justify-center ${isAllSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+            {isAllSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+          </div>
+          <span className="font-medium">{showAllLabel}</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {options.map((option) => {
+          const isSelected = selectedValues.includes(option.value);
+          return (
+            <DropdownMenuItem 
+              key={option.value} 
+              onClick={() => handleToggleOption(option.value)}
+              className="flex items-center gap-2"
+            >
+              <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
+                {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+              </div>
+              <span>{option.label}</span>
+            </DropdownMenuItem>
+          );
+        })}
+        {selectedValues.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleToggleAll} className="text-muted-foreground">
+              Clear filter
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 interface CallLogsProps {
   activeTab: string;
@@ -94,8 +184,15 @@ const CallLogs: React.FC<CallLogsProps> = ({
   const [sortBy, setSortBy] = useState<'createdAt' | 'durationSeconds' | 'contactName'>('createdAt');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [selectedCallSource, setSelectedCallSource] = useState<string>("");
-  const [selectedLeadType, setSelectedLeadType] = useState<string>("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  
+  // Column filters state (Excel-like multi-select)
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
+    agents: [],
+    campaigns: [],
+    status: [],
+    leadType: [],
+  });
+  
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -107,6 +204,31 @@ const CallLogs: React.FC<CallLogsProps> = ({
 
   const ITEMS_PER_PAGE = initialPageSize || 30; // Default to 30 for infinite scroll
   const SCROLL_THRESHOLD = 10; // Trigger load when 10 items from bottom
+
+  // Helper to update a specific column filter
+  const updateColumnFilter = (column: keyof ColumnFilters, values: string[]) => {
+    setColumnFilters(prev => ({ ...prev, [column]: values }));
+  };
+
+  // Check if any column filters are active
+  const hasActiveColumnFilters = Object.values(columnFilters).some(arr => arr.length > 0);
+
+  // Clear all column filters
+  const clearAllColumnFilters = () => {
+    setColumnFilters({
+      agents: [],
+      campaigns: [],
+      status: [],
+      leadType: [],
+    });
+    // Also notify parent components if needed
+    if (onAgentFilterChange) {
+      onAgentFilterChange([]);
+    }
+    if (onCampaignFilterChange) {
+      onCampaignFilterChange(null);
+    }
+  };
 
   // Debounce search term and reset pagination
   useEffect(() => {
@@ -129,7 +251,17 @@ const CallLogs: React.FC<CallLogsProps> = ({
     setCurrentPage(1);
     setHasReachedEnd(false);
     // Don't immediately clear allLoadedCalls - let the data effect handle it
-  }, [selectedCallSource, selectedLeadType, selectedStatus, startDate, endDate, sortBy, sortOrder, selectedAgents]);
+  }, [selectedCallSource, columnFilters, startDate, endDate, sortBy, sortOrder, selectedAgents]);
+
+  // Sync columnFilters with parent props
+  useEffect(() => {
+    if (selectedAgents && selectedAgents.length > 0 && columnFilters.agents.length === 0) {
+      setColumnFilters(prev => ({ ...prev, agents: selectedAgents }));
+    }
+    if (selectedCampaign && columnFilters.campaigns.length === 0) {
+      setColumnFilters(prev => ({ ...prev, campaigns: [selectedCampaign] }));
+    }
+  }, [selectedAgents, selectedCampaign]);
 
   // Map camelCase to snake_case for backend - Updated for duration_seconds
   const sortByMapping: Record<string, string> = {
@@ -146,10 +278,10 @@ const CallLogs: React.FC<CallLogsProps> = ({
     sortOrder,
     // Add server-side search and filtering
     search: debouncedSearchTerm || undefined,
-    agentNames: selectedAgents && selectedAgents.length > 0 ? selectedAgents : undefined,
-    campaignId: selectedCampaign || undefined,
-    status: (selectedStatus || undefined) as string | undefined, // This handles both call status and lifecycle status
-    leadType: (selectedLeadType || undefined) as 'inbound' | 'outbound' | undefined,
+    agentNames: columnFilters.agents.length > 0 ? columnFilters.agents : (selectedAgents && selectedAgents.length > 0 ? selectedAgents : undefined),
+    campaignId: columnFilters.campaigns.length > 0 ? columnFilters.campaigns[0] : (selectedCampaign || undefined),
+    status: columnFilters.status.length > 0 ? columnFilters.status[0] : undefined, // Server-side filtering for status
+    leadType: columnFilters.leadType.length > 0 ? columnFilters.leadType[0] as 'inbound' | 'outbound' : undefined,
     startDate: startDate ? startDate.toISOString() : undefined,
     endDate: endDate ? endDate.toISOString() : undefined,
   };
@@ -589,80 +721,68 @@ const CallLogs: React.FC<CallLogsProps> = ({
               />
             </div>
 
-            <div className="mt-2 flex items-center gap-2 flex-nowrap overflow-x-auto pb-1">
-              {/* Agent Filter */}
-              {agents.length > 0 && onAgentFilterChange && (
-                <Select 
-                  value={selectedAgents && selectedAgents.length === 1 ? selectedAgents[0] : "all"} 
-                  onValueChange={(value) => {
-                    if (value === "all") {
-                      onAgentFilterChange([]);
-                    } else {
-                      onAgentFilterChange([value]);
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              {/* Agent Filter - Excel-like multi-select */}
+              {agents.length > 0 && (
+                <ExcelColumnFilter
+                  title="Agents"
+                  options={agents.map(agent => ({ value: agent.name, label: agent.name }))}
+                  selectedValues={columnFilters.agents}
+                  onSelectionChange={(values) => {
+                    updateColumnFilter('agents', values);
+                    if (onAgentFilterChange) {
+                      onAgentFilterChange(values);
                     }
                   }}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="All Agents" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Agents</SelectItem>
-                    {agents.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.name}>
-                        {agent.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  showAllLabel="All Agents"
+                />
               )}
 
-              {/* Campaign Filter */}
-              {campaigns.length > 0 && onCampaignFilterChange && (
-                <Select 
-                  value={selectedCampaign || "all"} 
-                  onValueChange={(value) => onCampaignFilterChange(value === "all" ? null : value)}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="All Campaigns" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Campaigns</SelectItem>
-                    {campaigns.map((campaign) => (
-                      <SelectItem key={campaign.id} value={campaign.id}>
-                        {campaign.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Campaign Filter - Excel-like multi-select */}
+              {campaigns.length > 0 && (
+                <ExcelColumnFilter
+                  title="Campaigns"
+                  options={campaigns.map(campaign => ({ value: campaign.id, label: campaign.name }))}
+                  selectedValues={columnFilters.campaigns}
+                  onSelectionChange={(values) => {
+                    updateColumnFilter('campaigns', values);
+                    if (onCampaignFilterChange) {
+                      onCampaignFilterChange(values.length > 0 ? values[0] : null);
+                    }
+                  }}
+                  showAllLabel="All Campaigns"
+                />
               )}
 
-              <Select value={selectedLeadType || "all"} onValueChange={(value) => setSelectedLeadType(value === "all" ? "" : value)}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="All Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="inbound">Inbound</SelectItem>
-                  <SelectItem value="outbound">Outbound</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Lead Type Filter - Excel-like multi-select */}
+              <ExcelColumnFilter
+                title="Call Type"
+                options={[
+                  { value: 'inbound', label: 'Inbound' },
+                  { value: 'outbound', label: 'Outbound' },
+                ]}
+                selectedValues={columnFilters.leadType}
+                onSelectionChange={(values) => updateColumnFilter('leadType', values)}
+                showAllLabel="All Types"
+              />
 
-              <Select value={selectedStatus || "all"} onValueChange={(value) => setSelectedStatus(value === "all" ? "" : value)}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="busy">Busy</SelectItem>
-                  <SelectItem value="no-answer">No Answer</SelectItem>
-                  <SelectItem value="ringing">Ringing</SelectItem>
-                  <SelectItem value="initiated">Initiated</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Status Filter - Excel-like multi-select */}
+              <ExcelColumnFilter
+                title="Status"
+                options={[
+                  { value: 'completed', label: 'Completed' },
+                  { value: 'failed', label: 'Failed' },
+                  { value: 'in_progress', label: 'In Progress' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                  { value: 'busy', label: 'Busy' },
+                  { value: 'no-answer', label: 'No Answer' },
+                  { value: 'ringing', label: 'Ringing' },
+                  { value: 'initiated', label: 'Initiated' },
+                ]}
+                selectedValues={columnFilters.status}
+                onSelectionChange={(values) => updateColumnFilter('status', values)}
+                showAllLabel="All Status"
+              />
 
               <DateRangePicker
                 startDate={startDate}
@@ -693,8 +813,60 @@ const CallLogs: React.FC<CallLogsProps> = ({
               >
                 {sortOrder === 'ASC' ? '↑' : '↓'}
               </Button>
+
+              {/* Clear All Filters Button */}
+              {hasActiveColumnFilters && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearAllColumnFilters}
+                  className="h-10"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
+
+          {/* Active Filters Summary */}
+          {hasActiveColumnFilters && (
+            <div className="flex flex-wrap gap-2 items-center mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <span className="text-sm text-muted-foreground">Active filters:</span>
+              {columnFilters.agents.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  Agents: {columnFilters.agents.join(', ')}
+                  <button onClick={() => updateColumnFilter('agents', [])} className="ml-1 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {columnFilters.campaigns.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  Campaigns: {columnFilters.campaigns.map(id => campaigns.find(c => c.id === id)?.name || id).join(', ')}
+                  <button onClick={() => updateColumnFilter('campaigns', [])} className="ml-1 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {columnFilters.leadType.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  Type: {columnFilters.leadType.join(', ')}
+                  <button onClick={() => updateColumnFilter('leadType', [])} className="ml-1 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {columnFilters.status.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  Status: {columnFilters.status.join(', ')}
+                  <button onClick={() => updateColumnFilter('status', [])} className="ml-1 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Call Log Cards */}

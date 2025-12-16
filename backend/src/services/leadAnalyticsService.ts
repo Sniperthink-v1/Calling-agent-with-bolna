@@ -52,6 +52,7 @@ class LeadAnalyticsService {
         company_name: analytics.company_name || null,
         smartnotification: analytics.smart_notification || null,
         requirements: analytics.requirements ?? null,
+        custom_cta: analytics.custom_cta ?? null,
       },
     };
   }
@@ -120,6 +121,7 @@ class LeadAnalyticsService {
       smart_notification: analysis.extraction?.smartnotification ?? undefined,
       demo_book_datetime: analysis.demo_book_datetime ?? undefined,
       requirements: analysis.extraction?.requirements ?? undefined,
+      custom_cta: analysis.extraction?.custom_cta ?? undefined,
     };
   }
 
@@ -191,6 +193,7 @@ class LeadAnalyticsService {
       smart_notification: analysis.extraction?.smartnotification ?? undefined,
       demo_book_datetime: analysis.demo_book_datetime ?? undefined,
       requirements: analysis.extraction?.requirements ?? undefined,
+      custom_cta: analysis.extraction?.custom_cta ?? undefined,
     };
   }
 

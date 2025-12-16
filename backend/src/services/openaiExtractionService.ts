@@ -74,6 +74,7 @@ export interface IndividualAnalysis {
     company_name: string | null;
     smartnotification: string | null;
     requirements: string | null;
+    custom_cta: string | null;
   };
 }
 

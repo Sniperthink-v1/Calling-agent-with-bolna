@@ -2,27 +2,57 @@ import { pool } from '../config/database';
 import { logger } from '../utils/logger';
 
 /**
- * Lead Stage structure - All stages are user-customizable
+ * Lead Stage structure - Fixed stages + user-customizable stages
  * Stages are stored in users.custom_lead_stages as JSONB array
  * New users are auto-populated with predefined stages via database trigger
+ * 
+ * FIXED STAGES (cannot be deleted/renamed):
+ * 1. New Lead - Default stage for all new contacts
+ * 2. Attempted to Contact - Auto-set when call fails (busy/no-answer/failed)
+ * 3. Contacted - Auto-set when call is answered (in-progress status)
+ * 
+ * Users can add custom stages after these 3 fixed ones.
  */
 export interface LeadStage {
   name: string;
   color: string;
   order: number;
+  isFixed?: boolean; // True for the 3 fixed stages that cannot be deleted/renamed
 }
+
+// Fixed stage names - these cannot be deleted or renamed
+export const FIXED_STAGE_NAMES = ['New Lead', 'Attempted to Contact', 'Contacted'] as const;
+export type FixedStageName = typeof FIXED_STAGE_NAMES[number];
 
 // Predefined stages for new users (also used in migration)
 // These are auto-populated via database trigger trg_initialize_user_lead_stages
+// First 3 stages are FIXED and cannot be deleted/renamed
 export const PREDEFINED_LEAD_STAGES: LeadStage[] = [
-  { name: 'New Lead', color: '#3B82F6', order: 0 },      // Blue
-  { name: 'Contacted', color: '#8B5CF6', order: 1 },     // Purple
-  { name: 'Qualified', color: '#F59E0B', order: 2 },     // Amber
-  { name: 'Proposal Sent', color: '#06B6D4', order: 3 }, // Cyan
-  { name: 'Negotiation', color: '#EC4899', order: 4 },   // Pink
-  { name: 'Won', color: '#10B981', order: 5 },           // Green
-  { name: 'Lost', color: '#EF4444', order: 6 },          // Red
+  { name: 'New Lead', color: '#3B82F6', order: 0, isFixed: true },              // Blue - Default
+  { name: 'Attempted to Contact', color: '#F59E0B', order: 1, isFixed: true },  // Amber - Failed call attempts
+  { name: 'Contacted', color: '#10B981', order: 2, isFixed: true },             // Green - Call answered
 ];
+
+/**
+ * Check if a stage name is one of the fixed stages
+ */
+export function isFixedStage(stageName: string): boolean {
+  return FIXED_STAGE_NAMES.some(
+    fixed => fixed.toLowerCase() === stageName.toLowerCase()
+  );
+}
+
+/**
+ * Get the order/priority of a stage (used for progression logic)
+ * Returns: 0 = New Lead, 1 = Attempted to Contact, 2 = Contacted, -1 = unknown
+ */
+export function getStageOrder(stageName: string): number {
+  const lowerName = stageName.toLowerCase();
+  if (lowerName === 'new lead') return 0;
+  if (lowerName === 'attempted to contact') return 1;
+  if (lowerName === 'contacted') return 2;
+  return -1; // Custom stage or unknown
+}
 
 // Generate a random vibrant color
 function generateRandomColor(): string {
@@ -143,6 +173,7 @@ export class LeadStageService {
   /**
    * Update a stage (rename and/or change color)
    * Also updates all contacts that have this stage
+   * NOTE: Fixed stages (New Lead, Attempted to Contact, Contacted) cannot be renamed
    */
   static async updateStage(
     userId: string,
@@ -150,6 +181,12 @@ export class LeadStageService {
     newStageName?: string,
     newColor?: string
   ): Promise<LeadStage[]> {
+    // Check if trying to rename a fixed stage
+    if (newStageName && isFixedStage(oldStageName) && 
+        newStageName.toLowerCase() !== oldStageName.toLowerCase()) {
+      throw new Error(`Cannot rename fixed stage "${oldStageName}". Fixed stages (New Lead, Attempted to Contact, Contacted) cannot be renamed.`);
+    }
+    
     const client = await pool.getClient();
     
     try {
@@ -227,11 +264,17 @@ export class LeadStageService {
   /**
    * Delete a stage
    * Sets lead_stage to NULL for all contacts that had this stage
+   * NOTE: Fixed stages (New Lead, Attempted to Contact, Contacted) cannot be deleted
    */
   static async deleteStage(
     userId: string, 
     stageName: string
   ): Promise<LeadStage[]> {
+    // Check if trying to delete a fixed stage
+    if (isFixedStage(stageName)) {
+      throw new Error(`Cannot delete fixed stage "${stageName}". Fixed stages (New Lead, Attempted to Contact, Contacted) cannot be deleted.`);
+    }
+    
     const client = await pool.getClient();
     
     try {
@@ -337,6 +380,7 @@ export class LeadStageService {
   /**
    * Replace all stages at once (full update)
    * Used by the customizer popup to save all changes atomically
+   * NOTE: Fixed stages (New Lead, Attempted to Contact, Contacted) cannot be deleted or renamed
    */
   static async replaceAllStages(
     userId: string,
@@ -353,6 +397,14 @@ export class LeadStageService {
         [userId]
       );
       const oldStages: LeadStage[] = result.rows[0]?.custom_lead_stages || [];
+      
+      // Validate that all fixed stages are present and not renamed
+      const newStageNamesLower = newStages.map(s => s.name.toLowerCase());
+      for (const fixedName of FIXED_STAGE_NAMES) {
+        if (!newStageNamesLower.includes(fixedName.toLowerCase())) {
+          throw new Error(`Cannot remove fixed stage "${fixedName}". Fixed stages (New Lead, Attempted to Contact, Contacted) cannot be deleted.`);
+        }
+      }
       
       // Validate new stages
       const seenNames = new Set<string>();
@@ -479,6 +531,92 @@ export class LeadStageService {
     } catch (error) {
       logger.error('Error bulk updating lead stage:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Auto-progress lead stage based on call outcome
+   * This is called by webhook service when call status changes
+   * 
+   * Stage Progression Rules:
+   * - "New Lead" → "Attempted to Contact" (when call fails: busy/no-answer/failed)
+   * - "New Lead" or "Attempted to Contact" → "Contacted" (when call is answered: in-progress)
+   * - "Contacted" never downgrades (stays at "Contacted" even if subsequent calls fail)
+   * 
+   * @param contactId - The contact to update
+   * @param userId - The user who owns the contact
+   * @param callOutcome - The call outcome: 'answered' | 'busy' | 'no-answer' | 'failed'
+   * @returns The new stage name if updated, or null if no change
+   */
+  static async autoProgressStage(
+    contactId: string,
+    userId: string,
+    callOutcome: 'answered' | 'busy' | 'no-answer' | 'failed'
+  ): Promise<string | null> {
+    try {
+      // Get current contact stage
+      const contactResult = await pool.query(
+        'SELECT lead_stage FROM contacts WHERE id = $1 AND user_id = $2',
+        [contactId, userId]
+      );
+      
+      if (contactResult.rows.length === 0) {
+        logger.warn('Contact not found for auto-progress', { contactId, userId });
+        return null;
+      }
+      
+      const currentStage = contactResult.rows[0].lead_stage || 'New Lead';
+      const currentStageOrder = getStageOrder(currentStage);
+      
+      let newStage: string | null = null;
+      
+      if (callOutcome === 'answered') {
+        // Call was answered - progress to "Contacted"
+        // Only upgrade if current stage is below "Contacted" (order < 2)
+        if (currentStageOrder < 2) {
+          newStage = 'Contacted';
+        }
+      } else {
+        // Call failed (busy/no-answer/failed) - progress to "Attempted to Contact"
+        // Only upgrade if current stage is "New Lead" (order = 0)
+        if (currentStageOrder === 0) {
+          newStage = 'Attempted to Contact';
+        }
+      }
+      
+      if (newStage) {
+        // Update contact stage
+        await pool.query(
+          `UPDATE contacts 
+           SET lead_stage = $1, lead_stage_updated_at = NOW(), updated_at = NOW() 
+           WHERE id = $2 AND user_id = $3`,
+          [newStage, contactId, userId]
+        );
+        
+        logger.info('Auto-progressed lead stage', {
+          contactId,
+          userId,
+          callOutcome,
+          fromStage: currentStage,
+          toStage: newStage
+        });
+        
+        return newStage;
+      }
+      
+      logger.debug('No stage progression needed', {
+        contactId,
+        userId,
+        callOutcome,
+        currentStage,
+        currentStageOrder
+      });
+      
+      return null;
+    } catch (error) {
+      logger.error('Error auto-progressing lead stage:', error);
+      // Don't throw - stage update failure shouldn't break webhook processing
+      return null;
     }
   }
 }

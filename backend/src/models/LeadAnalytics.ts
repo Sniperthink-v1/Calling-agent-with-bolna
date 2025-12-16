@@ -46,6 +46,7 @@ export interface LeadAnalyticsInterface extends BaseModelInterface {
   extracted_name?: string;
   extracted_email?: string;
   requirements?: string;
+  custom_cta?: string;
   // Dedicated CTA boolean columns
   cta_pricing_clicked?: boolean;
   cta_demo_clicked?: boolean;
@@ -85,6 +86,7 @@ export interface CreateLeadAnalyticsData {
   extracted_name?: string;
   extracted_email?: string;
   requirements?: string;
+  custom_cta?: string;
   // Dedicated CTA boolean columns
   cta_pricing_clicked?: boolean;
   cta_demo_clicked?: boolean;
@@ -152,7 +154,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         engagement_health, engagement_score,
         total_score, lead_status_tag,
         reasoning, cta_interactions,
-        company_name, extracted_name, extracted_email, requirements,
+        company_name, extracted_name, extracted_email, requirements, custom_cta,
         cta_pricing_clicked, cta_demo_clicked, cta_followup_clicked,
         cta_sample_clicked, cta_escalated_to_human,
         smart_notification, demo_book_datetime
@@ -167,10 +169,10 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         $15, $16,
         $17, $18,
         $19, $20,
-        $21, $22, $23, $24,
-        $25, $26, $27,
-        $28, $29,
-        $30, $31
+        $21, $22, $23, $24, $25,
+        $26, $27, $28,
+        $29, $30,
+        $31, $32
       )
       ON CONFLICT (user_id, phone_number, analysis_type) WHERE (analysis_type = 'complete')
       DO UPDATE SET
@@ -195,6 +197,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         extracted_name = EXCLUDED.extracted_name,
         extracted_email = EXCLUDED.extracted_email,
         requirements = EXCLUDED.requirements,
+        custom_cta = EXCLUDED.custom_cta,
         cta_pricing_clicked = EXCLUDED.cta_pricing_clicked,
         cta_demo_clicked = EXCLUDED.cta_demo_clicked,
         cta_followup_clicked = EXCLUDED.cta_followup_clicked,
@@ -231,6 +234,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
       analyticsData.extracted_name ?? null,
       analyticsData.extracted_email ?? null,
       analyticsData.requirements ?? null,
+      analyticsData.custom_cta ?? null,
       analyticsData.cta_pricing_clicked ?? false,
       analyticsData.cta_demo_clicked ?? false,
       analyticsData.cta_followup_clicked ?? false,
