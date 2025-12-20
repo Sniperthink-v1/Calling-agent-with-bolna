@@ -18,11 +18,11 @@ import { useToast } from '@/components/ui/use-toast';
 // Detailed analytics structure returned from the API
 interface DetailedAnalytics {
   scores?: {
-    intent?: { level: string; score: number; reasoning: string };
-    urgency?: { level: string; score: number; reasoning: string };
-    budget?: { constraint: string; score: number; reasoning: string };
-    fit?: { alignment: string; score: number; reasoning: string };
-    engagement?: { health: string; score: number; reasoning: string };
+    intent?: { level: string; reasoning: string };
+    urgency?: { level: string; reasoning: string };
+    budget?: { constraint: string; reasoning: string };
+    fit?: { alignment: string; reasoning: string };
+    engagement?: { health: string; reasoning: string };
   };
   overall?: {
     total_score: number;
@@ -53,7 +53,6 @@ const ScoreCard: React.FC<{ title: string; data: any }> = ({ title, data }) => (
     <h4 className="font-semibold text-md mb-1 capitalize">{title}</h4>
     <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md space-y-1">
       <p><strong>Level:</strong> {data.level || data.constraint || data.alignment || data.health}</p>
-      <p><strong>Score:</strong> {data.score}</p>
       <p><strong>Reasoning:</strong> {data.reasoning}</p>
     </div>
   </div>
@@ -286,29 +285,6 @@ const InteractionDetailsModal: React.FC<InteractionDetailsModalProps> = ({
                   {detailedAnalytics.scores?.budget && <ScoreCard title="budget" data={detailedAnalytics.scores.budget} />}
                   {detailedAnalytics.scores?.fit && <ScoreCard title="fit" data={detailedAnalytics.scores.fit} />}
                   {detailedAnalytics.scores?.engagement && <ScoreCard title="engagement" data={detailedAnalytics.scores.engagement} />}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-lg mb-2">Interaction Highlights</h3>
-                <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-                  <p className="mb-2"><strong>CTA Behavior:</strong> {detailedAnalytics.interactions?.cta_behavior_reasoning}</p>
-                  {detailedAnalytics.interactions?.cta_summary && detailedAnalytics.interactions.cta_summary.length > 0 &&
-                    <div>
-                      <strong>CTA Summary:</strong>
-                      <ul className="list-disc list-inside pl-2">
-                        {detailedAnalytics.interactions.cta_summary.map((item, i) => <li key={i}>{item}</li>)}
-                      </ul>
-                    </div>
-                  }
-                  {detailedAnalytics.interactions?.engagement_indicators && detailedAnalytics.interactions.engagement_indicators.length > 0 &&
-                    <div className="mt-2">
-                      <strong>Engagement Indicators:</strong>
-                      <ul className="list-disc list-inside pl-2">
-                        {detailedAnalytics.interactions.engagement_indicators.map((item, i) => <li key={i}>{item}</li>)}
-                      </ul>
-                    </div>
-                  }
                 </div>
               </div>
               

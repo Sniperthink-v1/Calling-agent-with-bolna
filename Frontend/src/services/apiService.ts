@@ -2573,6 +2573,151 @@ class ApiService {
     // Backend returns the response directly, not wrapped in a data property
     return response as unknown as RefreshTokenResponse;
   }
+
+  // ============================================================================
+  // TEAM MEMBERS API
+  // ============================================================================
+
+  async getTeamMembers(): Promise<ApiResponse<{ team_members: TeamMember[] }>> {
+    return this.request<{ team_members: TeamMember[] }>(API_ENDPOINTS.TEAM_MEMBERS.LIST);
+  }
+
+  async getTeamStats(): Promise<ApiResponse<{ stats: TeamMemberStats }>> {
+    return this.request<{ stats: TeamMemberStats }>(API_ENDPOINTS.TEAM_MEMBERS.STATS);
+  }
+
+  async getRoleDescriptions(): Promise<ApiResponse<{ roles: RoleDescriptions }>> {
+    return this.request<{ roles: RoleDescriptions }>(API_ENDPOINTS.TEAM_MEMBERS.ROLES, {
+      skipAuth: true,
+    });
+  }
+
+  async inviteTeamMember(data: { name: string; email: string; role: string }): Promise<ApiResponse<{ message: string; team_member: TeamMember }>> {
+    return this.request<{ message: string; team_member: TeamMember }>(API_ENDPOINTS.TEAM_MEMBERS.INVITE, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateTeamMember(id: string, updates: Partial<{ name: string; role: string; is_active: boolean }>): Promise<ApiResponse<{ message: string; team_member: TeamMember }>> {
+    return this.request<{ message: string; team_member: TeamMember }>(API_ENDPOINTS.TEAM_MEMBERS.UPDATE(id), {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deactivateTeamMember(id: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>(API_ENDPOINTS.TEAM_MEMBERS.DELETE(id), {
+      method: 'DELETE',
+    });
+  }
+
+  async resendTeamMemberInvite(id: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>(API_ENDPOINTS.TEAM_MEMBERS.RESEND_INVITE(id), {
+      method: 'POST',
+    });
+  }
+
+  async validateInviteToken(token: string): Promise<{ valid: boolean; name?: string; email?: string; role?: string; message?: string }> {
+    const response = await this.request<{ valid: boolean; name?: string; email?: string; role?: string; message?: string }>(API_ENDPOINTS.TEAM_MEMBERS.VALIDATE_TOKEN(token), {
+      skipAuth: true,
+    });
+    return response as { valid: boolean; name?: string; email?: string; role?: string; message?: string };
+  }
+
+  async setTeamMemberPassword(token: string, password: string): Promise<{ token?: string; refreshToken?: string; user?: any; error?: string }> {
+    const response = await this.request<{ token?: string; refreshToken?: string; user?: any; error?: string }>(API_ENDPOINTS.TEAM_MEMBERS.SET_PASSWORD, {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+      skipAuth: true,
+    });
+    return response as { token?: string; refreshToken?: string; user?: any; error?: string };
+  }
+
+  // ============================================================================
+  // LEAD INTELLIGENCE EDIT API
+  // ============================================================================
+
+  async editLeadIntelligence(groupId: string, updates: LeadIntelligenceUpdate): Promise<ApiResponse<LeadIntelligenceEditResponse>> {
+    return this.request<LeadIntelligenceEditResponse>(API_ENDPOINTS.LEADS.INTELLIGENCE_EDIT(groupId), {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async getLeadIntelligenceEvents(groupId: string): Promise<ApiResponse<{ events: LeadIntelligenceEvent[] }>> {
+    return this.request<{ events: LeadIntelligenceEvent[] }>(API_ENDPOINTS.LEADS.INTELLIGENCE_EVENTS(groupId));
+  }
+
+  async getTeamMembersForAssignment(): Promise<ApiResponse<{ team_members: AssignableTeamMember[]; include_owner: boolean }>> {
+    return this.request<{ team_members: AssignableTeamMember[]; include_owner: boolean }>(API_ENDPOINTS.LEADS.INTELLIGENCE_TEAM_MEMBERS);
+  }
+}
+
+// Team Member Types
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: 'manager' | 'agent' | 'viewer';
+  is_active: boolean;
+  password_set: boolean;
+  invite_pending: boolean;
+  last_login: string | null;
+  created_at: string;
+}
+
+interface TeamMemberStats {
+  total: number;
+  by_role: {
+    manager: number;
+    agent: number;
+    viewer: number;
+  };
+  active: number;
+  pending_invite: number;
+}
+
+interface RoleDescriptions {
+  manager: { label: string; description: string };
+  agent: { label: string; description: string };
+  viewer: { label: string; description: string };
+}
+
+interface LeadIntelligenceUpdate {
+  intent_level?: string;
+  urgency_level?: string;
+  budget_constraint?: string;
+  fit_alignment?: string;
+  engagement_health?: string;
+  lead_status_tag?: string;
+  contact_notes?: string;
+  assigned_to_team_member_id?: string | null;
+  edit_note?: string;
+}
+
+interface LeadIntelligenceEditResponse {
+  message: string;
+  lead_analytics_id: string;
+  updated_fields: string[];
+  edited_by: string;
+  updated_at: string;
+}
+
+interface LeadIntelligenceEvent {
+  id: string;
+  actor_name: string;
+  actor_type: 'owner' | 'team_member' | 'ai' | 'system';
+  event_type: 'edit' | 'assign' | 'note' | 'status_change';
+  field_changes: Record<string, { old: any; new: any }>;
+  notes?: string;
+  created_at: string;
+}
+
+interface AssignableTeamMember {
+  id: string;
+  name: string;
+  role: 'manager' | 'agent';
 }
 
 // Create and configure the API service instance

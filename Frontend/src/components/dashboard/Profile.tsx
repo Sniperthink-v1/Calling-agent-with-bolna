@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import SettingsCard from "./SettingsCard";
 import TimezoneSettingsCard from "@/components/settings/TimezoneSettingsCard";
 import { OpenAIPromptsConfig } from "./OpenAIPromptsConfig";
+import TeamManagementSection from "@/components/settings/TeamManagementSection";
 
 const Profile = () => {
   const { theme, toggleTheme } = useTheme();
@@ -247,6 +248,11 @@ const Profile = () => {
       {/* OpenAI Analysis Configuration */}
       <div className="max-w-4xl">
         <OpenAIPromptsConfig />
+      </div>
+
+      {/* Team Management - Only shown to account owners */}
+      <div className="max-w-4xl">
+        <TeamManagementSection />
       </div>
 
       {/* Subscription & Usage - Real Data */}

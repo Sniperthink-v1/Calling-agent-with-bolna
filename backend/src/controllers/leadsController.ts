@@ -368,13 +368,7 @@ export class LeadsController {
             engagement: 'No analysis available',
             cta_behavior: 'No analysis available'
           },
-          ctaInteractions: leadAnalytics?.cta_interactions || {
-            pricing_clicked: false,
-            demo_clicked: false,
-            followup_clicked: false,
-            sample_clicked: false,
-            escalated_to_human: false
-          },
+          customCta: leadAnalytics?.custom_cta || null,
         },
       };
 
@@ -687,8 +681,8 @@ export class LeadsController {
           }
         }
 
-        // Check for demo CTA in any call
-        if (call.lead_analytics?.cta_demo_clicked) {
+        // Check for demo CTA in custom_cta field (demo keyword)
+        if (call.lead_analytics?.custom_cta && call.lead_analytics.custom_cta.toLowerCase().includes('demo')) {
           leadGroup.demoScheduled = true;
         }
       });
@@ -1213,13 +1207,7 @@ export class LeadsController {
           engagement: 'No analysis available',
           cta_behavior: 'No analysis available'
         },
-        ctaInteractions: leadAnalytics?.cta_interactions || {
-          pricing_clicked: false,
-          demo_clicked: false,
-          followup_clicked: false,
-          sample_clicked: false,
-          escalated_to_human: false
-        },
+        customCta: leadAnalytics?.custom_cta || null,
         
         // Call-specific data
         callData: {

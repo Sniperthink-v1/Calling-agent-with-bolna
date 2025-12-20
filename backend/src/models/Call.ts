@@ -67,11 +67,10 @@ export class CallModel extends BaseModel<CallInterface> {
              la.engagement_score,
              la.engagement_health,
              la.reasoning,
-             la.cta_interactions,
              la.extracted_name,
              la.extracted_email,
              la.company_name,
-             la.cta_demo_clicked,
+             la.custom_cta,
              la.created_at as lead_analytics_created_at,
              la.updated_at as lead_analytics_updated_at
       FROM calls c
@@ -209,12 +208,11 @@ export class CallModel extends BaseModel<CallInterface> {
         fit_score: row.fit_score,
         engagement_score: row.engagement_score,
         reasoning: row.reasoning,
-        cta_interactions: row.cta_interactions,
         extracted_name: row.extracted_name,
         extracted_email: row.extracted_email,
         company_name: row.company_name,
+        custom_cta: row.custom_cta,
         call_summary_title: row.call_summary_title,
-        cta_demo_clicked: row.cta_demo_clicked,
         created_at: row.lead_analytics_created_at || row.created_at,
         updated_at: row.lead_analytics_updated_at || row.updated_at
       };

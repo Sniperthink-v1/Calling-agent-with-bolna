@@ -396,6 +396,120 @@ export const getLeadButtonActivity = async (req: Request, res: Response): Promis
 };
 
 /**
+ * List WhatsApp campaigns (read-only)
+ * GET /api/whatsapp/campaigns
+ */
+export const listCampaigns = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId || (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'Missing user context',
+      });
+    }
+
+    const { status, phone_number_id, limit, offset } = req.query;
+
+    const response = await whatsappService.listCampaigns({
+      userId,
+      status: status ? String(status) : undefined,
+      phoneNumberId: phone_number_id ? String(phone_number_id) : undefined,
+      limit: limit ? parseInt(String(limit), 10) : undefined,
+      offset: offset ? parseInt(String(offset), 10) : undefined,
+    });
+
+    return res.json(response);
+  } catch (error: any) {
+    logger.error('❌ List WhatsApp campaigns failed', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch campaigns',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Get WhatsApp campaign status + recipient breakdown (read-only)
+ * GET /api/whatsapp/campaign/:campaignId
+ * 
+ * Enriches recipient phone numbers with contact names from the contacts table
+ */
+export const getCampaignStatus = async (req: Request, res: Response) => {
+  try {
+    const { campaignId } = req.params;
+    const userId = req.userId || (req as any).userId;
+
+    const response = await whatsappService.getCampaignStatus(campaignId);
+
+    // Enrich recipients with contact names if we have recipients and a user context
+    if (response.success && response.data?.recipients && Array.isArray(response.data.recipients) && userId) {
+      const { pool } = await import('../config/database');
+      
+      // Extract all phone numbers from recipients
+      const phoneNumbers = response.data.recipients.map((r: any) => r.phone).filter(Boolean);
+      
+      if (phoneNumbers.length > 0) {
+        // Normalize phones in JS to both formats for efficient index-based lookup
+        // External API may return: +919876543210 (no space)
+        // Contacts table stores: +91 9876543210 (with space after country code)
+        const normalizedPhones = phoneNumbers.flatMap((p: string) => {
+          const noSpace = p.replace(/\s/g, '');
+          // Add space after country code: +91 -> +91 , +1 -> +1 , +44 -> +44 
+          const withSpace = noSpace.replace(/^(\+\d{1,3})(\d+)$/, '$1 $2');
+          return [noSpace, withSpace];
+        });
+        
+        // Simple ANY query that uses idx_contacts_user_id_phone index efficiently
+        const contactsResult = await pool.query(
+          `SELECT phone_number, name FROM contacts 
+           WHERE user_id = $1 AND phone_number = ANY($2::text[])`,
+          [userId, [...new Set(normalizedPhones)]]
+        );
+        
+        // Create a map of phone -> name (handling both formats)
+        const phoneToNameMap: Record<string, string> = {};
+        for (const row of contactsResult.rows) {
+          // Store with original format
+          phoneToNameMap[row.phone_number] = row.name;
+          // Also store normalized (no space) format for lookup
+          phoneToNameMap[row.phone_number.replace(/\s/g, '')] = row.name;
+        }
+        
+        // Enrich recipients with contact names
+        response.data.recipients = response.data.recipients.map((recipient: any) => {
+          const phone = recipient.phone || '';
+          const normalizedPhone = phone.replace(/\s/g, '');
+          const contactName = phoneToNameMap[phone] || phoneToNameMap[normalizedPhone] || null;
+          return {
+            ...recipient,
+            contact_name: contactName,
+          };
+        });
+      }
+    }
+
+    return res.json(response);
+  } catch (error: any) {
+    logger.error('❌ Get WhatsApp campaign status failed', {
+      campaignId: req.params.campaignId,
+      error: error.message,
+    });
+
+    const message = error instanceof Error ? error.message : 'Failed to fetch campaign status';
+    const statusCode = message.toLowerCase().includes('not found') ? 404 : 500;
+
+    return res.status(statusCode).json({
+      success: false,
+      error: statusCode === 404 ? 'Campaign not found' : 'Failed to fetch campaign status',
+      message,
+    });
+  }
+};
+
+/**
  * Upload media file to R2
  * POST /api/whatsapp/media/upload
  * 

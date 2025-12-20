@@ -31,6 +31,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Loader2,
+    Pencil,
 } from "lucide-react";
 import {
     Table,
@@ -55,9 +56,12 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLeads } from "@/hooks/useLeads";
-import type { Lead, LeadFilters, LeadListOptions } from "@/hooks/useLeads";
+import type { LeadFilters, LeadListOptions } from "@/hooks/useLeads";
+import type { Lead } from "@/types";
 import { TableErrorBoundary } from "@/components/ui/ErrorBoundaryWrapper";
 import { LeadsTableLoading } from "@/components/ui/LoadingStates";
+import { EditLeadModal, LeadIntelligenceData } from "@/components/leads/EditLeadModal";
+import { useAuth } from "@/contexts/AuthContext";
 import { NoLeadsData, NoSearchResults, LoadingFailed } from "@/components/ui/EmptyStateComponents";
 import ErrorHandler from "@/components/ui/ErrorHandler";
 
@@ -105,6 +109,7 @@ interface LeadsDataProps {
 
 const LeadsDataContent = ({ onNavigateToLogs, onOpenProfile }: LeadsDataProps) => {
     const { theme } = useTheme();
+    const { canEditLeads } = useAuth();
 
     // Use the leads hook for real API data
     const {
@@ -127,6 +132,10 @@ const LeadsDataContent = ({ onNavigateToLogs, onOpenProfile }: LeadsDataProps) =
     const [pageSize, setPageSize] = useState(20);
     const [sortBy, setSortBy] = useState<string>('interactionDate');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    
+    // Edit lead modal state
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
     // Enhanced filters
     const [filters, setFilters] = useState<Filters>({
@@ -643,19 +652,20 @@ const LeadsDataContent = ({ onNavigateToLogs, onOpenProfile }: LeadsDataProps) =
                                     <TableHead>Use Case</TableHead>
                                     <TableHead>Engagement</TableHead>
                                     <TableHead>Intent</TableHead>
+                                    <TableHead>Assigned To</TableHead>
                                     <TableHead>Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={10} className="text-center py-8">
+                                        <TableCell colSpan={11} className="text-center py-8">
                                             <LeadsTableLoading rows={5} />
                                         </TableCell>
                                     </TableRow>
                                 ) : leads.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={10} className="text-center py-8">
+                                        <TableCell colSpan={11} className="text-center py-8">
                                             {searchTerm ? (
                                                 <NoSearchResults
                                                     searchTerm={searchTerm}
@@ -748,7 +758,26 @@ const LeadsDataContent = ({ onNavigateToLogs, onOpenProfile }: LeadsDataProps) =
                                                 </div>
                                             </TableCell>
                                             <TableCell>
+                                                <div className={`text-sm ${theme === "dark" ? "text-slate-300" : "text-gray-900"}`}>
+                                                    {(lead as any).assignedTo?.name || 'Unassigned'}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
                                                 <div className="flex items-center gap-2">
+                                                    {canEditLeads() && lead.phone && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                setEditingLead(lead);
+                                                                setShowEditModal(true);
+                                                            }}
+                                                            className="h-8"
+                                                            title="Edit Lead Intelligence"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
@@ -943,6 +972,36 @@ const LeadsDataContent = ({ onNavigateToLogs, onOpenProfile }: LeadsDataProps) =
 
             {/* Modals would go here - Email, Follow-up, Demo, Add Lead, etc. */}
             {/* For brevity, I'm not including all the modal implementations */}
+            
+            {/* Edit Lead Intelligence Modal */}
+            {editingLead && (
+                <EditLeadModal
+                    open={showEditModal}
+                    onOpenChange={(open) => {
+                        setShowEditModal(open);
+                        if (!open) setEditingLead(null);
+                    }}
+                    phoneNumber={(editingLead as any).phoneNumber || ""}
+                    leadName={(editingLead as any).contactName || (editingLead as any).callerName || "Unknown"}
+                    currentData={{
+                        intent_level: (editingLead as any).intentLevel || "Medium",
+                        urgency_level: (editingLead as any).urgencyLevel || "Medium",
+                        budget_constraint: (editingLead as any).budgetConstraint || "Medium",
+                        fit_alignment: (editingLead as any).fitAlignment || "Medium",
+                        engagement_health: (editingLead as any).engagementLevel || "Medium",
+                        lead_status_tag: (editingLead as any).leadTag || (editingLead as any).recentLeadTag || "Cold",
+                        custom_cta: (editingLead as any).customCta || "",
+                        requirements: (editingLead as any).requirements || "",
+                        contact_notes: (editingLead as any).contactNotes || "",
+                        assigned_to: (editingLead as any).assignedTo || null,
+                    }}
+                    onSave={() => {
+                        refreshLeads();
+                        setShowEditModal(false);
+                        setEditingLead(null);
+                    }}
+                />
+            )}
         </div>
     );
 };

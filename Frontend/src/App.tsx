@@ -30,6 +30,7 @@ import { queryClient } from "./lib/queryClient";
 import OAuthCallback from "./pages/OAuthCallback";
 import EmailVerificationPage from "./pages/EmailVerificationPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import SetPasswordPage from "./pages/SetPasswordPage";
 import ClientPanelLayout from "./components/clientPanel/ClientPanelLayout";
 
 // Lazy load admin components to fix object-to-primitive conversion error
@@ -63,6 +64,7 @@ function App() {
                       <Route path="/" element={<Index />} />
                       <Route path="/verify-email" element={<EmailVerificationPage />} />
                       <Route path="/reset-password" element={<ResetPasswordPage />} />
+                      <Route path="/set-password" element={<SetPasswordPage />} />
                       <Route
                         path="/dashboard"
                         element={

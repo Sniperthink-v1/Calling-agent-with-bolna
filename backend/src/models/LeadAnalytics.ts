@@ -10,20 +10,12 @@ export interface LeadReasoning {
   cta_behavior: string;
 }
 
-export interface CTAInteractions {
-  pricing_clicked: boolean;
-  demo_clicked: boolean;
-  followup_clicked: boolean;
-  sample_clicked: boolean;
-  escalated_to_human: boolean;
-}
-
 export interface LeadAnalyticsInterface extends BaseModelInterface {
   id: string;
   call_id: string;
   user_id: string; // NEW: Multi-tenant support
   phone_number: string; // NEW: Direct phone number reference
-  analysis_type: 'individual' | 'complete'; // NEW: Distinguishes analysis type
+  analysis_type: 'individual' | 'complete' | 'human_edit'; // Distinguishes analysis type
   previous_calls_analyzed?: number; // NEW: For complete analysis
   latest_call_id?: string; // NEW: For complete analysis
   analysis_timestamp?: Date; // NEW: When analysis was performed
@@ -40,19 +32,13 @@ export interface LeadAnalyticsInterface extends BaseModelInterface {
   total_score: number;
   lead_status_tag: string;
   reasoning: LeadReasoning;
-  cta_interactions: CTAInteractions;
   // Enhanced extraction columns
   company_name?: string;
   extracted_name?: string;
   extracted_email?: string;
   requirements?: string;
   custom_cta?: string;
-  // Dedicated CTA boolean columns
-  cta_pricing_clicked?: boolean;
-  cta_demo_clicked?: boolean;
-  cta_followup_clicked?: boolean;
-  cta_sample_clicked?: boolean;
-  cta_escalated_to_human?: boolean;
+  in_detail_summary?: string;
   // New enhanced analytics fields
   smart_notification?: string;
   demo_book_datetime?: string;
@@ -63,7 +49,7 @@ export interface CreateLeadAnalyticsData {
   call_id: string;
   user_id: string; // Required for multi-tenant support
   phone_number: string; // Required
-  analysis_type: 'individual' | 'complete'; // Required
+  analysis_type: 'individual' | 'complete' | 'human_edit'; // Required
   previous_calls_analyzed?: number; // Optional, for complete analysis
   latest_call_id?: string; // Optional, for complete analysis
   analysis_timestamp?: Date; // Optional, defaults to NOW()
@@ -80,19 +66,13 @@ export interface CreateLeadAnalyticsData {
   total_score: number;
   lead_status_tag: string;
   reasoning: LeadReasoning;
-  cta_interactions: CTAInteractions;
   // Enhanced extraction columns
   company_name?: string;
   extracted_name?: string;
   extracted_email?: string;
   requirements?: string;
   custom_cta?: string;
-  // Dedicated CTA boolean columns
-  cta_pricing_clicked?: boolean;
-  cta_demo_clicked?: boolean;
-  cta_followup_clicked?: boolean;
-  cta_sample_clicked?: boolean;
-  cta_escalated_to_human?: boolean;
+  in_detail_summary?: string;
   // New enhanced analytics fields
   smart_notification?: string;
   demo_book_datetime?: string;
@@ -153,10 +133,8 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         fit_alignment, fit_score,
         engagement_health, engagement_score,
         total_score, lead_status_tag,
-        reasoning, cta_interactions,
-        company_name, extracted_name, extracted_email, requirements, custom_cta,
-        cta_pricing_clicked, cta_demo_clicked, cta_followup_clicked,
-        cta_sample_clicked, cta_escalated_to_human,
+        reasoning,
+        company_name, extracted_name, extracted_email, requirements, custom_cta, in_detail_summary,
         smart_notification, demo_book_datetime
       )
       VALUES (
@@ -168,11 +146,9 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         $13, $14,
         $15, $16,
         $17, $18,
-        $19, $20,
-        $21, $22, $23, $24, $25,
-        $26, $27, $28,
-        $29, $30,
-        $31, $32
+        $19,
+        $20, $21, $22, $23, $24, $25,
+        $26, $27
       )
       ON CONFLICT (user_id, phone_number, analysis_type) WHERE (analysis_type = 'complete')
       DO UPDATE SET
@@ -192,17 +168,12 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         total_score = EXCLUDED.total_score,
         lead_status_tag = EXCLUDED.lead_status_tag,
         reasoning = EXCLUDED.reasoning,
-        cta_interactions = EXCLUDED.cta_interactions,
         company_name = EXCLUDED.company_name,
         extracted_name = EXCLUDED.extracted_name,
         extracted_email = EXCLUDED.extracted_email,
         requirements = EXCLUDED.requirements,
         custom_cta = EXCLUDED.custom_cta,
-        cta_pricing_clicked = EXCLUDED.cta_pricing_clicked,
-        cta_demo_clicked = EXCLUDED.cta_demo_clicked,
-        cta_followup_clicked = EXCLUDED.cta_followup_clicked,
-        cta_sample_clicked = EXCLUDED.cta_sample_clicked,
-        cta_escalated_to_human = EXCLUDED.cta_escalated_to_human,
+        in_detail_summary = EXCLUDED.in_detail_summary,
         smart_notification = EXCLUDED.smart_notification,
         demo_book_datetime = EXCLUDED.demo_book_datetime,
         analysis_timestamp = CURRENT_TIMESTAMP
@@ -229,17 +200,12 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
       analyticsData.total_score,
       analyticsData.lead_status_tag,
       JSON.stringify(analyticsData.reasoning),
-      JSON.stringify(analyticsData.cta_interactions),
       analyticsData.company_name ?? null,
       analyticsData.extracted_name ?? null,
       analyticsData.extracted_email ?? null,
       analyticsData.requirements ?? null,
       analyticsData.custom_cta ?? null,
-      analyticsData.cta_pricing_clicked ?? false,
-      analyticsData.cta_demo_clicked ?? false,
-      analyticsData.cta_followup_clicked ?? false,
-      analyticsData.cta_sample_clicked ?? false,
-      analyticsData.cta_escalated_to_human ?? false,
+      analyticsData.in_detail_summary ?? null,
       analyticsData.smart_notification ?? null,
       analyticsData.demo_book_datetime ?? null,
     ];

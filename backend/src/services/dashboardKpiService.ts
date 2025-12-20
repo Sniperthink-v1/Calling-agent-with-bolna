@@ -481,20 +481,16 @@ export class DashboardKpiService {
   }
 
   /**
-   * Get enhanced lead metrics including CTA data and company information
-   * Requirements: US-2.1 - Enhanced CTA metrics and company data
+   * Get enhanced lead metrics including company information
+   * Note: CTA boolean columns have been removed, using custom_cta text field instead
    */
   private static async getEnhancedLeadMetrics(userId: string): Promise<any> {
     try {
       const userTimezone = await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
-          COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
-          COUNT(CASE WHEN la.cta_demo_clicked = true THEN 1 END) as demo_requests,
-          COUNT(CASE WHEN la.cta_followup_clicked = true THEN 1 END) as followup_requests,
-          COUNT(CASE WHEN la.cta_sample_clicked = true THEN 1 END) as sample_requests,
-          COUNT(CASE WHEN la.cta_escalated_to_human = true THEN 1 END) as human_escalations,
-          COUNT(CASE WHEN la.company_name IS NOT NULL AND la.company_name != '' THEN 1 END) as leads_with_company
+          COUNT(CASE WHEN la.company_name IS NOT NULL AND la.company_name != '' THEN 1 END) as leads_with_company,
+          COUNT(CASE WHEN la.custom_cta IS NOT NULL AND la.custom_cta != '' THEN 1 END) as leads_with_cta
         FROM lead_analytics la
         JOIN calls c ON la.call_id = c.id
         WHERE c.user_id = $1 
@@ -505,12 +501,13 @@ export class DashboardKpiService {
       const row = result.rows[0] || {};
 
       return {
-        pricingClicks: parseInt(String(row.pricing_clicks)) || 0,
-        demoRequests: parseInt(String(row.demo_requests)) || 0,
-        followupRequests: parseInt(String(row.followup_requests)) || 0,
-        sampleRequests: parseInt(String(row.sample_requests)) || 0,
-        humanEscalations: parseInt(String(row.human_escalations)) || 0,
-        leadsWithCompany: parseInt(String(row.leads_with_company)) || 0
+        pricingClicks: 0,
+        demoRequests: 0,
+        followupRequests: 0,
+        sampleRequests: 0,
+        humanEscalations: 0,
+        leadsWithCompany: parseInt(String(row.leads_with_company)) || 0,
+        leadsWithCta: parseInt(String(row.leads_with_cta)) || 0
       };
     } catch (error) {
       logger.error('Error getting enhanced lead metrics:', error);

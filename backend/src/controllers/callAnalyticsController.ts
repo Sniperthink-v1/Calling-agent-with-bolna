@@ -41,7 +41,6 @@ export class CallAnalyticsController {
           END as call_drop_off_rate,
           -- Not Connected: sum of not_connected column from contacts table (Twilio unanswered calls)
           COALESCE(SUM(DISTINCT ct.not_connected), 0) as not_connected_calls,
-          COUNT(DISTINCT c.id) FILTER (WHERE la.cta_interactions->>'demo_clicked' = 'true') as demos_scheduled,
           -- Hot leads: based on lead_status_tag indicating Hot
           COUNT(DISTINCT c.id) FILTER (WHERE COALESCE(la.lead_status_tag,'') ILIKE 'hot%') as hot_leads_generated,
           -- Pending follow-ups: flexible match for tag variants like 'Follow-Up Later'
@@ -80,6 +79,18 @@ export class CallAnalyticsController {
       const result = await database.query(kpiQuery, queryParams);
       const stats = result.rows[0];
 
+      // Query calendar_meetings for demo count
+      const demosQuery = `
+        SELECT COUNT(*) as demos_scheduled
+        FROM calendar_meetings cm
+        WHERE cm.user_id = $1
+          AND cm.meeting_start_time >= $2
+          AND cm.meeting_start_time <= $3
+          AND cm.status != 'cancelled'
+      `;
+      const demosResult = await database.query(demosQuery, [userId, fromDate, toDate]);
+      const demosStats = demosResult.rows[0];
+
       // Get previous period for comparison
       const prevFromDate = new Date(fromDate.getTime() - (toDate.getTime() - fromDate.getTime()));
       const prevToDate = fromDate;
@@ -95,6 +106,10 @@ export class CallAnalyticsController {
       const prevResult = await database.query(prevKpiQuery, prevQueryParams);
       const prevStats = prevResult.rows[0];
 
+      // Previous period demos from calendar_meetings
+      const prevDemosResult = await database.query(demosQuery, [userId, prevFromDate, prevToDate]);
+      const prevDemosStats = prevDemosResult.rows[0];
+
       // Calculate changes
       const calculateChange = (current: number, previous: number) => {
         if (previous === 0) return current > 0 ? 100 : 0;
@@ -109,7 +124,7 @@ export class CallAnalyticsController {
       const callDropOffCount = parseInt(stats.call_drop_off_count) || 0;
       const callDropOffRate = Math.round((parseFloat(stats.call_drop_off_rate) || 0) * 10) / 10;
       const notConnectedCalls = parseInt(stats.not_connected_calls) || 0;
-      const demosScheduled = parseInt(stats.demos_scheduled) || 0;
+      const demosScheduled = parseInt(demosStats.demos_scheduled) || 0;
       const hotLeadsGenerated = parseInt(stats.hot_leads_generated) || 0;
       const pendingFollowups = parseInt(stats.pending_followups) || 0;
 
@@ -120,7 +135,7 @@ export class CallAnalyticsController {
       const prevAvgCallDuration = parseFloat(prevStats.avg_call_duration) || 0;
       const prevCallDropOffCount = parseInt(prevStats.call_drop_off_count) || 0;
       const prevNotConnectedCalls = parseInt(prevStats.not_connected_calls) || 0;
-      const prevDemosScheduled = parseInt(prevStats.demos_scheduled) || 0;
+      const prevDemosScheduled = parseInt(prevDemosStats.demos_scheduled) || 0;
       const prevHotLeadsGenerated = parseInt(prevStats.hot_leads_generated) || 0;
 
       const kpiData = [
@@ -319,13 +334,20 @@ export class CallAnalyticsController {
       let contactsQuery = `SELECT COUNT(DISTINCT id) as total_contacts FROM contacts WHERE user_id = $1`;
       const contactsParams = [userId];
       
+      // Query meetings table for demo bookings count
+      let meetingsQuery = `
+        SELECT COUNT(DISTINCT cm.contact_id) as unique_demo_booked
+        FROM calendar_meetings cm
+        WHERE cm.user_id = $1
+          AND cm.meeting_start_time >= $2
+          AND cm.meeting_start_time <= $3
+          AND cm.status != 'cancelled'`;
+      
       let query = `
         SELECT 
           COUNT(DISTINCT c.phone_number) as total_unique_calls,
-          COUNT(DISTINCT c.phone_number) FILTER (WHERE la.cta_demo_clicked = true) as unique_demo_booked,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont.is_customer = true) as customers
         FROM calls c
-        LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id AND la.analysis_type = 'individual'
         LEFT JOIN contacts cont ON cont.phone_number = c.phone_number AND cont.user_id = c.user_id
         WHERE c.user_id = $1 
           AND c.created_at >= $2 
@@ -338,14 +360,17 @@ export class CallAnalyticsController {
         queryParams.push(agent.id);
       }
 
-      // Execute both queries
-      const [contactsResult, callsResult] = await Promise.all([
+      // Execute all queries
+      const meetingsParams = [userId, fromDate, toDate];
+      const [contactsResult, callsResult, meetingsResult] = await Promise.all([
         database.query(contactsQuery, contactsParams),
-        database.query(query, queryParams)
+        database.query(query, queryParams),
+        database.query(meetingsQuery, meetingsParams)
       ]);
       
       const contactsStats = contactsResult.rows[0];
       const callsStats = callsResult.rows[0];
+      const meetingsStats = meetingsResult.rows[0];
 
       const colors = ["#1A6262", "#91C499", "#E1A940", "#FF6700"];
 
@@ -362,7 +387,7 @@ export class CallAnalyticsController {
         },
         {
           name: "Unique Demo Booked",
-          value: parseInt(callsStats.unique_demo_booked) || 0,
+          value: parseInt(meetingsStats.unique_demo_booked) || 0,
           fill: colors[2],
         },
         {
@@ -583,7 +608,8 @@ export class CallAnalyticsController {
           SUM(credits_used) as total_credits_used,
           COUNT(CASE WHEN la.total_score >= 60 THEN 1 END) as leads_generated,
           COUNT(CASE WHEN la.total_score >= 80 THEN 1 END) as hot_leads,
-          COUNT(CASE WHEN la.cta_interactions->>'demo_clicked' = 'true' THEN 1 END) as demos_scheduled,
+          -- Demo count from calendar_meetings (joined by contact)
+          COUNT(DISTINCT cm.id) as demos_scheduled,
           CASE 
             WHEN COUNT(*) > 0 
             THEN ROUND((COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / COUNT(*)), 1)
@@ -601,6 +627,7 @@ export class CallAnalyticsController {
           END as cost_per_lead
         FROM calls c
         LEFT JOIN lead_analytics la ON c.id = la.call_id AND la.user_id = c.user_id AND la.analysis_type = 'individual'
+        LEFT JOIN calendar_meetings cm ON c.contact_id = cm.contact_id AND cm.status != 'cancelled'
         WHERE c.user_id = $1 
           AND c.created_at >= $2 
           AND c.created_at <= $3`;

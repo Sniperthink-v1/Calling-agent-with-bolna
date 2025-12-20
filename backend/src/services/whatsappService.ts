@@ -285,6 +285,53 @@ class WhatsAppServiceClient {
       throw this.handleError(error);
     }
   }
+
+  /**
+   * List WhatsApp campaigns (read-only)
+   * Proxies: GET /api/v1/campaigns
+   */
+  async listCampaigns(options: {
+    userId: string;
+    phoneNumberId?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    try {
+      const params = new URLSearchParams();
+      params.append('user_id', options.userId);
+      if (options.phoneNumberId) params.append('phone_number_id', options.phoneNumberId);
+      if (options.status) params.append('status', options.status);
+      if (typeof options.limit === 'number') params.append('limit', options.limit.toString());
+      if (typeof options.offset === 'number') params.append('offset', options.offset.toString());
+
+      const response = await this.client.get(`/api/v1/campaigns?${params.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      logger.error('❌ Failed to list WhatsApp campaigns', {
+        userId: options.userId,
+        error: error.message,
+      });
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Get WhatsApp campaign status + recipient breakdown (read-only)
+   * Proxies: GET /api/v1/campaign/:campaignId
+   */
+  async getCampaignStatus(campaignId: string): Promise<any> {
+    try {
+      const response = await this.client.get(`/api/v1/campaign/${encodeURIComponent(campaignId)}`);
+      return response.data;
+    } catch (error: any) {
+      logger.error('❌ Failed to get WhatsApp campaign status', {
+        campaignId,
+        error: error.message,
+      });
+      throw this.handleError(error);
+    }
+  }
   
   /**
    * Handle Axios errors and convert to consistent format

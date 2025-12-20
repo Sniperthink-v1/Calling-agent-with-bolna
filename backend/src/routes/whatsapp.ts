@@ -10,6 +10,8 @@ import {
   listButtonClicks,
   getLeadButtonActivity,
   uploadMedia,
+  listCampaigns,
+  getCampaignStatus,
 } from '../controllers/whatsappController';
 
 const router = Router();
@@ -44,5 +46,9 @@ router.post('/templates/sync', syncTemplates);
 router.get('/templates/:templateId/button-clicks', getButtonClicks);
 router.get('/button-clicks', listButtonClicks);
 router.get('/leads/:customerPhone/button-activity', getLeadButtonActivity);
+
+// Campaign read APIs (proxied to WhatsApp microservice)
+router.get('/campaigns', listCampaigns);
+router.get('/campaign/:campaignId', getCampaignStatus);
 
 export default router;

@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import { authService } from '../services/authService';
+import teamMemberService from '../services/teamMemberService';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { body, validationResult } from 'express-validator';
 import { configService } from '../services/configService';
 import { getDetectedTimezone, wasTimezoneAutoDetected } from '../middleware/timezoneDetection';
 import { validateUrl } from '../middleware/validation';
+import TeamMemberModel from '../models/TeamMember';
 
 // Authentication controller - handles user registration, login, and session management
 export class AuthController {
@@ -94,6 +96,7 @@ export class AuthController {
 
   /**
    * Login user
+   * Supports both owner/user login and team member login with same endpoint
    */
   static async login(req: Request, res: Response): Promise<void> {
     try {
@@ -114,7 +117,46 @@ export class AuthController {
       const { email, password } = req.body;
       const ipAddress = req.ip || req.socket.remoteAddress;
 
-      // Login user
+      // First check if this email belongs to a team member
+      const teamMember = await TeamMemberModel.findByEmail(email);
+      
+      if (teamMember) {
+        // This is a team member login
+        const teamResult = await teamMemberService.authenticate(email, password);
+        
+        if (!teamResult.success) {
+          res.status(401).json({
+            error: {
+              code: 'LOGIN_FAILED',
+              message: teamResult.error || 'Invalid email or password',
+              timestamp: new Date(),
+            },
+          });
+          return;
+        }
+
+        res.json({
+          message: 'Login successful',
+          user: {
+            id: teamResult.team_member!.id,
+            email: teamResult.team_member!.email,
+            name: teamResult.team_member!.name,
+            role: teamResult.team_member!.role,
+            emailVerified: true, // Team members are verified when they set password
+            isActive: true,
+            credits: 0, // Team members don't have credits
+            isTeamMember: true,
+            teamMemberRole: teamResult.team_member!.role,
+          },
+          tenant: teamResult.tenant_info,
+          token: teamResult.token,
+          refreshToken: teamResult.refreshToken,
+          timestamp: new Date(),
+        });
+        return;
+      }
+
+      // Regular user/owner login
       const result = await authService.login(email, password, ipAddress);
 
       if (!result) {
@@ -138,6 +180,7 @@ export class AuthController {
           emailVerified: result.user.emailVerified,
           isActive: result.user.isActive,
           role: result.user.role,
+          isTeamMember: false,
         },
         token: result.token,
         refreshToken: result.refreshToken,
@@ -183,6 +226,7 @@ export class AuthController {
 
   /**
    * Validate token and return user information
+   * Supports both owner/user tokens and team member tokens
    */
   static async validateToken(req: Request, res: Response): Promise<void> {
     try {
@@ -199,7 +243,32 @@ export class AuthController {
         return;
       }
 
-      // Validate session
+      // First try to validate as team member session
+      const teamMemberSession = await authService.validateTeamMemberSession(token);
+      
+      if (teamMemberSession) {
+        // Return team member info
+        res.json({
+          user: {
+            id: teamMemberSession.userId, // Tenant's user ID for data access
+            email: teamMemberSession.email,
+            name: teamMemberSession.name || '',
+            credits: 0, // Team members don't have credits
+            emailVerified: true, // Team members are verified when they set password
+            isActive: true,
+            role: 'user', // Base role for API compatibility
+            createdAt: new Date(),
+            // Team member specific fields
+            isTeamMember: true,
+            teamMemberId: teamMemberSession.teamMemberId,
+            teamMemberRole: teamMemberSession.role,
+          },
+          timestamp: new Date(),
+        });
+        return;
+      }
+
+      // Try to validate as regular user session
       const user = await authService.validateSession(token);
 
       if (!user) {

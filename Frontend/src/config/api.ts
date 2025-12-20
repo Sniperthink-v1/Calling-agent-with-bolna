@@ -133,6 +133,22 @@ export const API_ENDPOINTS = {
     PROFILE: (id: string) => `${API_URL}/leads/${id}/profile`,
     INTELLIGENCE: `${API_URL}/lead-intelligence`,
     INTELLIGENCE_TIMELINE: (groupId: string) => `${API_URL}/lead-intelligence/${groupId}/timeline`,
+    INTELLIGENCE_EDIT: (groupId: string) => `${API_URL}/lead-intelligence/${encodeURIComponent(groupId)}`,
+    INTELLIGENCE_EVENTS: (groupId: string) => `${API_URL}/lead-intelligence/${encodeURIComponent(groupId)}/events`,
+    INTELLIGENCE_TEAM_MEMBERS: `${API_URL}/lead-intelligence/team-members`,
+  },
+
+  // Team Members
+  TEAM_MEMBERS: {
+    LIST: `${API_URL}/team-members`,
+    STATS: `${API_URL}/team-members/stats`,
+    ROLES: `${API_URL}/team-members/roles`,
+    INVITE: `${API_URL}/team-members/invite`,
+    UPDATE: (id: string) => `${API_URL}/team-members/${id}`,
+    DELETE: (id: string) => `${API_URL}/team-members/${id}`,
+    RESEND_INVITE: (id: string) => `${API_URL}/team-members/${id}/resend-invite`,
+    SET_PASSWORD: `${API_URL}/team-members/set-password`,
+    VALIDATE_TOKEN: (token: string) => `${API_URL}/team-members/validate-token/${token}`,
   },
 
   // Follow-ups

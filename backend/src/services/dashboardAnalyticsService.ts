@@ -629,8 +629,8 @@ export class DashboardAnalyticsService {
   }
 
   /**
-   * Get enhanced CTA metrics using dedicated boolean columns
-   * Requirements: US-2.1 - Enhanced CTA metrics from new columns
+   * Get enhanced CTA metrics
+   * Note: CTA boolean columns have been removed, using custom_cta text field instead
    * Using timezone-aware date filtering for consistent IST results
    */
   static async getEnhancedCTAMetrics(userId: string, userTimezone?: string): Promise<any> {
@@ -638,13 +638,9 @@ export class DashboardAnalyticsService {
       const tz = userTimezone || await getUserTimezoneForQuery(userId);
       const query = `
         SELECT 
-          COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
-          COUNT(CASE WHEN la.cta_demo_clicked = true THEN 1 END) as demo_requests,
-          COUNT(CASE WHEN la.cta_followup_clicked = true THEN 1 END) as followup_requests,
-          COUNT(CASE WHEN la.cta_sample_clicked = true THEN 1 END) as sample_requests,
-          COUNT(CASE WHEN la.cta_escalated_to_human = true THEN 1 END) as human_escalations,
           COUNT(*) as total_leads,
-          COUNT(CASE WHEN la.company_name IS NOT NULL AND la.company_name != '' THEN 1 END) as leads_with_company
+          COUNT(CASE WHEN la.company_name IS NOT NULL AND la.company_name != '' THEN 1 END) as leads_with_company,
+          COUNT(CASE WHEN la.custom_cta IS NOT NULL AND la.custom_cta != '' THEN 1 END) as leads_with_cta
         FROM lead_analytics la
         JOIN calls c ON la.call_id = c.id
         WHERE c.user_id = $1 
@@ -655,13 +651,14 @@ export class DashboardAnalyticsService {
       const row = result.rows[0] || {};
 
       return {
-        pricingClicks: parseInt(String(row.pricing_clicks)) || 0,
-        demoRequests: parseInt(String(row.demo_requests)) || 0,
-        followupRequests: parseInt(String(row.followup_requests)) || 0,
-        sampleRequests: parseInt(String(row.sample_requests)) || 0,
-        humanEscalations: parseInt(String(row.human_escalations)) || 0,
+        pricingClicks: 0,
+        demoRequests: 0,
+        followupRequests: 0,
+        sampleRequests: 0,
+        humanEscalations: 0,
         totalLeads: parseInt(String(row.total_leads)) || 0,
-        leadsWithCompany: parseInt(String(row.leads_with_company)) || 0
+        leadsWithCompany: parseInt(String(row.leads_with_company)) || 0,
+        leadsWithCta: parseInt(String(row.leads_with_cta)) || 0
       };
     } catch (error) {
       logger.error('Error in getEnhancedCTAMetrics:', error);
@@ -689,8 +686,7 @@ export class DashboardAnalyticsService {
         SELECT 
           la.company_name,
           COUNT(*) as lead_count,
-          AVG(la.total_score) as avg_score,
-          COUNT(CASE WHEN la.cta_demo_clicked = true THEN 1 END) as demo_requests
+          AVG(la.total_score) as avg_score
         FROM lead_analytics la
         JOIN calls c ON la.call_id = c.id
         WHERE c.user_id = $1 
@@ -707,8 +703,7 @@ export class DashboardAnalyticsService {
       return result.rows.map((row: any) => ({
         companyName: row.company_name,
         leadCount: parseInt(String(row.lead_count)) || 0,
-        avgScore: Math.round(parseFloat(String(row.avg_score)) || 0),
-        demoRequests: parseInt(String(row.demo_requests)) || 0
+        avgScore: Math.round(parseFloat(String(row.avg_score)) || 0)
       }));
     } catch (error) {
       logger.error('Error in getCompanyLeadBreakdown:', error);

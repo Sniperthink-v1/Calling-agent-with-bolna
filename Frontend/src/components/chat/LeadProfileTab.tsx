@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, X, Loader2 } from "lucide-react";
+import { ChevronLeft, X, Loader2, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { TimelineCard } from "./TimelineCard";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { LeadProfileLoading } from "@/components/ui/LoadingStates";
 import { EmptyLeadProfile, EmptyInteractionHistory, LoadingFailed } from "@/components/ui/EmptyStateComponents";
 import { ContactDisplay } from "@/components/contacts/ContactDisplay";
 import ErrorHandler from "@/components/ui/ErrorHandler";
+import { EditLeadModal, LeadIntelligenceData } from "@/components/leads/EditLeadModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Styled badge helper - fixed to handle undefined values
 const getColor = (
@@ -66,6 +68,10 @@ const LeadProfileTabContent = ({ lead, onBack }: LeadProfileTabProps) => {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [showTranscriptEntry, setShowTranscriptEntry] =
     useState<TimelineEntry | null>(null);
+  
+  // State for Edit Lead Intelligence modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const { canEditLeads } = useAuth();
 
   // Use the lead profile hook to fetch real data
   const { leadProfile, timeline, loading, error, refetch } = useLeadProfile(
@@ -389,27 +395,43 @@ const LeadProfileTabContent = ({ lead, onBack }: LeadProfileTabProps) => {
         </div>
         <div className="col-span-1 md:col-span-2">
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+            {/* Header with Edit button */}
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-white">Lead Intelligence</h3>
+              {canEditLeads() && displayLead.phone && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowEditModal(true)}
+                  className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              )}
+            </div>
+            
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <div className="font-medium text-gray-300">
-                  Engagement Level
+                  Intent Level
                 </div>
-                <Badge
-                  className={
-                    getColor(displayLead.engagementLevel, "level") + " px-3 py-1 mt-1"
-                  }
-                >
-                  {displayLead.engagementLevel || "Unknown"}
-                </Badge>
-              </div>
-              <div>
-                <div className="font-medium text-gray-300">Intent Level</div>
                 <Badge
                   className={
                     getColor(displayLead.intentLevel, "level") + " px-3 py-1 mt-1"
                   }
                 >
                   {displayLead.intentLevel || "Unknown"}
+                </Badge>
+              </div>
+              <div>
+                <div className="font-medium text-gray-300">Urgency Level</div>
+                <Badge
+                  className={
+                    getColor(displayLead.timelineUrgency, "level") + " px-3 py-1 mt-1"
+                  }
+                >
+                  {displayLead.timelineUrgency || "Unknown"}
                 </Badge>
               </div>
               <div>
@@ -426,14 +448,34 @@ const LeadProfileTabContent = ({ lead, onBack }: LeadProfileTabProps) => {
               </div>
               <div>
                 <div className="font-medium text-gray-300">
-                  Timeline Urgency
+                  Fit Alignment
                 </div>
                 <Badge
                   className={
-                    getColor(displayLead.timelineUrgency, "level") + " px-3 py-1 mt-1"
+                    getColor(displayLead.engagementLevel, "level") + " px-3 py-1 mt-1"
                   }
                 >
-                  {displayLead.timelineUrgency || "Unknown"}
+                  {displayLead.engagementLevel || "Unknown"}
+                </Badge>
+              </div>
+              <div>
+                <div className="font-medium text-gray-300">
+                  Engagement
+                </div>
+                <Badge
+                  className={
+                    getColor(displayLead.engagementLevel, "level") + " px-3 py-1 mt-1"
+                  }
+                >
+                  {displayLead.engagementLevel || "Unknown"}
+                </Badge>
+              </div>
+              <div>
+                <div className="font-medium text-gray-300">
+                  Assigned To
+                </div>
+                <Badge className="bg-gray-700 text-white px-3 py-1 mt-1">
+                  {(displayLead as any).assignedTo?.name || "Unassigned"}
                 </Badge>
               </div>
             </div>
@@ -454,6 +496,41 @@ const LeadProfileTabContent = ({ lead, onBack }: LeadProfileTabProps) => {
               </div>
             </div>
           </div>
+          
+          {/* Edit Lead Modal */}
+          <EditLeadModal
+            open={showEditModal}
+            onOpenChange={setShowEditModal}
+            phoneNumber={displayLead.phone || ""}
+            leadName={displayLead.name}
+            currentData={{
+              intent_level: displayLead.intentLevel || "Medium",
+              urgency_level: displayLead.timelineUrgency || "Medium",
+              budget_constraint: displayLead.budgetConstraint || "Medium",
+              fit_alignment: displayLead.engagementLevel || "Medium",
+              engagement_health: displayLead.engagementLevel || "Medium",
+              lead_status_tag: (displayLead as any).leadTag || "Cold",
+              custom_cta: (displayLead as any).customCta || "",
+              requirements: (displayLead as any).requirements || "",
+              contact_notes: (displayLead as any).contactNotes || "",
+              assigned_to: (displayLead as any).assignedTo || null,
+            }}
+            onSave={(data) => {
+              // Update local state with new values
+              if (transformedLead) {
+                setTransformedLead({
+                  ...transformedLead,
+                  intentLevel: data.intent_level,
+                  timelineUrgency: data.urgency_level,
+                  budgetConstraint: data.budget_constraint,
+                  engagementLevel: data.engagement_health,
+                });
+              }
+              // Refresh data from server
+              refetch();
+            }}
+          />
+          
           {/* Lead Reasoning Section */}
           <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
             <div className="font-semibold text-white mb-4">Lead Analysis Reasoning</div>

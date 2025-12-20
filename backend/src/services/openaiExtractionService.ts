@@ -51,12 +51,6 @@ export interface IndividualAnalysis {
   fit_score: number;
   engagement_health: string;
   engagement_score: number;
-  cta_pricing_clicked: string;
-  cta_demo_clicked: string;
-  cta_followup_clicked: string;
-  cta_sample_clicked: string;
-  cta_website_clicked?: string;
-  cta_escalated_to_human: string;
   total_score: number;
   lead_status_tag: string;
   demo_book_datetime: string | null;
@@ -75,6 +69,7 @@ export interface IndividualAnalysis {
     smartnotification: string | null;
     requirements: string | null;
     custom_cta: string | null;
+    in_detail_summary: string | null;
   };
 }
 

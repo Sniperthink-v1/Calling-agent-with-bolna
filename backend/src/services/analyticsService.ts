@@ -60,6 +60,7 @@ export interface DashboardMetrics {
     followup_requests: number;
     sample_requests: number;
     human_escalations: number;
+    leads_with_cta: number;
   };
 }
 
@@ -147,22 +148,12 @@ export class AnalyticsService {
         total_score: parsedAnalytics.total_score || 0,
         lead_status_tag: parsedAnalytics.lead_status_tag || 'Cold',
         reasoning: parsedAnalytics.reasoning || {},
-        cta_interactions: {
-          pricing_clicked: parsedAnalytics.cta_pricing_clicked === 'Yes',
-          demo_clicked: parsedAnalytics.cta_demo_clicked === 'Yes',
-          followup_clicked: parsedAnalytics.cta_followup_clicked === 'Yes',
-          sample_clicked: parsedAnalytics.cta_sample_clicked === 'Yes',
-          escalated_to_human: parsedAnalytics.cta_escalated_to_human === 'Yes'
-        },
         // Enhanced data fields
         company_name: parsedAnalytics.extraction?.company_name || null,
         extracted_name: parsedAnalytics.extraction?.name || null,
         extracted_email: parsedAnalytics.extraction?.email_address || null,
-        cta_pricing_clicked: parsedAnalytics.cta_pricing_clicked === 'Yes',
-        cta_demo_clicked: parsedAnalytics.cta_demo_clicked === 'Yes',
-        cta_followup_clicked: parsedAnalytics.cta_followup_clicked === 'Yes',
-        cta_sample_clicked: parsedAnalytics.cta_sample_clicked === 'Yes',
-        cta_escalated_to_human: parsedAnalytics.cta_escalated_to_human === 'Yes',
+        custom_cta: parsedAnalytics.extraction?.custom_cta || null,
+        in_detail_summary: parsedAnalytics.extraction?.in_detail_summary || null,
         smart_notification: parsedAnalytics.extraction?.smartnotification || null,
         demo_book_datetime: parsedAnalytics.demo_book_datetime || null
       });
@@ -195,13 +186,9 @@ export class AnalyticsService {
           company_name = COALESCE($2, company_name),
           extracted_name = COALESCE($3, extracted_name),
           extracted_email = COALESCE($4, extracted_email),
-          cta_pricing_clicked = COALESCE($5, cta_pricing_clicked),
-          cta_demo_clicked = COALESCE($6, cta_demo_clicked),
-          cta_followup_clicked = COALESCE($7, cta_followup_clicked),
-          cta_sample_clicked = COALESCE($8, cta_sample_clicked),
-          cta_escalated_to_human = COALESCE($9, cta_escalated_to_human),
-          smart_notification = COALESCE($10, smart_notification),
-          demo_book_datetime = COALESCE($11, demo_book_datetime),
+          custom_cta = COALESCE($5, custom_cta),
+          smart_notification = COALESCE($6, smart_notification),
+          demo_book_datetime = COALESCE($7, demo_book_datetime),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
       `;
@@ -211,11 +198,7 @@ export class AnalyticsService {
         parsedAnalytics.extraction?.company_name || null,
         parsedAnalytics.extraction?.name || null,
         parsedAnalytics.extraction?.email_address || null,
-        parsedAnalytics.cta_pricing_clicked === 'Yes',
-        parsedAnalytics.cta_demo_clicked === 'Yes',
-        parsedAnalytics.cta_followup_clicked === 'Yes',
-        parsedAnalytics.cta_sample_clicked === 'Yes',
-        parsedAnalytics.cta_escalated_to_human === 'Yes',
+        parsedAnalytics.custom_cta || null,
         parsedAnalytics.extraction?.smartnotification || null,
         parsedAnalytics.demo_book_datetime || null
       ];
@@ -278,7 +261,6 @@ export class AnalyticsService {
         total_score: analyticsData.total_score,
         lead_status_tag: analyticsData.lead_status_tag,
         reasoning: analyticsData.reasoning,
-        cta_interactions: analyticsData.cta_interactions,
       });
 
       logger.info(`Successfully processed lead analytics for call ${callId}`, {
@@ -313,27 +295,22 @@ export class AnalyticsService {
         scores: {
           intent: {
             level: analytics.intent_level,
-            score: analytics.intent_score,
             reasoning: analytics.reasoning.intent
           },
           urgency: {
             level: analytics.urgency_level,
-            score: analytics.urgency_score,
             reasoning: analytics.reasoning.urgency
           },
           budget: {
             constraint: analytics.budget_constraint,
-            score: analytics.budget_score,
             reasoning: analytics.reasoning.budget
           },
           fit: {
             alignment: analytics.fit_alignment,
-            score: analytics.fit_score,
             reasoning: analytics.reasoning.fit
           },
           engagement: {
             health: analytics.engagement_health,
-            score: analytics.engagement_score,
             reasoning: analytics.reasoning.engagement
           }
         },
@@ -342,9 +319,8 @@ export class AnalyticsService {
           lead_status_tag: this.calculateLeadStatusTag(analytics.total_score),
         },
         interactions: {
-          cta_summary: this.formatCTAInteractions(analytics.cta_interactions),
-          cta_behavior_reasoning: analytics.reasoning.cta_behavior,
-          engagement_indicators: this.getEngagementIndicators(analytics.cta_interactions)
+          custom_cta: analytics.custom_cta || null,
+          cta_behavior_reasoning: analytics.reasoning.cta_behavior
         },
         recommendations: this.generateRecommendations(analytics),
         created_at: analytics.created_at
@@ -446,11 +422,11 @@ export class AnalyticsService {
         extracted_name: row.extracted_name,
         extracted_email: row.extracted_email,
         scores: {
-          intent: { level: row.intent_level, score: row.intent_score },
-          urgency: { level: row.urgency_level, score: row.urgency_score },
-          budget: { constraint: row.budget_constraint, score: row.budget_score },
-          fit: { alignment: row.fit_alignment, score: row.fit_score },
-          engagement: { health: row.engagement_health, score: row.engagement_score }
+          intent: { level: row.intent_level },
+          urgency: { level: row.urgency_level },
+          budget: { constraint: row.budget_constraint },
+          fit: { alignment: row.fit_alignment },
+          engagement: { health: row.engagement_health }
         },
         cta_summary: this.formatCTAInteractionsFromColumns(row),
         created_at: row.created_at
@@ -545,27 +521,32 @@ export class AnalyticsService {
   private formatCTAInteractionsFromColumns(row: any): string[] {
     const actions: string[] = [];
     
-    if (row.cta_pricing_clicked) actions.push('Viewed Pricing');
-    if (row.cta_demo_clicked) actions.push('Requested Demo');
-    if (row.cta_followup_clicked) actions.push('Requested Follow-up');
-    if (row.cta_sample_clicked) actions.push('Requested Sample');
-    if (row.cta_escalated_to_human) actions.push('Escalated to Human');
+    // Parse custom_cta text field for CTA types
+    const customCta = (row.custom_cta || '').toLowerCase();
+    
+    if (customCta.includes('pricing')) actions.push('Viewed Pricing');
+    if (customCta.includes('demo')) actions.push('Requested Demo');
+    if (customCta.includes('follow')) actions.push('Requested Follow-up');
+    if (customCta.includes('sample')) actions.push('Requested Sample');
+    if (customCta.includes('human') || customCta.includes('escalat')) actions.push('Escalated to Human');
     
     return actions.length > 0 ? actions : ['No CTA Interactions'];
   }
 
   /**
-   * Get engagement indicators based on CTA interactions (supports both JSONB and boolean columns)
+   * Get engagement indicators based on custom_cta text field
    */
   private getEngagementIndicators(interactions: any): string[] {
     const indicators: string[] = [];
     
-    // Support both JSONB format and direct boolean values
-    const pricingClicked = interactions.pricing_clicked || interactions.cta_pricing_clicked;
-    const demoClicked = interactions.demo_clicked || interactions.cta_demo_clicked;
-    const followupClicked = interactions.followup_clicked || interactions.cta_followup_clicked;
-    const sampleClicked = interactions.sample_clicked || interactions.cta_sample_clicked;
-    const escalatedToHuman = interactions.escalated_to_human || interactions.cta_escalated_to_human;
+    // Parse custom_cta text field for engagement analysis
+    const customCta = (interactions.custom_cta || interactions || '').toString().toLowerCase();
+    
+    const pricingClicked = customCta.includes('pricing');
+    const demoClicked = customCta.includes('demo');
+    const followupClicked = customCta.includes('follow');
+    const sampleClicked = customCta.includes('sample');
+    const escalatedToHuman = customCta.includes('human') || customCta.includes('escalat');
     
     const totalInteractions = [pricingClicked, demoClicked, followupClicked, sampleClicked, escalatedToHuman].filter(Boolean).length;
     
@@ -625,19 +606,16 @@ export class AnalyticsService {
       recommendations.push('Budget concerns - Focus on ROI and value');
     }
 
-    // CTA-based recommendations (support both JSONB and boolean columns)
-    const interactions = analytics.cta_interactions;
-    const demoClicked = interactions.demo_clicked || analytics.cta_demo_clicked;
-    const pricingClicked = interactions.pricing_clicked || analytics.cta_pricing_clicked;
-    const escalatedToHuman = interactions.escalated_to_human || analytics.cta_escalated_to_human;
+    // CTA-based recommendations using custom_cta text field
+    const customCta = analytics.custom_cta || '';
     
-    if (demoClicked) {
+    if (customCta.toLowerCase().includes('demo')) {
       recommendations.push('Demo requested - Schedule technical presentation');
     }
-    if (pricingClicked) {
+    if (customCta.toLowerCase().includes('pricing') || customCta.toLowerCase().includes('quote')) {
       recommendations.push('Pricing interest shown - Prepare custom quote');
     }
-    if (escalatedToHuman) {
+    if (customCta.toLowerCase().includes('human') || customCta.toLowerCase().includes('representative')) {
       recommendations.push('Human escalation requested - Assign to sales rep');
     }
 
@@ -663,12 +641,8 @@ export class AnalyticsService {
           COUNT(CASE WHEN la.total_score >= 60 AND la.total_score < 80 THEN 1 END) as warm_leads,
           COUNT(CASE WHEN la.total_score < 60 THEN 1 END) as cold_leads,
           COALESCE(SUM(c.duration_minutes), 0) as total_duration,
-          COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
-          COUNT(CASE WHEN la.cta_demo_clicked = true THEN 1 END) as demo_requests,
-          COUNT(CASE WHEN la.cta_followup_clicked = true THEN 1 END) as followup_requests,
-          COUNT(CASE WHEN la.cta_sample_clicked = true THEN 1 END) as sample_requests,
-          COUNT(CASE WHEN la.cta_escalated_to_human = true THEN 1 END) as human_escalations,
-          COUNT(CASE WHEN la.company_name IS NOT NULL THEN 1 END) as leads_with_company
+          COUNT(CASE WHEN la.company_name IS NOT NULL THEN 1 END) as leads_with_company,
+          COUNT(CASE WHEN la.custom_cta IS NOT NULL AND la.custom_cta != '' THEN 1 END) as leads_with_cta
         FROM calls c
         LEFT JOIN lead_analytics la ON c.id = la.call_id
         WHERE c.user_id = $1
@@ -710,11 +684,12 @@ export class AnalyticsService {
           cold_leads: parseInt(stats.cold_leads) || 0
         },
         cta_performance: {
-          pricing_clicks: parseInt(stats.pricing_clicks) || 0,
-          demo_requests: parseInt(stats.demo_requests) || 0,
-          followup_requests: parseInt(stats.followup_requests) || 0,
-          sample_requests: parseInt(stats.sample_requests) || 0,
-          human_escalations: parseInt(stats.human_escalations) || 0
+          pricing_clicks: 0,
+          demo_requests: 0,
+          followup_requests: 0,
+          sample_requests: 0,
+          human_escalations: 0,
+          leads_with_cta: parseInt(stats.leads_with_cta) || 0
         }
       };
     } catch (error) {
@@ -916,6 +891,7 @@ export class AnalyticsService {
           dateInterval = '1 day';
       }
 
+      // Updated to use custom_cta text field with ILIKE pattern matching
       const query = `
         WITH date_series AS (
           SELECT generate_series(
@@ -927,11 +903,12 @@ export class AnalyticsService {
         cta_stats AS (
           SELECT 
             date_trunc('${groupBy}', c.created_at) as cta_date,
-            COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
-            COUNT(CASE WHEN la.cta_demo_clicked = true THEN 1 END) as demo_requests,
-            COUNT(CASE WHEN la.cta_followup_clicked = true THEN 1 END) as followup_requests,
-            COUNT(CASE WHEN la.cta_sample_clicked = true THEN 1 END) as sample_requests,
-            COUNT(CASE WHEN la.cta_escalated_to_human = true THEN 1 END) as human_escalations
+            COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%pricing%' THEN 1 END) as pricing_clicks,
+            COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%demo%' THEN 1 END) as demo_requests,
+            COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%follow%' THEN 1 END) as followup_requests,
+            COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%sample%' THEN 1 END) as sample_requests,
+            COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%human%' OR LOWER(la.custom_cta) LIKE '%escalat%' THEN 1 END) as human_escalations,
+            COUNT(CASE WHEN la.custom_cta IS NOT NULL AND la.custom_cta != '' THEN 1 END) as leads_with_cta
           FROM calls c
           JOIN lead_analytics la ON c.id = la.call_id
           WHERE c.user_id = $1 
@@ -946,9 +923,7 @@ export class AnalyticsService {
           COALESCE(cs.followup_requests, 0) as followup_requests,
           COALESCE(cs.sample_requests, 0) as sample_requests,
           COALESCE(cs.human_escalations, 0) as human_escalations,
-          COALESCE(cs.pricing_clicks, 0) + COALESCE(cs.demo_requests, 0) + 
-          COALESCE(cs.followup_requests, 0) + COALESCE(cs.sample_requests, 0) + 
-          COALESCE(cs.human_escalations, 0) as total_interactions
+          COALESCE(cs.leads_with_cta, 0) as total_interactions
         FROM date_series ds
         LEFT JOIN cta_stats cs ON ds.date = cs.cta_date
         ORDER BY ds.date
@@ -1077,13 +1052,14 @@ export class AnalyticsService {
     };
   }> {
     try {
+      // Updated to use custom_cta text field with ILIKE pattern matching
       let query = `
         SELECT 
-          COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
-          COUNT(CASE WHEN la.cta_demo_clicked = true THEN 1 END) as demo_requests,
-          COUNT(CASE WHEN la.cta_followup_clicked = true THEN 1 END) as followup_requests,
-          COUNT(CASE WHEN la.cta_sample_clicked = true THEN 1 END) as sample_requests,
-          COUNT(CASE WHEN la.cta_escalated_to_human = true THEN 1 END) as human_escalations,
+          COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%pricing%' THEN 1 END) as pricing_clicks,
+          COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%demo%' THEN 1 END) as demo_requests,
+          COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%follow%' THEN 1 END) as followup_requests,
+          COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%sample%' THEN 1 END) as sample_requests,
+          COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%human%' OR LOWER(la.custom_cta) LIKE '%escalat%' THEN 1 END) as human_escalations,
           COUNT(*) as total_leads,
           COUNT(CASE WHEN la.company_name IS NOT NULL THEN 1 END) as leads_with_company
         FROM lead_analytics la
@@ -1157,16 +1133,15 @@ export class AnalyticsService {
     conversion_rate: number;
   }>> {
     try {
+      // Updated to use custom_cta text field with ILIKE pattern matching
       let query = `
         SELECT 
           la.company_name,
           COUNT(*) as lead_count,
           ROUND(AVG(la.total_score), 2) as avg_score,
-          COUNT(CASE WHEN la.cta_demo_clicked = true THEN 1 END) as demo_requests,
-          COUNT(CASE WHEN la.cta_pricing_clicked = true THEN 1 END) as pricing_clicks,
-          COUNT(CASE WHEN (la.cta_pricing_clicked = true OR la.cta_demo_clicked = true OR 
-                          la.cta_followup_clicked = true OR la.cta_sample_clicked = true OR 
-                          la.cta_escalated_to_human = true) THEN 1 END) as total_cta_interactions
+          COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%demo%' THEN 1 END) as demo_requests,
+          COUNT(CASE WHEN LOWER(la.custom_cta) LIKE '%pricing%' THEN 1 END) as pricing_clicks,
+          COUNT(CASE WHEN la.custom_cta IS NOT NULL AND la.custom_cta != '' THEN 1 END) as total_cta_interactions
         FROM lead_analytics la
         JOIN calls c ON la.call_id = c.id
         WHERE c.user_id = $1 

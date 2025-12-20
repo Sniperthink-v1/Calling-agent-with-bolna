@@ -958,11 +958,6 @@ class WebhookService {
                 companyName: individualData?.extraction?.company_name || null,
                 extractedName: individualData?.extraction?.name || null,
                 extractedEmail: individualData?.extraction?.email_address || null,
-                ctaPricingClicked: individualData?.cta_pricing_clicked === 'Yes',
-                ctaDemoClicked: individualData?.cta_demo_clicked === 'Yes',
-                ctaFollowupClicked: individualData?.cta_followup_clicked === 'Yes',
-                ctaSampleClicked: individualData?.cta_sample_clicked === 'Yes',
-                ctaEscalatedToHuman: individualData?.cta_escalated_to_human === 'Yes',
                 smartNotification: individualData?.extraction?.smartnotification || null,
                 demoBookDatetime: individualData?.demo_book_datetime || null
               };

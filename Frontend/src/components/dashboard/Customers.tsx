@@ -77,11 +77,7 @@ interface CustomerTimelineEntry {
   urgency_level?: string;
   fit_alignment?: string;
   total_score?: number;
-  cta_pricing_clicked?: boolean;
-  cta_demo_clicked?: boolean;
-  cta_followup_clicked?: boolean;
-  cta_sample_clicked?: boolean;
-  cta_escalated_to_human?: boolean;
+  custom_cta?: string;
   // Additional fields from backend transformation
   interactionAgent?: string;
   interactionDate?: string;
@@ -561,14 +557,7 @@ const Customers = ({}: CustomersProps) => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-600">
-                {customerTimeline.reduce((sum, entry) => {
-                  return sum + 
-                    (entry.cta_pricing_clicked ? 1 : 0) + 
-                    (entry.cta_demo_clicked ? 1 : 0) + 
-                    (entry.cta_followup_clicked ? 1 : 0) + 
-                    (entry.cta_sample_clicked ? 1 : 0) + 
-                    (entry.cta_escalated_to_human ? 1 : 0);
-                }, 0)}
+                {customerTimeline.filter(entry => entry.custom_cta && entry.custom_cta.trim() !== '').length}
               </div>
               <div className="text-xs text-muted-foreground">
                 Interactions

@@ -2,6 +2,8 @@ import { Response } from 'express';
 import { Pool } from 'pg';
 import pool from '../config/database';
 import { AuthenticatedRequest } from '../middleware/auth';
+import LeadIntelligenceEventModel, { EventActorType, FieldChange } from '../models/LeadIntelligenceEvent';
+import TeamMemberModel from '../models/TeamMember';
 
 export interface LeadGroup {
   id: string;
@@ -31,6 +33,12 @@ export interface LeadGroup {
   // Lead stage for pipeline tracking
   leadStage?: string;
   contactId?: string; // Contact ID for updating lead stage
+  // Assigned team member
+  assignedTo?: {
+    id: string;
+    name: string;
+    role: string;
+  } | null;
 }
 
 export interface LeadTimelineEntry {
@@ -75,7 +83,7 @@ export interface LeadTimelineEntry {
   // Custom CTA string from extraction (e.g., "proposal required, demo booked")
   customCta?: string;
   // Email-specific fields
-  interactionType?: 'call' | 'email'; // Type of interaction
+  interactionType?: 'call' | 'email' | 'human_edit'; // Type of interaction
   emailSubject?: string; // Email subject
   emailStatus?: 'sent' | 'delivered' | 'opened' | 'failed'; // Email delivery status
   emailTo?: string; // Email recipient
@@ -98,6 +106,7 @@ export class LeadIntelligenceController {
       }
 
       // Enhanced query to group leads and get their analytics with new fields
+      // Priority: complete analysis (human-edited) > most recent individual call analytics
       const query = `
         WITH phone_leads_base AS (
           SELECT 
@@ -114,47 +123,97 @@ export class LeadIntelligenceController {
                 WHEN c.status = 'failed' AND c.call_lifecycle_status IS NOT NULL THEN c.call_lifecycle_status
                 ELSE 'Cold'
               END
-            ) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_lead_tag,
-            FIRST_VALUE(la.engagement_health) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_engagement_level,
-            FIRST_VALUE(la.intent_level) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_intent_level,
-            FIRST_VALUE(la.budget_constraint) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_budget_constraint,
-            FIRST_VALUE(la.urgency_level) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_timeline_urgency,
-            FIRST_VALUE(la.fit_alignment) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_fit_alignment,
-            FIRST_VALUE(COALESCE(la.cta_escalated_to_human, false)) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as escalated_to_human,
+            ) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_lead_tag_from_call,
+            FIRST_VALUE(la.engagement_health) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_engagement_level_from_call,
+            FIRST_VALUE(la.intent_level) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_intent_level_from_call,
+            FIRST_VALUE(la.budget_constraint) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_budget_constraint_from_call,
+            FIRST_VALUE(la.urgency_level) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_timeline_urgency_from_call,
+            FIRST_VALUE(la.fit_alignment) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as recent_fit_alignment_from_call,
+            false as escalated_to_human,
             FIRST_VALUE(c.created_at) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as last_contact,
             FIRST_VALUE(la.demo_book_datetime) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC) as demo_book_datetime,
             FIRST_VALUE(co.lead_stage) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as lead_stage,
             FIRST_VALUE(co.id) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as contact_id,
             COUNT(*) FILTER (WHERE la.analysis_type = 'individual' OR la.analysis_type IS NULL) OVER (PARTITION BY c.phone_number)::bigint as interactions,
-            ROW_NUMBER() OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::bigint as rn
+            ROW_NUMBER() OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::bigint as rn,
+            -- Get the latest agent only (not all agents)
+            FIRST_VALUE(a.name) OVER (PARTITION BY c.phone_number ORDER BY c.created_at DESC)::text as latest_agent
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id
           LEFT JOIN contacts co ON c.contact_id = co.id
+          LEFT JOIN agents a ON c.agent_id = a.id
           WHERE c.user_id = $1 
             AND c.phone_number IS NOT NULL
             AND c.phone_number != ''
             AND (co.is_customer IS NULL OR co.is_customer = false)
         ),
+        -- Get the latest analysis values (human_edit takes precedence if newer than complete)
+        latest_analysis AS (
+          SELECT DISTINCT ON (phone_number)
+            phone_number,
+            intent_level,
+            urgency_level,
+            budget_constraint,
+            fit_alignment,
+            engagement_health,
+            lead_status_tag,
+            assigned_to_team_member_id,
+            analysis_type,
+            analysis_timestamp
+          FROM lead_analytics
+          WHERE user_id = $1 
+            AND analysis_type IN ('complete', 'human_edit')
+            AND phone_number IS NOT NULL
+          ORDER BY phone_number, analysis_timestamp DESC
+        ),
         phone_leads AS (
           SELECT 
-            plb.*,
-            COALESCE((SELECT STRING_AGG(DISTINCT a.name, ', ') 
-             FROM calls c2 
-             LEFT JOIN agents a ON c2.agent_id = a.id 
-             WHERE c2.phone_number = plb.phone AND c2.user_id = $1), '')::text as interacted_agents,
-            (SELECT la_complete.requirements 
-             FROM lead_analytics la_complete 
-             WHERE la_complete.user_id = $1 
-               AND la_complete.phone_number = plb.phone 
-               AND la_complete.analysis_type = 'complete' 
+            plb.group_key,
+            plb.group_type,
+            plb.phone,
+            plb.email,
+            plb.name,
+            plb.company,
+            plb.lead_type,
+            -- Prefer latest analysis values (human_edit or complete) over individual call values
+            COALESCE(lta.lead_status_tag, plb.recent_lead_tag_from_call, 'Cold')::text as recent_lead_tag,
+            COALESCE(lta.engagement_health, plb.recent_engagement_level_from_call)::text as recent_engagement_level,
+            COALESCE(lta.intent_level, plb.recent_intent_level_from_call)::text as recent_intent_level,
+            COALESCE(lta.budget_constraint, plb.recent_budget_constraint_from_call)::text as recent_budget_constraint,
+            COALESCE(lta.urgency_level, plb.recent_timeline_urgency_from_call)::text as recent_timeline_urgency,
+            COALESCE(lta.fit_alignment, plb.recent_fit_alignment_from_call)::text as recent_fit_alignment,
+            plb.escalated_to_human,
+            plb.last_contact,
+            plb.demo_book_datetime,
+            plb.lead_stage,
+            plb.contact_id,
+            plb.interactions,
+            plb.rn,
+            -- Show only the latest interacted agent
+            COALESCE(plb.latest_agent, '')::text as interacted_agents,
+            (SELECT la_latest.requirements 
+             FROM lead_analytics la_latest 
+             WHERE la_latest.user_id = $1 
+               AND la_latest.phone_number = plb.phone 
+               AND la_latest.analysis_type IN ('complete', 'human_edit')
+             ORDER BY la_latest.analysis_timestamp DESC
              LIMIT 1)::text as requirements,
-            (SELECT la_complete.custom_cta 
-             FROM lead_analytics la_complete 
-             WHERE la_complete.user_id = $1 
-               AND la_complete.phone_number = plb.phone 
-               AND la_complete.analysis_type = 'complete' 
-             LIMIT 1)::text as custom_cta
+            (SELECT la_latest.custom_cta 
+             FROM lead_analytics la_latest 
+             WHERE la_latest.user_id = $1 
+               AND la_latest.phone_number = plb.phone 
+               AND la_latest.analysis_type IN ('complete', 'human_edit')
+             ORDER BY la_latest.analysis_timestamp DESC
+             LIMIT 1)::text as custom_cta,
+            -- Notes now come from contacts table
+            (SELECT co_notes.notes 
+             FROM contacts co_notes 
+             WHERE co_notes.user_id = $1 
+               AND co_notes.phone_number = plb.phone 
+             LIMIT 1)::text as contact_notes,
+            lta.assigned_to_team_member_id
           FROM phone_leads_base plb
+          LEFT JOIN latest_analysis lta ON lta.phone_number = plb.phone
           WHERE plb.rn = 1
         ),
         email_leads_base AS (
@@ -178,7 +237,7 @@ export class LeadIntelligenceController {
             FIRST_VALUE(la.budget_constraint) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::text as recent_budget_constraint,
             FIRST_VALUE(la.urgency_level) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::text as recent_timeline_urgency,
             FIRST_VALUE(la.fit_alignment) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::text as recent_fit_alignment,
-            FIRST_VALUE(COALESCE(la.cta_escalated_to_human, false)) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as escalated_to_human,
+            false as escalated_to_human,
             FIRST_VALUE(c.created_at) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as last_contact,
             FIRST_VALUE(la.demo_book_datetime) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC) as demo_book_datetime,
             FIRST_VALUE(co.lead_stage) OVER (PARTITION BY la.extracted_email ORDER BY c.created_at DESC)::text as lead_stage,
@@ -219,7 +278,10 @@ export class LeadIntelligenceController {
                AND la_ind.extracted_email = elb.email 
                AND la_ind.analysis_type = 'individual'
              ORDER BY c_ind.created_at DESC 
-             LIMIT 1)::text as custom_cta
+             LIMIT 1)::text as custom_cta,
+            -- Notes from contacts (email-only leads may not have contact record)
+            NULL::text as contact_notes,
+            NULL::uuid as assigned_to_team_member_id
           FROM email_leads_base elb
           WHERE elb.rn = 1
         ),
@@ -248,7 +310,7 @@ export class LeadIntelligenceController {
             la.budget_constraint::text as recent_budget_constraint,
             la.urgency_level::text as recent_timeline_urgency,
             la.fit_alignment::text as recent_fit_alignment,
-            COALESCE(la.cta_escalated_to_human, false) as escalated_to_human,
+            false as escalated_to_human,
             c.created_at as last_contact,
             la.demo_book_datetime as demo_book_datetime,
             co.lead_stage::text as lead_stage,
@@ -257,7 +319,9 @@ export class LeadIntelligenceController {
             COALESCE(a.name, '')::text as interacted_agents,
             la.requirements::text as requirements,
             la.custom_cta::text as custom_cta,
-            1::bigint as rn
+            co.notes::text as contact_notes,
+            1::bigint as rn,
+            NULL::uuid as assigned_to_team_member_id
           FROM calls c
           LEFT JOIN lead_analytics la ON c.id = la.call_id
           LEFT JOIN agents a ON c.agent_id = a.id
@@ -273,7 +337,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
-            interacted_agents, requirements, custom_cta, rn
+            interacted_agents, requirements, custom_cta, contact_notes, rn, assigned_to_team_member_id
           FROM phone_leads
           UNION ALL
           SELECT 
@@ -281,7 +345,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
-            interacted_agents, requirements, custom_cta, rn
+            interacted_agents, requirements, custom_cta, contact_notes, rn, assigned_to_team_member_id
           FROM email_leads
           UNION ALL
           SELECT 
@@ -289,7 +353,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
-            interacted_agents, requirements, custom_cta, rn
+            interacted_agents, requirements, custom_cta, contact_notes, rn, assigned_to_team_member_id
           FROM individual_leads
         )
         SELECT 
@@ -302,7 +366,10 @@ export class LeadIntelligenceController {
           cm.attendee_email as meeting_attendee_email,
           cm.meeting_title,
           cm.meeting_description,
-          cm.google_event_id
+          cm.google_event_id,
+          tm.id as assigned_member_id,
+          tm.name as assigned_member_name,
+          tm.role as assigned_member_role
         FROM all_leads al
         LEFT JOIN (
           SELECT DISTINCT ON (lead_phone, lead_email)
@@ -331,6 +398,7 @@ export class LeadIntelligenceController {
           ORDER BY cm.meeting_start_time DESC
           LIMIT 1
         ) cm ON true
+        LEFT JOIN team_members tm ON al.assigned_to_team_member_id = tm.id
         ORDER BY al.last_contact DESC;
       `;
 
@@ -350,7 +418,7 @@ export class LeadIntelligenceController {
         recentTimelineUrgency: row.recent_timeline_urgency,
         recentFitAlignment: row.recent_fit_alignment,
         escalatedToHuman: row.escalated_to_human || false,
-        interactedAgents: row.interacted_agents ? row.interacted_agents.split(', ') : [],
+        interactedAgents: row.interacted_agents ? row.interacted_agents.split(', ').filter(Boolean) : [],
         interactions: parseInt(row.interactions) || 0,
         lastContact: row.last_contact,
         followUpScheduled: row.follow_up_scheduled,
@@ -364,8 +432,14 @@ export class LeadIntelligenceController {
         groupType: row.group_type,
         requirements: row.requirements, // From complete analysis (phone leads) or individual analysis (email/individual leads)
         customCta: row.custom_cta, // Custom CTA string from extraction
+        contactNotes: row.contact_notes, // Notes from contacts table
         leadStage: row.lead_stage, // Lead stage for pipeline tracking
-        contactId: row.contact_id // Contact ID for updating lead stage
+        contactId: row.contact_id, // Contact ID for updating lead stage
+        assignedTo: row.assigned_member_id ? {
+          id: row.assigned_member_id,
+          name: row.assigned_member_name,
+          role: row.assigned_member_role
+        } : null
       }));
 
       res.json(leadGroups);
@@ -450,11 +524,6 @@ export class LeadIntelligenceController {
               NULL::numeric as budget_score,
               NULL::numeric as fit_score,
               NULL::numeric as engagement_score,
-              false as cta_pricing_clicked,
-              false as cta_demo_clicked,
-              false as cta_followup_clicked,
-              false as cta_sample_clicked,
-              false as cta_escalated_to_human,
               NULL::timestamp as demo_book_datetime,
               NULL::timestamp as follow_up_date,
               NULL::text as follow_up_remark,
@@ -471,6 +540,56 @@ export class LeadIntelligenceController {
               AND co.phone_number = $2
           `
           : '';
+
+        // Human edit interactions - show manual edits in timeline
+        const humanEditUnion = `
+          UNION ALL
+          
+          -- Human edit interactions
+          SELECT 
+            la.id,
+            'human_edit'::text as interaction_type,
+            la.extracted_name as lead_name,
+            la.extracted_email as extracted_email,
+            la.company_name as company_name,
+            COALESCE(la.last_edited_by_name, 'Unknown Editor') as interaction_agent,
+            la.last_edited_at as interaction_date,
+            'Manual Edit'::text as platform,
+            NULL::text as call_direction,
+            NULL::text as hangup_by,
+            NULL::text as hangup_reason,
+            la.lead_status_tag as status,
+            'Manual intelligence update' as smart_notification,
+            la.requirements,
+            la.custom_cta,
+            NULL::text as duration,
+            la.engagement_health as engagement_level,
+            la.intent_level,
+            la.budget_constraint,
+            la.urgency_level as timeline_urgency,
+            la.fit_alignment,
+            la.total_score,
+            la.intent_score,
+            la.urgency_score,
+            la.budget_score,
+            la.fit_score,
+            la.engagement_score,
+            la.demo_book_datetime,
+            NULL::timestamp as follow_up_date,
+            NULL::text as follow_up_remark,
+            NULL::text as follow_up_status,
+            NULL::boolean as follow_up_completed,
+            NULL::uuid as follow_up_call_id,
+            NULL::text as email_subject,
+            NULL::text as email_status,
+            NULL::text as email_to,
+            NULL::text as email_from
+          FROM lead_analytics la
+          WHERE la.user_id = $1
+            AND la.phone_number = $2
+            AND la.analysis_type = 'human_edit'
+            AND la.last_edited_at IS NOT NULL
+        `;
 
         query = `
           SELECT * FROM (
@@ -520,11 +639,6 @@ export class LeadIntelligenceController {
               la.budget_score,
               la.fit_score,
               la.engagement_score,
-              la.cta_pricing_clicked,
-              la.cta_demo_clicked,
-              la.cta_followup_clicked,
-              la.cta_sample_clicked,
-              la.cta_escalated_to_human,
               la.demo_book_datetime,
               fu.follow_up_date,
               fu.remark as follow_up_remark,
@@ -546,6 +660,7 @@ export class LeadIntelligenceController {
             WHERE c.user_id = $1 
               AND c.phone_number = $2
             ${emailInteractionsUnion}
+            ${humanEditUnion}
           ) combined
           ORDER BY interaction_date DESC;
         `;
@@ -596,11 +711,6 @@ export class LeadIntelligenceController {
             la.budget_score,
             la.fit_score,
             la.engagement_score,
-            la.cta_pricing_clicked,
-            la.cta_demo_clicked,
-            la.cta_followup_clicked,
-            la.cta_sample_clicked,
-            la.cta_escalated_to_human,
             la.demo_book_datetime,
             fu.follow_up_date,
             fu.remark as follow_up_remark,
@@ -666,11 +776,6 @@ export class LeadIntelligenceController {
             la.budget_score,
             la.fit_score,
             la.engagement_score,
-            la.cta_pricing_clicked,
-            la.cta_demo_clicked,
-            la.cta_followup_clicked,
-            la.cta_sample_clicked,
-            la.cta_escalated_to_human,
             la.demo_book_datetime,
             NULL as follow_up_date,
             NULL as follow_up_remark,
@@ -721,12 +826,6 @@ export class LeadIntelligenceController {
         fitScore: row.fit_score,
         engagementScore: row.engagement_score,
         overallScore: row.overall_score,
-        // CTA interactions
-        ctaPricingClicked: row.cta_pricing_clicked,
-        ctaDemoClicked: row.cta_demo_clicked,
-        ctaFollowupClicked: row.cta_followup_clicked,
-        ctaSampleClicked: row.cta_sample_clicked,
-        ctaEscalatedToHuman: row.cta_escalated_to_human,
         // Follow-up information
         followUpDate: row.follow_up_date,
         followUpRemark: row.follow_up_remark,
@@ -747,6 +846,344 @@ export class LeadIntelligenceController {
       res.json(timeline);
     } catch (error) {
       console.error('Error fetching lead timeline:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Edit lead intelligence fields for a lead group
+   * Creates a new 'human_edit' analysis record instead of updating 'complete'
+   * This preserves AI analysis history while allowing human overrides
+   */
+  async editLeadIntelligence(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
+      }
+
+      const { groupId } = req.params;
+      const updates = req.body;
+
+      // Decode the groupId (phone number is URL encoded)
+      const decodedGroupId = decodeURIComponent(groupId);
+
+      // Editable fields (text levels and text fields)
+      // NOTE: manual_notes removed - notes are now stored in contacts.notes and updated separately
+      const editableFields = [
+        'intent_level',
+        'urgency_level', // This is timeline_urgency in the UI
+        'budget_constraint',
+        'fit_alignment',
+        'engagement_health',
+        'lead_status_tag',
+        'assigned_to_team_member_id',
+        'custom_cta',      // Custom CTA tags
+        'requirements',    // Requirements/notes
+        'contact_notes'    // Notes from contacts table (handled separately)
+      ];
+
+      // Validate that only allowed fields are being updated
+      const updateKeys = Object.keys(updates);
+      const invalidFields = updateKeys.filter(key => !editableFields.includes(key));
+      if (invalidFields.length > 0) {
+        res.status(400).json({ 
+          error: `Cannot edit these fields: ${invalidFields.join(', ')}. Only allowed fields can be edited.` 
+        });
+        return;
+      }
+
+      // Validate level values if provided
+      const validLevels = ['High', 'Medium', 'Low', 'N/A', 'Unknown', null, ''];
+      const levelFields = ['intent_level', 'urgency_level', 'budget_constraint', 'fit_alignment', 'engagement_health'];
+      
+      for (const field of levelFields) {
+        if (updates[field] !== undefined && !validLevels.includes(updates[field])) {
+          res.status(400).json({ 
+            error: `Invalid value for ${field}. Must be: High, Medium, Low, N/A, or Unknown` 
+          });
+          return;
+        }
+      }
+
+      // Find the latest analysis record (complete or human_edit) to use as base
+      const findQuery = `
+        SELECT la.*
+        FROM lead_analytics la
+        WHERE la.user_id = $1 
+          AND la.phone_number = $2
+          AND la.analysis_type IN ('complete', 'human_edit')
+        ORDER BY la.analysis_timestamp DESC
+        LIMIT 1
+      `;
+
+      const findResult = await this.pool.query(findQuery, [userId, decodedGroupId]);
+
+      if (findResult.rows.length === 0) {
+        res.status(404).json({ error: 'Lead not found' });
+        return;
+      }
+
+      const baseRecord = findResult.rows[0];
+
+      // Determine actor info
+      let actorType: EventActorType = 'owner';
+      let actorId: string | undefined = userId;
+      let actorName: string = req.user?.name || 'Owner';
+
+      // Check if this is a team member
+      if ((req as any).isTeamMember && (req as any).teamMemberId) {
+        actorType = 'team_member';
+        actorId = (req as any).teamMemberId;
+        const teamMember = await TeamMemberModel.getWithTenantInfo(actorId!);
+        actorName = teamMember?.name || 'Team Member';
+      }
+
+      // Track field changes
+      const fieldChanges: Record<string, FieldChange> = {};
+
+      // Build the new human_edit record values
+      const newValues: Record<string, any> = {
+        intent_level: baseRecord.intent_level,
+        urgency_level: baseRecord.urgency_level,
+        budget_constraint: baseRecord.budget_constraint,
+        fit_alignment: baseRecord.fit_alignment,
+        engagement_health: baseRecord.engagement_health,
+        lead_status_tag: baseRecord.lead_status_tag,
+        assigned_to_team_member_id: baseRecord.assigned_to_team_member_id,
+        // Copy scores from base record
+        intent_score: baseRecord.intent_score,
+        urgency_score: baseRecord.urgency_score,
+        budget_score: baseRecord.budget_score,
+        fit_score: baseRecord.fit_score,
+        engagement_score: baseRecord.engagement_score,
+        total_score: baseRecord.total_score,
+        // Copy other important fields
+        reasoning: baseRecord.reasoning,
+        cta_interactions: baseRecord.cta_interactions,
+        company_name: baseRecord.company_name,
+        extracted_name: baseRecord.extracted_name,
+        extracted_email: baseRecord.extracted_email,
+        smart_notification: baseRecord.smart_notification,
+        demo_book_datetime: baseRecord.demo_book_datetime,
+        requirements: baseRecord.requirements,
+        custom_cta: baseRecord.custom_cta,
+        latest_call_id: baseRecord.latest_call_id || baseRecord.call_id,
+        previous_calls_analyzed: baseRecord.previous_calls_analyzed
+      };
+
+      // Handle contact_notes separately - update contacts table directly
+      let contactNotesUpdated = false;
+      if (updates.contact_notes !== undefined) {
+        // Find contact by phone number and update notes
+        const updateContactNotesQuery = `
+          UPDATE contacts 
+          SET notes = $1, updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = $2 AND phone_number = $3
+          RETURNING id
+        `;
+        const contactResult = await this.pool.query(updateContactNotesQuery, [
+          updates.contact_notes,
+          userId,
+          decodedGroupId
+        ]);
+        if (contactResult.rows.length > 0) {
+          contactNotesUpdated = true;
+          fieldChanges['contact_notes'] = {
+            old: null, // We don't track old value here
+            new: updates.contact_notes
+          };
+        }
+        // Remove from updates so it doesn't try to save to lead_analytics
+        delete updates.contact_notes;
+      }
+
+      // Apply the updates and track changes
+      for (const field of editableFields) {
+        if (updates[field] !== undefined && field !== 'contact_notes') {
+          const oldValue = newValues[field];
+          const newValue = updates[field];
+
+          if (oldValue !== newValue) {
+            fieldChanges[field] = {
+              old: oldValue,
+              new: newValue
+            };
+            newValues[field] = newValue;
+          }
+        }
+      }
+
+      if (Object.keys(fieldChanges).length === 0) {
+        res.json({ 
+          message: 'No changes to apply',
+          lead_analytics_id: baseRecord.id
+        });
+        return;
+      }
+
+      // If this is an agent editing and no explicit assignment, auto-assign to themselves
+      if ((req as any).teamMemberRole === 'agent' && !updates.assigned_to_team_member_id) {
+        fieldChanges['assigned_to'] = {
+          old: newValues.assigned_to_team_member_id,
+          new: (req as any).teamMemberId
+        };
+        newValues.assigned_to_team_member_id = (req as any).teamMemberId;
+      }
+
+      // Add editor tracking
+      newValues.last_edited_by_type = actorType;
+      newValues.last_edited_by_id = actorId;
+      newValues.last_edited_by_name = actorName;
+      newValues.last_edited_at = new Date();
+
+      // Upsert the human_edit record (one per user+phone)
+      const upsertQuery = `
+        INSERT INTO lead_analytics (
+          user_id, phone_number, analysis_type, call_id,
+          intent_level, urgency_level, budget_constraint, fit_alignment, engagement_health,
+          lead_status_tag, assigned_to_team_member_id,
+          intent_score, urgency_score, budget_score, fit_score, engagement_score, total_score,
+          reasoning, cta_interactions, company_name, extracted_name, extracted_email,
+          smart_notification, demo_book_datetime, requirements, custom_cta,
+          latest_call_id, previous_calls_analyzed, analysis_timestamp,
+          last_edited_by_type, last_edited_by_id, last_edited_by_name, last_edited_at
+        ) VALUES (
+          $1, $2, 'human_edit', $3,
+          $4, $5, $6, $7, $8,
+          $9, $10,
+          $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21,
+          $22, $23, $24, $25,
+          $26, $27, CURRENT_TIMESTAMP,
+          $28, $29, $30, $31
+        )
+        ON CONFLICT (user_id, phone_number, analysis_type) WHERE analysis_type = 'human_edit'
+        DO UPDATE SET
+          intent_level = EXCLUDED.intent_level,
+          urgency_level = EXCLUDED.urgency_level,
+          budget_constraint = EXCLUDED.budget_constraint,
+          fit_alignment = EXCLUDED.fit_alignment,
+          engagement_health = EXCLUDED.engagement_health,
+          lead_status_tag = EXCLUDED.lead_status_tag,
+          assigned_to_team_member_id = EXCLUDED.assigned_to_team_member_id,
+          intent_score = EXCLUDED.intent_score,
+          urgency_score = EXCLUDED.urgency_score,
+          budget_score = EXCLUDED.budget_score,
+          fit_score = EXCLUDED.fit_score,
+          engagement_score = EXCLUDED.engagement_score,
+          total_score = EXCLUDED.total_score,
+          reasoning = EXCLUDED.reasoning,
+          cta_interactions = EXCLUDED.cta_interactions,
+          company_name = EXCLUDED.company_name,
+          extracted_name = EXCLUDED.extracted_name,
+          extracted_email = EXCLUDED.extracted_email,
+          smart_notification = EXCLUDED.smart_notification,
+          demo_book_datetime = EXCLUDED.demo_book_datetime,
+          requirements = EXCLUDED.requirements,
+          custom_cta = EXCLUDED.custom_cta,
+          latest_call_id = EXCLUDED.latest_call_id,
+          previous_calls_analyzed = EXCLUDED.previous_calls_analyzed,
+          analysis_timestamp = CURRENT_TIMESTAMP,
+          last_edited_by_type = EXCLUDED.last_edited_by_type,
+          last_edited_by_id = EXCLUDED.last_edited_by_id,
+          last_edited_by_name = EXCLUDED.last_edited_by_name,
+          last_edited_at = EXCLUDED.last_edited_at
+        RETURNING *
+      `;
+
+      const upsertValues = [
+        userId, decodedGroupId, baseRecord.call_id,
+        newValues.intent_level, newValues.urgency_level, newValues.budget_constraint, newValues.fit_alignment, newValues.engagement_health,
+        newValues.lead_status_tag, newValues.assigned_to_team_member_id,
+        newValues.intent_score, newValues.urgency_score, newValues.budget_score, newValues.fit_score, newValues.engagement_score, newValues.total_score,
+        newValues.reasoning, newValues.cta_interactions, newValues.company_name, newValues.extracted_name, newValues.extracted_email,
+        newValues.smart_notification, newValues.demo_book_datetime, newValues.requirements, newValues.custom_cta,
+        newValues.latest_call_id, newValues.previous_calls_analyzed,
+        newValues.last_edited_by_type, newValues.last_edited_by_id, newValues.last_edited_by_name, newValues.last_edited_at
+      ];
+
+      const upsertResult = await this.pool.query(upsertQuery, upsertValues);
+      const humanEditRecord = upsertResult.rows[0];
+
+      // Create event record for timeline
+      await LeadIntelligenceEventModel.createEditEvent({
+        tenant_user_id: userId,
+        phone_number: decodedGroupId,
+        lead_analytics_id: humanEditRecord.id,
+        actor_type: actorType,
+        actor_id: actorId,
+        actor_name: actorName,
+        field_changes: fieldChanges,
+        notes: updates.edit_note || undefined
+      });
+
+      res.json({
+        message: 'Lead intelligence updated successfully',
+        lead_analytics_id: humanEditRecord.id,
+        updated_fields: Object.keys(fieldChanges),
+        edited_by: actorName,
+        updated_at: humanEditRecord.last_edited_at
+      });
+    } catch (error) {
+      console.error('Error editing lead intelligence:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Get available team members for assignment dropdown
+   */
+  async getTeamMembersForAssignment(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
+      }
+
+      const teamMembers = await TeamMemberModel.findByTenantUserId(userId);
+
+      // Filter to only active members who can be assigned (not viewers)
+      const assignableMembers = teamMembers
+        .filter(tm => tm.is_active && tm.role !== 'viewer')
+        .map(tm => ({
+          id: tm.id,
+          name: tm.name,
+          role: tm.role
+        }));
+
+      res.json({ 
+        team_members: assignableMembers,
+        // Include owner as option
+        include_owner: true
+      });
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Get lead intelligence events for timeline (manual edits, assignments, notes)
+   */
+  async getLeadEvents(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
+      }
+
+      const { groupId } = req.params;
+      const decodedGroupId = decodeURIComponent(groupId);
+
+      const events = await LeadIntelligenceEventModel.getEventsByPhone(userId, decodedGroupId, 50);
+
+      res.json({ events });
+    } catch (error) {
+      console.error('Error fetching lead events:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

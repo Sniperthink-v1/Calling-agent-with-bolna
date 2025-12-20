@@ -37,6 +37,34 @@ interface EmailCampaign {
   updated_at: Date;
 }
 
+interface EmailAttachmentMetadata {
+  id: string;
+  email_id: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
+  created_at: Date;
+}
+
+interface EmailCampaignEmail {
+  id: string;
+  contact_id: string | null;
+  to_email: string;
+  to_name: string | null;
+  status: string;
+  sent_at: Date;
+  delivered_at: Date | null;
+  opened_at: Date | null;
+  failed_at: Date | null;
+  error_message: string | null;
+  contact: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  } | null;
+  attachments: EmailAttachmentMetadata[];
+}
+
 export class EmailCampaignService {
   /**
    * Check if Gmail is connected for the user
@@ -238,6 +266,89 @@ export class EmailCampaignService {
     );
 
     return result.rows[0] || null;
+  }
+
+  /**
+   * Get an email campaign + recipient emails and attachment metadata
+   */
+  static async getEmailCampaignDetails(
+    id: string,
+    userId: string
+  ): Promise<{ campaign: EmailCampaign; emails: EmailCampaignEmail[] } | null> {
+    const campaign = await this.getEmailCampaign(id, userId);
+    if (!campaign) return null;
+
+    const emailsResult = await pool.query(
+      `SELECT
+        e.id,
+        e.contact_id,
+        e.to_email,
+        e.to_name,
+        e.status,
+        e.sent_at,
+        e.delivered_at,
+        e.opened_at,
+        e.failed_at,
+        e.error_message,
+        c.name AS contact_name,
+        c.email AS contact_email
+      FROM emails e
+      LEFT JOIN contacts c ON c.id = e.contact_id
+      WHERE e.campaign_id = $1 AND e.user_id = $2
+      ORDER BY e.sent_at DESC`,
+      [id, userId]
+    );
+
+    const emailRows = emailsResult.rows as Array<{
+      id: string;
+      contact_id: string | null;
+      to_email: string;
+      to_name: string | null;
+      status: string;
+      sent_at: Date;
+      delivered_at: Date | null;
+      opened_at: Date | null;
+      failed_at: Date | null;
+      error_message: string | null;
+      contact_name: string | null;
+      contact_email: string | null;
+    }>;
+
+    const emailIds = emailRows.map((r) => r.id);
+    const attachmentsByEmailId: Record<string, EmailAttachmentMetadata[]> = {};
+
+    if (emailIds.length > 0) {
+      const attachmentsResult = await pool.query(
+        `SELECT id, email_id, filename, content_type, file_size, created_at
+         FROM email_attachments
+         WHERE email_id = ANY($1::uuid[])`,
+        [emailIds]
+      );
+
+      for (const row of attachmentsResult.rows as EmailAttachmentMetadata[]) {
+        if (!attachmentsByEmailId[row.email_id]) attachmentsByEmailId[row.email_id] = [];
+        attachmentsByEmailId[row.email_id].push(row);
+      }
+    }
+
+    const emails: EmailCampaignEmail[] = emailRows.map((row) => ({
+      id: row.id,
+      contact_id: row.contact_id,
+      to_email: row.to_email,
+      to_name: row.to_name,
+      status: row.status,
+      sent_at: row.sent_at,
+      delivered_at: row.delivered_at,
+      opened_at: row.opened_at,
+      failed_at: row.failed_at,
+      error_message: row.error_message,
+      contact: row.contact_id
+        ? { id: row.contact_id, name: row.contact_name, email: row.contact_email }
+        : null,
+      attachments: attachmentsByEmailId[row.id] || [],
+    }));
+
+    return { campaign, emails };
   }
 
   /**

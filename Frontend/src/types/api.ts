@@ -79,6 +79,9 @@ export interface PaginatedResponse<T> {
 // USER INTERFACES
 // ============================================================================
 
+// Team member role type
+export type TeamMemberRole = 'manager' | 'agent' | 'viewer';
+
 export interface User {
   id: string;
   email: string;
@@ -103,6 +106,11 @@ export interface User {
   timezone_auto_detected?: boolean;
   timezone_manually_set?: boolean;
   timezone_updated_at?: string;
+  // Team member fields (when logged in as team member)
+  isTeamMember?: boolean;
+  teamMemberId?: string;
+  teamMemberRole?: TeamMemberRole;
+  tenantUserId?: string; // The owner user ID this team member belongs to
 }
 
 export interface UserProfileUpdate {

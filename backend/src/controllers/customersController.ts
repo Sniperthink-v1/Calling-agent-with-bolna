@@ -148,11 +148,7 @@ export class CustomersController {
           la.urgency_level,
           la.fit_alignment,
           la.total_score,
-          la.cta_pricing_clicked,
-          la.cta_demo_clicked,
-          la.cta_followup_clicked,
-          la.cta_sample_clicked,
-          la.cta_escalated_to_human,
+          la.custom_cta,
           -- Additional fields to match lead intelligence format
           la.company_name,
           CASE 
@@ -222,11 +218,7 @@ export class CustomersController {
             agent_name: row.agent_name,
             interaction_type: row.interaction_type,
             lead_status_tag: row.lead_status_tag,
-            cta_pricing_clicked: row.cta_pricing_clicked,
-            cta_demo_clicked: row.cta_demo_clicked,
-            cta_followup_clicked: row.cta_followup_clicked,
-            cta_sample_clicked: row.cta_sample_clicked,
-            cta_escalated_to_human: row.cta_escalated_to_human
+            custom_cta: row.custom_cta || ''
           }))
         }
       });
@@ -268,22 +260,47 @@ export class CustomersController {
         return;
       }
 
+      // Extract phone number from contactId if it's in the format "phone_+91 8979556941"
+      let extractedPhone = phone;
+      let cleanContactId = contactId;
+      
+      if (contactId.startsWith('phone_')) {
+        extractedPhone = contactId.replace('phone_', '');
+        cleanContactId = extractedPhone; // Use the phone number for lookup
+        logger.info('Extracted phone from contactId:', { extractedPhone, originalContactId: contactId });
+      }
+
       // Check if contact exists and belongs to user
       // contactId might be a phone number (lead group ID) or actual contact UUID
+      // First try to find by phone number (most common case from Lead Intelligence)
       let contactQuery = `
         SELECT id, name, phone_number, email, company, is_customer
         FROM contacts 
         WHERE user_id = $1 AND (
-          id::text = $2 OR 
           phone_number = $2 OR
-          ($3::text IS NOT NULL AND phone_number = $3) OR 
-          ($4::text IS NOT NULL AND email = $4)
+          phone_number = $3 OR
+          ($4::text IS NOT NULL AND phone_number = $4) OR 
+          ($5::text IS NOT NULL AND email = $5)
         )
         ORDER BY created_at DESC
         LIMIT 1
       `;
       
-      let contactResult = await pool.query(contactQuery, [userId, contactId, phone, email]);
+      let contactResult = await pool.query(contactQuery, [userId, cleanContactId, extractedPhone, phone, email]);
+      
+      // If still not found, try UUID lookup only if contactId looks like a valid UUID
+      if (contactResult.rows.length === 0 && !contactId.startsWith('phone_')) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(contactId)) {
+          const uuidQuery = `
+            SELECT id, name, phone_number, email, company, is_customer
+            FROM contacts 
+            WHERE user_id = $1 AND id = $2
+            LIMIT 1
+          `;
+          contactResult = await pool.query(uuidQuery, [userId, contactId]);
+        }
+      }
 
       let contact;
       let contactId_actual;
@@ -299,8 +316,8 @@ export class CustomersController {
           RETURNING id, name, phone_number, email, company, is_customer
         `;
 
-        // Use the phone from request body or try to extract from contactId if it looks like a phone
-        const phoneToUse = phone || (contactId.replace(/[^0-9]/g, '').length >= 10 ? contactId : null);
+        // Use extracted phone, or phone from request body, or try to extract from contactId if it looks like a phone
+        const phoneToUse = extractedPhone || phone || (contactId.replace(/[^0-9+\s]/g, '').length >= 10 ? contactId : null);
         
         if (!phoneToUse) {
           res.status(400).json({
@@ -309,6 +326,8 @@ export class CustomersController {
           });
           return;
         }
+        
+        logger.info('Creating new contact with phone:', { phoneToUse, name, email, company });
 
         const newContactResult = await pool.query(createContactQuery, [
           userId,
@@ -346,12 +365,15 @@ export class CustomersController {
           RETURNING *
         `;
 
+        // Use extractedPhone if available, then phone from request, then contact's phone
+        const customerPhone = extractedPhone || phone || contact.phone_number;
+
         const customerResult = await pool.query(insertCustomerQuery, [
           userId,
           contactId_actual,
           name,
           email || contact.email,
-          phone || contact.phone_number,
+          customerPhone,
           company || contact.company,
           originalLeadSource,
           assignedSalesRep,

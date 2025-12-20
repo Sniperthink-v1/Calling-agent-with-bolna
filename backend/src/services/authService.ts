@@ -29,6 +29,10 @@ interface JWTPayload {
   iat: number;
   exp: number;
   type?: 'access' | 'refresh';
+  // Team member specific fields
+  isTeamMember?: boolean;
+  teamMemberId?: string;
+  teamMemberRole?: 'manager' | 'agent' | 'viewer';
 }
 
 interface LoginAttempt {
@@ -95,6 +99,128 @@ class AuthService {
     };
 
     return jwt.sign(payload, this.JWT_SECRET);
+  }
+
+  /**
+   * Generate JWT tokens for team member
+   */
+  generateTeamMemberTokens(teamMember: { 
+    id: string; 
+    tenant_user_id: string; 
+    email: string; 
+    role: 'manager' | 'agent' | 'viewer';
+  }): { token: string; refreshToken: string } {
+    const accessPayload: JWTPayload = {
+      userId: teamMember.tenant_user_id, // Tenant's user ID for data access
+      email: teamMember.email,
+      type: 'access',
+      isTeamMember: true,
+      teamMemberId: teamMember.id,
+      teamMemberRole: teamMember.role,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + (configService.get('session_duration_hours') * 60 * 60),
+    };
+
+    const refreshPayload: JWTPayload = {
+      userId: teamMember.tenant_user_id,
+      email: teamMember.email,
+      type: 'refresh',
+      isTeamMember: true,
+      teamMemberId: teamMember.id,
+      teamMemberRole: teamMember.role,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // 7 days
+    };
+
+    return {
+      token: jwt.sign(accessPayload, this.JWT_SECRET),
+      refreshToken: jwt.sign(refreshPayload, this.JWT_SECRET)
+    };
+  }
+
+  /**
+   * Create session for team member
+   */
+  async createTeamMemberSession(
+    teamMemberId: string,
+    tenantUserId: string,
+    token: string,
+    refreshToken?: string
+  ): Promise<void> {
+    try {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const refreshTokenHash = refreshToken ? crypto.createHash('sha256').update(refreshToken).digest('hex') : null;
+      const sessionHours = configService.get('session_duration_hours');
+      const expiresAt = new Date(Date.now() + sessionHours * 60 * 60 * 1000);
+      const refreshExpiresAt = refreshToken ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null;
+
+      // Store in team_member_sessions table
+      const query = `
+        INSERT INTO team_member_sessions (team_member_id, tenant_user_id, token_hash, refresh_token_hash, expires_at, refresh_expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `;
+
+      await databaseService.query(query, [teamMemberId, tenantUserId, tokenHash, refreshTokenHash, expiresAt, refreshExpiresAt]);
+    } catch (error) {
+      console.error('Error creating team member session:', error);
+    }
+  }
+
+  /**
+   * Validate team member session token
+   */
+  async validateTeamMemberSession(token: string): Promise<{
+    userId: string;
+    teamMemberId: string;
+    role: 'manager' | 'agent' | 'viewer';
+    email: string;
+    name: string;
+  } | null> {
+    try {
+      const payload = await this.verifyToken(token);
+      if (!payload || !payload.isTeamMember || !payload.teamMemberId) {
+        return null;
+      }
+
+      // Check if session exists and is active
+      const sessionQuery = `
+        SELECT tms.team_member_id, tms.tenant_user_id, tm.role, tm.email, tm.name, tm.is_active
+        FROM team_member_sessions tms
+        JOIN team_members tm ON tm.id = tms.team_member_id
+        WHERE tms.token_hash = $1 AND tms.is_active = true AND tms.expires_at > CURRENT_TIMESTAMP
+      `;
+      
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const sessionResult = await databaseService.query(sessionQuery, [tokenHash]);
+      
+      if (sessionResult.rows.length === 0) {
+        return null;
+      }
+
+      const session = sessionResult.rows[0];
+      
+      // Check if team member is still active
+      if (!session.is_active) {
+        return null;
+      }
+
+      // Update session last used time
+      await databaseService.query(
+        'UPDATE team_member_sessions SET last_used = CURRENT_TIMESTAMP WHERE token_hash = $1',
+        [tokenHash]
+      );
+
+      return {
+        userId: session.tenant_user_id,
+        teamMemberId: session.team_member_id,
+        role: session.role,
+        email: session.email,
+        name: session.name
+      };
+    } catch (error) {
+      console.error('Team member session validation failed:', error);
+      return null;
+    }
   }
 
   /**

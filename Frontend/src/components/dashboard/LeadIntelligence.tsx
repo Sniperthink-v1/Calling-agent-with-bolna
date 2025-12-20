@@ -38,6 +38,8 @@ import {
   Filter,
   Check,
   ChevronDown,
+  Pencil,
+  User as UserIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -54,7 +56,10 @@ import { cn } from "@/lib/utils";
 import { apiService } from "@/services/apiService";
 import { useToast } from "@/hooks/use-toast";
 import { useLeadStages } from "@/hooks/useLeadStages";
-import type { Lead, LeadAnalyticsData } from "@/pages/Dashboard";
+import { useAuth } from "@/contexts/AuthContext";
+import { EditLeadModal, LeadIntelligenceData } from "@/components/leads/EditLeadModal";
+import type { Lead } from "@/pages/Dashboard";
+import type { LeadAnalyticsData } from "@/types/api";
 
 // API interfaces
 interface LeadGroup {
@@ -87,9 +92,17 @@ interface LeadGroup {
   requirements?: string;
   // Custom CTA - call-to-action strings extracted from analysis
   customCta?: string;
+  // Notes from contacts table
+  contactNotes?: string;
   // Lead stage for pipeline tracking
   leadStage?: string;
   contactId?: string; // Contact ID for updating lead stage
+  // Assigned team member
+  assignedTo?: {
+    id: string;
+    name: string;
+    role: string;
+  } | null;
 }
 
 interface LeadTimelineEntry {
@@ -134,7 +147,7 @@ interface LeadTimelineEntry {
   // Custom CTA - call-to-action strings extracted from analysis
   customCta?: string;
   // Email-specific fields
-  interactionType?: 'call' | 'email'; // Type of interaction
+  interactionType?: 'call' | 'email' | 'human_edit'; // Type of interaction
   emailSubject?: string; // Email subject
   emailStatus?: 'sent' | 'delivered' | 'opened' | 'failed'; // Email delivery status
   emailTo?: string; // Email recipient
@@ -249,6 +262,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const { targetLeadIdentifier, clearTargetLeadId } = useNavigation();
   const { toast } = useToast();
   const { stages, bulkUpdateLeadStage, getStageColor, bulkUpdating } = useLeadStages();
+  const { canEditLeads } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isBulkLeadStageUpdating, setIsBulkLeadStageUpdating] = useState(false);
   
@@ -306,6 +320,10 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   // Campaign creation modal state
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [campaignContactIds, setCampaignContactIds] = useState<string[]>([]);
+
+  // Edit Lead Intelligence modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<LeadGroup | null>(null);
 
   // API functions
   const fetchLeadIntelligence = async () => {
@@ -1304,8 +1322,12 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     timeline.map((interaction) => (
                       <tr 
                         key={interaction.id}
-                        className="border-b transition-colors hover:bg-muted/50 cursor-pointer hover:bg-muted-foreground/10"
-                        onClick={() => handleInteractionClick(interaction.id)}
+                        className={`border-b transition-colors cursor-pointer ${
+                          interaction.interactionType === 'human_edit'
+                            ? 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/30'
+                            : 'hover:bg-muted/50 hover:bg-muted-foreground/10'
+                        }`}
+                        onClick={() => interaction.interactionType !== 'human_edit' && handleInteractionClick(interaction.id)}
                       >
                         {/* Name Column - Show extracted name to see what AI captured */}
                         <td className="p-4 align-middle text-foreground font-medium">
@@ -1339,7 +1361,12 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         
                         {/* Platform Column */}
                         <td className="p-4 align-middle text-foreground">
-                          {interaction.interactionType === 'email' ? (
+                          {interaction.interactionType === 'human_edit' ? (
+                            <div className="flex items-center gap-1.5">
+                              <Pencil className="w-4 h-4 text-purple-600" />
+                              <span className="text-purple-700 dark:text-purple-400 font-medium">Manual Edit</span>
+                            </div>
+                          ) : interaction.interactionType === 'email' ? (
                             <div className="flex items-center gap-1.5">
                               <Mail className="w-4 h-4 text-blue-600" />
                               <span>Email</span>
@@ -1351,7 +1378,14 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         
                         {/* Call Type (Inbound/Outbound) or Email Status */}
                         <td className="p-4 align-middle text-foreground">
-                          {interaction.interactionType === 'email' ? (
+                          {interaction.interactionType === 'human_edit' ? (
+                            <Badge
+                              variant="outline"
+                              className="bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/30 dark:text-purple-400"
+                            >
+                              Updated
+                            </Badge>
+                          ) : interaction.interactionType === 'email' ? (
                             <Badge
                               variant="outline"
                               className={
@@ -1402,7 +1436,9 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         {/* Smart Summary or Email Subject */}
                         <td className="p-4 align-middle text-foreground max-w-xs">
                           <div className="text-xs truncate" title={interaction.interactionType === 'email' ? interaction.emailSubject : interaction.smartNotification || ''}>
-                            {interaction.interactionType === 'email' 
+                            {interaction.interactionType === 'human_edit'
+                              ? <span className="text-purple-600 dark:text-purple-400">Manual intelligence update</span>
+                              : interaction.interactionType === 'email' 
                               ? (interaction.emailSubject || "—")
                               : (interaction.smartNotification || "—")
                             }
@@ -1411,7 +1447,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         
                         {/* Duration */}
                         <td className="p-4 align-middle text-foreground text-xs">
-                          {interaction.interactionType === 'email' ? '—' : (interaction.duration || "—")}
+                          {interaction.interactionType === 'email' || interaction.interactionType === 'human_edit' ? '—' : (interaction.duration || "—")}
                         </td>
                         
                         {/* Analytics - Each on new line */}
@@ -1861,9 +1897,11 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                   showAllLabel="All CTAs"
                 />
               </th>
+              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Notes</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Escalated</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">No. of Interactions</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Interacted Agents</th>
+              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Assigned To</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Last Interaction</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Date</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Status</th>
@@ -2050,6 +2088,26 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     <span className="text-muted-foreground">-</span>
                   )}
                 </td>
+                {/* Notes */}
+                <td className="p-4 align-middle text-xs text-foreground max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                  {contact.contactNotes ? (
+                    <details className="cursor-pointer group">
+                      <summary className="list-none flex items-center gap-1 hover:text-primary">
+                        <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+                        <span className="truncate max-w-[160px]" title={contact.contactNotes}>
+                          {contact.contactNotes.length > 50
+                            ? contact.contactNotes.substring(0, 50) + '...'
+                            : contact.contactNotes}
+                        </span>
+                      </summary>
+                      <div className="mt-2 p-2 bg-muted/50 rounded text-xs whitespace-pre-wrap max-h-[150px] overflow-y-auto">
+                        {contact.contactNotes}
+                      </div>
+                    </details>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </td>
                 <td className="p-4 align-middle">
                   <Badge
                     variant={contact.escalatedToHuman ? "destructive" : "secondary"}
@@ -2062,6 +2120,19 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 </td>
                 <td className="p-4 align-middle text-foreground">
                   {contact.interactedAgents.join(', ')}
+                </td>
+                <td className="p-4 align-middle text-foreground">
+                  {contact.assignedTo ? (
+                    <div className="flex items-center gap-2">
+                      <UserIcon className="w-3 h-3 text-muted-foreground" />
+                      <span>{contact.assignedTo.name}</span>
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {contact.assignedTo.role}
+                      </Badge>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
                 </td>
                 <td className="p-4 align-middle text-foreground">
                   {new Date(contact.lastContact).toLocaleDateString('en-US', { 
@@ -2169,15 +2240,31 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                   )}
                 </td>
                 <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={() => handleConvertToCustomer(contact)}
-                    className="h-8 px-3 text-xs"
-                  >
-                    <UserPlus className="w-3 h-3 mr-1" />
-                    Convert
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {canEditLeads() && contact.phone && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingContact(contact);
+                          setShowEditModal(true);
+                        }}
+                        className="h-8 px-2"
+                        title="Edit Lead Intelligence"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => handleConvertToCustomer(contact)}
+                      className="h-8 px-3 text-xs"
+                    >
+                      <UserPlus className="w-3 h-3 mr-1" />
+                      Convert
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -2452,6 +2539,36 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
         onClose={handleCampaignModalClose}
         preSelectedContacts={campaignContactIds}
       />
+
+      {/* Edit Lead Intelligence Modal */}
+      {editingContact && (
+        <EditLeadModal
+          open={showEditModal}
+          onOpenChange={(open) => {
+            setShowEditModal(open);
+            if (!open) setEditingContact(null);
+          }}
+          phoneNumber={editingContact.phone || ''}
+          leadName={editingContact.name}
+          currentData={{
+            intent_level: editingContact.recentIntentLevel || 'Medium',
+            urgency_level: editingContact.recentTimelineUrgency || 'Medium',
+            budget_constraint: editingContact.recentBudgetConstraint || 'Medium',
+            fit_alignment: editingContact.recentFitAlignment || 'Medium',
+            engagement_health: editingContact.recentEngagementLevel || 'Medium',
+            lead_status_tag: editingContact.recentLeadTag || 'Cold',
+            custom_cta: editingContact.customCta || '',
+            requirements: editingContact.requirements || '',
+            contact_notes: editingContact.contactNotes || '',
+            assigned_to: null,
+          }}
+          onSave={() => {
+            setShowEditModal(false);
+            setEditingContact(null);
+            fetchLeadIntelligence();
+          }}
+        />
+      )}
     </div>
   );
 };

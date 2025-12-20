@@ -1,5 +1,8 @@
 import { Request } from 'express';
 
+// Team member role type
+export type TeamMemberRole = 'manager' | 'agent' | 'viewer';
+
 // Authentication types
 export interface AuthUser {
   id: string;
@@ -10,6 +13,10 @@ export interface AuthUser {
   timezone?: string;
   timezone_auto_detected?: boolean;
   timezone_manually_set?: boolean;
+  // Team member fields (present when user is a team member)
+  isTeamMember?: boolean;
+  teamMemberId?: string;
+  teamMemberRole?: TeamMemberRole;
 }
 
 export interface AuthenticatedRequest extends Omit<Request, 'user'> {
@@ -32,4 +39,8 @@ export interface TokenPayload {
   email: string;
   iat: number;
   exp: number;
+  // Team member fields
+  isTeamMember?: boolean;
+  teamMemberId?: string;
+  teamMemberRole?: TeamMemberRole;
 }

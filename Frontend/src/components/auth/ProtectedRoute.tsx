@@ -23,11 +23,11 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  // Check if user email is verified (only for non-Google login users)
-  // Google login users are automatically considered verified
-  if (user && !user.emailVerified) {
+  // Check if user email is verified (only for non-Google login users and non-team members)
+  // Google login users and team members are automatically considered verified
+  if (user && !user.emailVerified && !user.isTeamMember) {
     // Check if the user signed up with Google (Google users should be auto-verified)
-    // If not verified and not a Google user, show email verification page
+    // If not verified and not a Google user or team member, show email verification page
     return (
       <EmailVerification 
         userEmail={user.email}

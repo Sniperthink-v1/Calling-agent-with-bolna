@@ -1105,6 +1105,25 @@ If you have any questions, please don't hesitate to reach out.
       text,
     });
   }
+
+  /**
+   * Send team member invite email
+   */
+  async sendTeamInviteEmail(params: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<boolean> {
+    const { to, subject, html, text } = params;
+
+    return await this.sendEmail({
+      to,
+      subject,
+      html,
+      text,
+    });
+  }
 }
 
 export const emailService = new EmailService();

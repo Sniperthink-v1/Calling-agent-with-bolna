@@ -26,6 +26,14 @@ interface AuthContextType {
   sessionValidated: boolean;
   isAdminUser: () => boolean;
   isSuperAdminUser: () => boolean;
+  // Team member helpers
+  isTeamMember: () => boolean;
+  isOwner: () => boolean;
+  isManager: () => boolean;
+  isAgent: () => boolean;
+  isViewer: () => boolean;
+  canEditLeads: () => boolean;
+  canManageTeam: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -462,6 +470,39 @@ function AuthContextProvider({ children }: { children: React.ReactNode }) {
     return user?.role === 'super_admin';
   };
 
+  // Team member role helpers
+  const isTeamMember = (): boolean => {
+    return user?.isTeamMember === true;
+  };
+
+  const isOwner = (): boolean => {
+    return !user?.isTeamMember;
+  };
+
+  const isManager = (): boolean => {
+    return user?.isTeamMember === true && user?.teamMemberRole === 'manager';
+  };
+
+  const isAgent = (): boolean => {
+    return user?.isTeamMember === true && user?.teamMemberRole === 'agent';
+  };
+
+  const isViewer = (): boolean => {
+    return user?.isTeamMember === true && user?.teamMemberRole === 'viewer';
+  };
+
+  // Permission helpers
+  const canEditLeads = (): boolean => {
+    // Owners, managers, and agents can edit leads (viewers cannot)
+    return !user?.isTeamMember || 
+           (user?.isTeamMember && user?.teamMemberRole !== 'viewer');
+  };
+
+  const canManageTeam = (): boolean => {
+    // Only account owners can manage team members
+    return !user?.isTeamMember;
+  };
+
   const clearError = () => {
     setError(null);
   };
@@ -481,6 +522,14 @@ function AuthContextProvider({ children }: { children: React.ReactNode }) {
     sessionValidated,
     isAdminUser: () => isAdminUser(user),
     isSuperAdminUser: () => isSuperAdminUser(user),
+    // Team member helpers
+    isTeamMember,
+    isOwner,
+    isManager,
+    isAgent,
+    isViewer,
+    canEditLeads,
+    canManageTeam,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

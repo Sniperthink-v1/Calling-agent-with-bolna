@@ -35,13 +35,6 @@ class LeadAnalyticsService {
       lead_status_tag: analytics.lead_status_tag,
       demo_book_datetime: analytics.demo_book_datetime || null,
       
-      // Convert boolean CTAs back to strings for OpenAI format
-      cta_pricing_clicked: analytics.cta_pricing_clicked ? 'Yes' : 'No',
-      cta_demo_clicked: analytics.cta_demo_clicked ? 'Yes' : 'No',
-      cta_followup_clicked: analytics.cta_followup_clicked ? 'Yes' : 'No',
-      cta_sample_clicked: analytics.cta_sample_clicked ? 'Yes' : 'No',
-      cta_escalated_to_human: analytics.cta_escalated_to_human ? 'Yes' : 'No',
-      
       // Reasoning (already in correct format from JSONB)
       reasoning: analytics.reasoning,
       
@@ -53,6 +46,7 @@ class LeadAnalyticsService {
         smartnotification: analytics.smart_notification || null,
         requirements: analytics.requirements ?? null,
         custom_cta: analytics.custom_cta ?? null,
+        in_detail_summary: analytics.in_detail_summary ?? null,
       },
     };
   }
@@ -96,32 +90,17 @@ class LeadAnalyticsService {
         cta_behavior: ''
       },
       
-      // CTA Interactions
-      cta_interactions: {
-        pricing_clicked: analysis.cta_pricing_clicked === 'Yes',
-        demo_clicked: analysis.cta_demo_clicked === 'Yes',
-        followup_clicked: analysis.cta_followup_clicked === 'Yes',
-        sample_clicked: analysis.cta_sample_clicked === 'Yes',
-        escalated_to_human: analysis.cta_escalated_to_human === 'Yes',
-      },
-      
       // Extraction data
       company_name: analysis.extraction?.company_name ?? undefined,
       extracted_name: analysis.extraction?.name ?? undefined,
       extracted_email: analysis.extraction?.email_address ?? undefined,
-      
-      // CTA booleans
-      cta_pricing_clicked: analysis.cta_pricing_clicked === 'Yes',
-      cta_demo_clicked: analysis.cta_demo_clicked === 'Yes',
-      cta_followup_clicked: analysis.cta_followup_clicked === 'Yes',
-      cta_sample_clicked: analysis.cta_sample_clicked === 'Yes',
-      cta_escalated_to_human: analysis.cta_escalated_to_human === 'Yes',
       
       // Enhanced analytics
       smart_notification: analysis.extraction?.smartnotification ?? undefined,
       demo_book_datetime: analysis.demo_book_datetime ?? undefined,
       requirements: analysis.extraction?.requirements ?? undefined,
       custom_cta: analysis.extraction?.custom_cta ?? undefined,
+      in_detail_summary: analysis.extraction?.in_detail_summary ?? undefined,
     };
   }
 
@@ -168,32 +147,17 @@ class LeadAnalyticsService {
         cta_behavior: ''
       },
       
-      // CTA Interactions (aggregated)
-      cta_interactions: {
-        pricing_clicked: analysis.cta_pricing_clicked === 'Yes',
-        demo_clicked: analysis.cta_demo_clicked === 'Yes',
-        followup_clicked: analysis.cta_followup_clicked === 'Yes',
-        sample_clicked: analysis.cta_sample_clicked === 'Yes',
-        escalated_to_human: analysis.cta_escalated_to_human === 'Yes',
-      },
-      
       // Enhanced extraction
       company_name: analysis.extraction?.company_name ?? undefined,
       extracted_name: analysis.extraction?.name ?? undefined,
       extracted_email: analysis.extraction?.email_address ?? undefined,
-      
-      // CTA booleans
-      cta_pricing_clicked: analysis.cta_pricing_clicked === 'Yes',
-      cta_demo_clicked: analysis.cta_demo_clicked === 'Yes',
-      cta_followup_clicked: analysis.cta_followup_clicked === 'Yes',
-      cta_sample_clicked: analysis.cta_sample_clicked === 'Yes',
-      cta_escalated_to_human: analysis.cta_escalated_to_human === 'Yes',
       
       // Enhanced analytics
       smart_notification: analysis.extraction?.smartnotification ?? undefined,
       demo_book_datetime: analysis.demo_book_datetime ?? undefined,
       requirements: analysis.extraction?.requirements ?? undefined,
       custom_cta: analysis.extraction?.custom_cta ?? undefined,
+      in_detail_summary: analysis.extraction?.in_detail_summary ?? undefined,
     };
   }
 

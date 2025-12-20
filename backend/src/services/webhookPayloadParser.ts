@@ -19,15 +19,6 @@ export interface AnalysisData {
   lead_status_tag: string;
   reasoning: string;
   
-  // CTA interactions as structured object
-  cta_interactions: {
-    cta_pricing_clicked: boolean;
-    cta_demo_clicked: boolean;
-    cta_followup_clicked: boolean;
-    cta_sample_clicked: boolean;
-    cta_escalated_to_human: boolean;
-  };
-  
   // Additional analysis fields
   call_successful: string;
   transcript_summary: string;
@@ -126,15 +117,6 @@ export class WebhookPayloadParser {
         total_score: parsedAnalysisValue.total_score,
         lead_status_tag: parsedAnalysisValue.lead_status_tag,
         reasoning: parsedAnalysisValue.reasoning,
-        
-        // CTA interactions as structured object
-        cta_interactions: {
-          cta_pricing_clicked: parsedAnalysisValue.cta_pricing_clicked === 'Yes',
-          cta_demo_clicked: parsedAnalysisValue.cta_demo_clicked === 'Yes',
-          cta_followup_clicked: parsedAnalysisValue.cta_followup_clicked === 'Yes',
-          cta_sample_clicked: parsedAnalysisValue.cta_sample_clicked === 'Yes',
-          cta_escalated_to_human: parsedAnalysisValue.cta_escalated_to_human === 'Yes'
-        },
         
         // Additional fields from analysis (convert string booleans)
         call_successful: webhookData.analysis.call_successful === 'true' || webhookData.analysis.call_successful === 'True' || webhookData.analysis.call_successful === true ? 'true' : 'false',

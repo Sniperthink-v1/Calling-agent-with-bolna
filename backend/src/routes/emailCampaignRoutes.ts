@@ -96,9 +96,9 @@ router.get('/:id', async (req: Request, res: Response): Promise<any> => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const campaign = await EmailCampaignService.getEmailCampaign(req.params.id, userId);
+    const campaignDetails = await EmailCampaignService.getEmailCampaignDetails(req.params.id, userId);
 
-    if (!campaign) {
+    if (!campaignDetails) {
       return res.status(404).json({
         success: false,
         error: 'Email campaign not found',
@@ -107,7 +107,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<any> => {
 
     res.status(200).json({
       success: true,
-      data: campaign,
+      data: campaignDetails,
     });
   } catch (error) {
     logger.error('Error fetching email campaign:', error);

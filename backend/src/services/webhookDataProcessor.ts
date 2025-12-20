@@ -15,11 +15,6 @@ export interface EnhancedLeadData {
   companyName: string | null;
   extractedName: string | null;
   extractedEmail: string | null;
-  ctaPricingClicked: boolean;
-  ctaDemoClicked: boolean;
-  ctaFollowupClicked: boolean;
-  ctaSampleClicked: boolean;
-  ctaEscalatedToHuman: boolean;
   smartNotification: string | null;
   demoBookDatetime: string | null;
 }
@@ -364,13 +359,6 @@ export class WebhookDataProcessor {
       const extractedName = extraction.name || null;
       const extractedEmail = extraction.email_address || null;
 
-      // Extract CTA interactions (convert "Yes"/"No" strings to boolean)
-      const ctaPricingClicked = parsedData.cta_pricing_clicked === 'Yes';
-      const ctaDemoClicked = parsedData.cta_demo_clicked === 'Yes';
-      const ctaFollowupClicked = parsedData.cta_followup_clicked === 'Yes';
-      const ctaSampleClicked = parsedData.cta_sample_clicked === 'Yes';
-      const ctaEscalatedToHuman = parsedData.cta_escalated_to_human === 'Yes';
-
       // Extract new fields: smart notification and demo booking
       const smartNotification = extraction.smartnotification || null;
       const demoBookDatetime = parsedData.demo_book_datetime || null;
@@ -379,11 +367,6 @@ export class WebhookDataProcessor {
         companyName,
         extractedName,
         extractedEmail,
-        ctaPricingClicked,
-        ctaDemoClicked,
-        ctaFollowupClicked,
-        ctaSampleClicked,
-        ctaEscalatedToHuman,
         smartNotification,
         demoBookDatetime
       };
@@ -392,11 +375,6 @@ export class WebhookDataProcessor {
         companyName,
         extractedName,
         extractedEmail,
-        ctaPricingClicked,
-        ctaDemoClicked,
-        ctaFollowupClicked,
-        ctaSampleClicked,
-        ctaEscalatedToHuman,
         smartNotification,
         demoBookDatetime
       });
