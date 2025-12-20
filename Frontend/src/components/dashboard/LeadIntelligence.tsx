@@ -103,6 +103,8 @@ interface LeadGroup {
     name: string;
     role: string;
   } | null;
+  // Chat summary from external server (Chat Agent)
+  chatSummary?: string;
 }
 
 interface LeadTimelineEntry {
@@ -147,11 +149,15 @@ interface LeadTimelineEntry {
   // Custom CTA - call-to-action strings extracted from analysis
   customCta?: string;
   // Email-specific fields
-  interactionType?: 'call' | 'email' | 'human_edit'; // Type of interaction
+  interactionType?: 'call' | 'email' | 'human_edit' | 'chat'; // Type of interaction
   emailSubject?: string; // Email subject
   emailStatus?: 'sent' | 'delivered' | 'opened' | 'failed'; // Email delivery status
   emailTo?: string; // Email recipient
   emailFrom?: string; // Email sender
+  // Chat-specific fields (from Chat Agent Server extractions)
+  inDetailSummary?: string; // Full summary from chat extraction
+  conversationId?: string; // Conversation ID from chat
+  messageCount?: number; // Number of messages in conversation
 }
 
 interface CreateFollowUpRequest {
@@ -325,13 +331,49 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState<LeadGroup | null>(null);
 
+  // Chat summaries state (from external Chat Agent Server)
+  const [chatSummaries, setChatSummaries] = useState<Record<string, string>>({});
+  const [chatSummariesLoading, setChatSummariesLoading] = useState(false);
+
+  // Fetch chat summaries from external Chat Agent Server
+  const fetchChatSummaries = async (contactsList: LeadGroup[]) => {
+    try {
+      // Get phone numbers from contacts that have phones
+      const phoneNumbers = contactsList
+        .filter(c => c.phone)
+        .map(c => c.phone!)
+        .filter(Boolean);
+
+      if (phoneNumbers.length === 0) {
+        return;
+      }
+
+      setChatSummariesLoading(true);
+      
+      const response = await apiService.getBatchExtractionSummaries(phoneNumbers);
+      
+      if (response.success && response.data) {
+        setChatSummaries(response.data as Record<string, string>);
+      }
+    } catch (error) {
+      // Silently fail - chat summaries are optional
+      console.warn('Failed to fetch chat summaries:', error);
+    } finally {
+      setChatSummariesLoading(false);
+    }
+  };
+
   // API functions
   const fetchLeadIntelligence = async () => {
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getLeadIntelligence();
-      setContacts(response.data || response as any);
+      const contactsData = response.data || response as any;
+      setContacts(contactsData);
+      
+      // Fetch chat summaries for all contacts in background
+      fetchChatSummaries(contactsData);
     } catch (error) {
       console.error('Error fetching lead intelligence:', error);
       setError('Failed to load lead intelligence data');
@@ -340,11 +382,75 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     }
   };
 
+  // Fetch chat extractions and merge with call timeline
+  const fetchChatExtractions = async (phone: string): Promise<LeadTimelineEntry[]> => {
+    try {
+      const response = await apiService.getFullExtractions(phone);
+      
+      if (response.success && response.data && response.data.length > 0) {
+        // Convert chat extractions to timeline entries
+        return response.data.map((extraction: any) => ({
+          id: `chat_${extraction.extraction_id}`,
+          leadName: extraction.name || undefined,
+          interactionAgent: extraction.agent_name || 'Chat Agent',
+          interactionDate: extraction.extracted_at,
+          platform: extraction.platform || 'WhatsApp',
+          status: extraction.lead_status_tag,
+          smartNotification: extraction.smart_notification,
+          engagementLevel: extraction.engagement_health,
+          intentLevel: extraction.intent_level,
+          budgetConstraint: extraction.budget_constraint,
+          timelineUrgency: extraction.urgency_level,
+          fitAlignment: extraction.fit_alignment,
+          extractedEmail: extraction.email,
+          totalScore: extraction.total_score,
+          intentScore: extraction.intent_score,
+          urgencyScore: extraction.urgency_score,
+          budgetScore: extraction.budget_score,
+          fitScore: extraction.fit_score,
+          engagementScore: extraction.engagement_score,
+          requirements: extraction.requirements,
+          customCta: extraction.custom_cta,
+          interactionType: 'chat' as const,
+          inDetailSummary: extraction.in_detail_summary,
+          conversationId: extraction.conversation_id,
+          messageCount: extraction.message_count_at_extraction,
+        }));
+      }
+      return [];
+    } catch (error) {
+      console.warn('Failed to fetch chat extractions:', error);
+      return [];
+    }
+  };
+
   const fetchLeadTimeline = async (groupId: string) => {
     try {
       setTimelineLoading(true);
+      
+      // Fetch call timeline from main backend
       const response = await apiService.getLeadIntelligenceTimeline(groupId);
-      setTimeline(response.data || response as any);
+      const callTimeline = response.data || response as any;
+      
+      // Get the phone number from groupId if it's a phone-based group
+      const [groupType, ...groupKeyParts] = groupId.split('_');
+      const groupKey = groupKeyParts.join('_');
+      
+      // If this is a phone-based group, also fetch chat extractions
+      if (groupType === 'phone' && groupKey) {
+        const chatTimeline = await fetchChatExtractions(groupKey);
+        
+        // Merge and sort by date (most recent first)
+        const mergedTimeline = [...callTimeline, ...chatTimeline].sort((a, b) => {
+          const dateA = new Date(a.interactionDate).getTime();
+          const dateB = new Date(b.interactionDate).getTime();
+          return dateB - dateA;
+        });
+        
+        setTimeline(mergedTimeline);
+      } else {
+        setTimeline(callTimeline);
+      }
     } catch (error) {
       console.error('Error fetching lead timeline:', error);
       setTimeline([]);
@@ -1322,12 +1428,14 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     timeline.map((interaction) => (
                       <tr 
                         key={interaction.id}
-                        className={`border-b transition-colors cursor-pointer ${
+                        className={`border-b transition-colors ${
                           interaction.interactionType === 'human_edit'
                             ? 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/30'
-                            : 'hover:bg-muted/50 hover:bg-muted-foreground/10'
+                            : interaction.interactionType === 'chat'
+                            ? 'bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/30 cursor-default'
+                            : 'hover:bg-muted/50 hover:bg-muted-foreground/10 cursor-pointer'
                         }`}
-                        onClick={() => interaction.interactionType !== 'human_edit' && handleInteractionClick(interaction.id)}
+                        onClick={() => interaction.interactionType !== 'human_edit' && interaction.interactionType !== 'chat' && handleInteractionClick(interaction.id)}
                       >
                         {/* Name Column - Show extracted name to see what AI captured */}
                         <td className="p-4 align-middle text-foreground font-medium">
@@ -1371,6 +1479,11 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                               <Mail className="w-4 h-4 text-blue-600" />
                               <span>Email</span>
                             </div>
+                          ) : interaction.interactionType === 'chat' ? (
+                            <div className="flex items-center gap-1.5">
+                              <MessageSquare className="w-4 h-4 text-green-600" />
+                              <span className="text-green-700 dark:text-green-400">{interaction.platform || 'Chat'}</span>
+                            </div>
                           ) : (
                             interaction.platform || "—"
                           )}
@@ -1384,6 +1497,13 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                               className="bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/30 dark:text-purple-400"
                             >
                               Updated
+                            </Badge>
+                          ) : interaction.interactionType === 'chat' ? (
+                            <Badge
+                              variant="outline"
+                              className="bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400"
+                            >
+                              {interaction.messageCount ? `${interaction.messageCount} msgs` : 'Chat'}
                             </Badge>
                           ) : interaction.interactionType === 'email' ? (
                             <Badge
@@ -1435,11 +1555,19 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                         
                         {/* Smart Summary or Email Subject */}
                         <td className="p-4 align-middle text-foreground max-w-xs">
-                          <div className="text-xs truncate" title={interaction.interactionType === 'email' ? interaction.emailSubject : interaction.smartNotification || ''}>
+                          <div className="text-xs truncate" title={
+                            interaction.interactionType === 'email' 
+                              ? interaction.emailSubject 
+                              : interaction.interactionType === 'chat'
+                              ? interaction.inDetailSummary || interaction.smartNotification
+                              : interaction.smartNotification || ''
+                          }>
                             {interaction.interactionType === 'human_edit'
                               ? <span className="text-purple-600 dark:text-purple-400">Manual intelligence update</span>
                               : interaction.interactionType === 'email' 
                               ? (interaction.emailSubject || "—")
+                              : interaction.interactionType === 'chat'
+                              ? (interaction.inDetailSummary || interaction.smartNotification || "—")
                               : (interaction.smartNotification || "—")
                             }
                           </div>
@@ -1887,6 +2015,12 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                   showAllLabel="All"
                 />
               </th>
+              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
+                <div className="flex items-center gap-1">
+                  <span>Summary</span>
+                  {chatSummariesLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                </div>
+              </th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Requirements</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
                 <ExcelColumnFilter
@@ -2050,6 +2184,38 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}
+                </td>
+                {/* Summary column - from Chat Agent Server */}
+                <td className="p-4 align-middle text-xs text-foreground max-w-[280px]" onClick={(e) => e.stopPropagation()}>
+                  {(() => {
+                    // Get summary from chat summaries using phone number
+                    const summary = contact.phone ? (chatSummaries[contact.phone] as any)?.in_detail_summary : null;
+                    if (summary) {
+                      return (
+                        <details className="cursor-pointer group">
+                          <summary className="list-none flex items-center gap-1 hover:text-primary">
+                            <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+                            <span className="truncate max-w-[230px]" title={summary}>
+                              {summary.length > 80
+                                ? summary.substring(0, 80) + '...'
+                                : summary}
+                            </span>
+                          </summary>
+                          <div className="mt-2 p-2 bg-muted/50 rounded text-xs whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                            {summary}
+                          </div>
+                        </details>
+                      );
+                    }
+                    return chatSummariesLoading ? (
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Loading...
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    );
+                  })()}
                 </td>
                 <td className="p-4 align-middle text-xs text-foreground max-w-[240px]" onClick={(e) => e.stopPropagation()}>
                   {contact.requirements ? (

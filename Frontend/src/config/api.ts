@@ -138,6 +138,13 @@ export const API_ENDPOINTS = {
     INTELLIGENCE_TEAM_MEMBERS: `${API_URL}/lead-intelligence/team-members`,
   },
 
+  // Extractions (Chat Agent Server proxy)
+  EXTRACTIONS: {
+    SUMMARIES: (phone: string) => `${API_URL}/extractions/summaries?customer_phone=${encodeURIComponent(phone)}`,
+    FULL: (phone: string) => `${API_URL}/extractions?customer_phone=${encodeURIComponent(phone)}`,
+    BATCH_SUMMARIES: `${API_URL}/extractions/batch-summaries`,
+  },
+
   // Team Members
   TEAM_MEMBERS: {
     LIST: `${API_URL}/team-members`,

@@ -38,6 +38,7 @@ import whatsappRoutes from './whatsapp';
 import leadStageRoutes from './leadStageRoutes';
 import chatLeadsRoutes from './chatLeads';
 import teamMemberRoutes from './teamMembers';
+import extractionsRoutes from './extractions';
 
 // Import rate limiting middleware
 import { generalRateLimit, authRateLimit } from '../middleware/rateLimit';
@@ -108,6 +109,7 @@ router.use('/whatsapp', authenticatedRateLimit, whatsappRoutes); // WhatsApp tem
 router.use('/lead-stages', authenticatedRateLimit, leadStageRoutes); // Lead stage management
 router.use('/chat-leads', authenticatedRateLimit, chatLeadsRoutes); // Chat Agent leads and messages proxy
 router.use('/team-members', generalRateLimit, teamMemberRoutes); // Team member management (has mixed auth)
+router.use('/extractions', authenticatedRateLimit, extractionsRoutes); // Chat Agent extractions proxy for summaries
 
 // Monitoring routes - no rate limiting
 router.use('/monitoring', monitoringRoutes);

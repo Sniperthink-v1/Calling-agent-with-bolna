@@ -2652,6 +2652,37 @@ class ApiService {
   async getTeamMembersForAssignment(): Promise<ApiResponse<{ team_members: AssignableTeamMember[]; include_owner: boolean }>> {
     return this.request<{ team_members: AssignableTeamMember[]; include_owner: boolean }>(API_ENDPOINTS.LEADS.INTELLIGENCE_TEAM_MEMBERS);
   }
+
+  // ============================================================================
+  // EXTRACTIONS API (Chat Agent Server - External Summaries)
+  // ============================================================================
+
+  /**
+   * Get extraction summaries for a phone number
+   * Returns lightweight summary data including in_detail_summary
+   */
+  async getExtractionSummaries(phone: string): Promise<ApiResponse<ExtractionSummaryResponse>> {
+    return this.request<ExtractionSummaryResponse>(API_ENDPOINTS.EXTRACTIONS.SUMMARIES(phone));
+  }
+
+  /**
+   * Get full extraction data for a phone number
+   * Returns complete extraction data including all scoring fields
+   */
+  async getFullExtractions(phone: string): Promise<ApiResponse<FullExtractionResponse>> {
+    return this.request<FullExtractionResponse>(API_ENDPOINTS.EXTRACTIONS.FULL(phone));
+  }
+
+  /**
+   * Get batch extraction summaries for multiple phone numbers
+   * More efficient for loading summaries in table views
+   */
+  async getBatchExtractionSummaries(phoneNumbers: string[]): Promise<ApiResponse<BatchExtractionSummaryResponse>> {
+    return this.request<BatchExtractionSummaryResponse>(API_ENDPOINTS.EXTRACTIONS.BATCH_SUMMARIES, {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumbers }),
+    });
+  }
 }
 
 // Team Member Types
@@ -2718,6 +2749,106 @@ interface AssignableTeamMember {
   id: string;
   name: string;
   role: 'manager' | 'agent';
+}
+
+// Extraction types (from Chat Agent Server)
+interface ExtractionSummary {
+  extraction_id: string;
+  conversation_id: string;
+  customer_phone: string;
+  in_detail_summary: string | null;
+  smart_notification: string | null;
+  lead_status_tag: string;
+  total_score: number;
+  extracted_at: string;
+  is_latest: boolean;
+  conversation_active: boolean;
+}
+
+interface ExtractionSummaryResponse {
+  success: boolean;
+  data: ExtractionSummary[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+  timestamp: string;
+  correlationId: string;
+}
+
+interface FullExtraction {
+  extraction_id: string;
+  conversation_id: string;
+  user_id: string;
+  customer_phone: string;
+  extracted_at: string;
+  is_latest: boolean;
+  message_count_at_extraction: number;
+  name: string | null;
+  email: string | null;
+  company: string | null;
+  intent_level: string;
+  intent_score: number;
+  urgency_level: string;
+  urgency_score: number;
+  budget_constraint: string;
+  budget_score: number;
+  fit_alignment: string;
+  fit_score: number;
+  engagement_health: string;
+  engagement_score: number;
+  total_score: number;
+  lead_status_tag: string;
+  demo_book_datetime: string | null;
+  reasoning: {
+    intent: string;
+    urgency: string;
+    budget: string;
+    fit: string;
+    engagement: string;
+    cta_behavior: string;
+  };
+  smart_notification: string | null;
+  requirements: string | null;
+  custom_cta: string | null;
+  in_detail_summary: string | null;
+  created_at: string;
+  updated_at: string;
+  agent_id: string;
+  conversation_active: boolean;
+  agent_name: string;
+  phone_number_id: string;
+  platform: string;
+  phone_display_name: string;
+}
+
+interface FullExtractionResponse {
+  success: boolean;
+  data: FullExtraction[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+  timestamp: string;
+  correlationId: string;
+}
+
+interface BatchExtractionSummary {
+  in_detail_summary: string | null;
+  smart_notification: string | null;
+  lead_status_tag: string;
+  total_score: number;
+  extracted_at: string;
+}
+
+interface BatchExtractionSummaryResponse {
+  success: boolean;
+  data: Record<string, BatchExtractionSummary>;
+  timestamp: string;
 }
 
 // Create and configure the API service instance
