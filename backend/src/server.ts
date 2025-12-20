@@ -328,6 +328,9 @@ async function startServer() {
   // Run database migrations before starting the server
   await runMigrations();
 
+  // Pool validation
+  await database.poolService.initValidation();
+
   // Clear rate limits on server startup to unblock any previously blocked IPs
   const { clearRateLimitStore } = require('./middleware/rateLimit');
   if (clearRateLimitStore) {
