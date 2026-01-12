@@ -337,7 +337,7 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const response = await authenticatedFetch('/api/users/profile');
+        const response = await authenticatedFetch('/api/user/profile');
         if (response.ok) {
           const data = await response.json();
           const profileTimezone = data.user?.timezone || detectBrowserTimezone();
