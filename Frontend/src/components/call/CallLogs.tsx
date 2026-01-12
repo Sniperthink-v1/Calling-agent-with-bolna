@@ -280,7 +280,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
     search: debouncedSearchTerm || undefined,
     agentNames: columnFilters.agents.length > 0 ? columnFilters.agents : (selectedAgents && selectedAgents.length > 0 ? selectedAgents : undefined),
     campaignId: columnFilters.campaigns.length > 0 ? columnFilters.campaigns[0] : (selectedCampaign || undefined),
-    status: columnFilters.status.length > 0 ? columnFilters.status[0] : undefined, // Server-side filtering for status
+    status: columnFilters.status.length > 0 ? columnFilters.status : undefined, // Server-side filtering for status (multiple)
     leadType: columnFilters.leadType.length > 0 ? columnFilters.leadType[0] as 'inbound' | 'outbound' : undefined,
     startDate: startDate ? startDate.toISOString() : undefined,
     endDate: endDate ? endDate.toISOString() : undefined,
@@ -782,13 +782,13 @@ const CallLogs: React.FC<CallLogsProps> = ({
             title="Status"
             options={[
               { value: 'completed', label: 'Completed' },
-              { value: 'failed', label: 'Failed' },
-              { value: 'in_progress', label: 'In Progress' },
-              { value: 'cancelled', label: 'Cancelled' },
-              { value: 'busy', label: 'Busy' },
-              { value: 'no-answer', label: 'No Answer' },
+              { value: 'in-progress', label: 'In Progress' },
+              { value: 'call-disconnected', label: 'Call Disconnected' },
               { value: 'ringing', label: 'Ringing' },
               { value: 'initiated', label: 'Initiated' },
+              { value: 'failed', label: 'Failed' },
+              { value: 'busy', label: 'Busy' },
+              { value: 'no-answer', label: 'No Answer' },
             ]}
             selectedValues={columnFilters.status}
             onSelectionChange={(values) => updateColumnFilter('status', values)}

@@ -571,7 +571,7 @@ export interface CallListOptions {
   search?: string;
   agentNames?: string[];
   campaignId?: string; // Filter by campaign ID
-  status?: string; // Filter by call status or lifecycle status (completed, failed, busy, no-answer, etc.)
+  status?: string | string[]; // Array of lifecycle statuses for filtering (completed, failed, busy, no-answer, etc.)
   leadType?: 'inbound' | 'outbound'; // Filter by lead type
   callLifecycleStatus?: string; // Filter by lifecycle status (busy, no-answer, etc.)
   startDate?: string; // Filter by start date (ISO string)

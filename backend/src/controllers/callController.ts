@@ -40,16 +40,24 @@ export class CallController {
         filters.search = req.query.search.trim();
       }
 
-      // Status filter - can be call status or lifecycle status
-      if (req.query.status && typeof req.query.status === 'string') {
-        const validStatuses = [
-          // Call statuses
-          'completed', 'failed', 'in_progress', 'cancelled',
-          // Lifecycle statuses
-          'busy', 'no-answer', 'ringing', 'initiated', 'call-disconnected'
+      // Status filter - array of lifecycle statuses
+      if (req.query.status) {
+        const validLifecycleStatuses = [
+          'initiated', 'ringing', 'in-progress', 'call-disconnected', 
+          'completed', 'no-answer', 'busy', 'failed'
         ];
-        if (validStatuses.includes(req.query.status)) {
-          filters.status = req.query.status as any;
+        
+        // Handle both single status and array of statuses
+        const statusParam = Array.isArray(req.query.status) 
+          ? req.query.status 
+          : [req.query.status];
+        
+        const validStatuses = statusParam.filter((s): s is string => 
+          typeof s === 'string' && validLifecycleStatuses.includes(s)
+        );
+        
+        if (validStatuses.length > 0) {
+          filters.status = validStatuses;
         }
       }
 

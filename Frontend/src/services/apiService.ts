@@ -1257,6 +1257,12 @@ class ApiService {
       if (options.status) queryParams.append('status', options.status);
       if (options.leadType) queryParams.append('leadType', options.leadType);
       if (options.callLifecycleStatus) queryParams.append('callLifecycleStatus', options.callLifecycleStatus);
+      // Handle status array
+      if (options.status && Array.isArray(options.status)) {
+        options.status.forEach(s => queryParams.append('status', s));
+      } else if (options.status && typeof options.status === 'string') {
+        queryParams.append('status', options.status);
+      }
       if (options.startDate) queryParams.append('start_date', options.startDate);
       if (options.endDate) queryParams.append('end_date', options.endDate);
       if (options.agentNames && options.agentNames.length > 0) {

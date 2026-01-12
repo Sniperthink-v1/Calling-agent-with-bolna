@@ -659,15 +659,13 @@ export class CallModel extends BaseModel<CallInterface> {
       }
 
       if (filters.status) {
-        // Status can be either a call status (completed, failed, etc.) or lifecycle status (busy, no-answer, etc.)
-        const lifecycleStatuses = ['busy', 'no-answer', 'ringing', 'initiated', 'call-disconnected', 'in-progress'];
-        if (lifecycleStatuses.includes(filters.status)) {
-          baseQuery += ` AND c.call_lifecycle_status = $${paramIndex}`;
-        } else {
-          baseQuery += ` AND c.status = $${paramIndex}`;
+        // Status is now always an array of lifecycle statuses
+        if (Array.isArray(filters.status) && filters.status.length > 0) {
+          const placeholders = filters.status.map((_, i) => `$${paramIndex + i}`).join(', ');
+          baseQuery += ` AND c.call_lifecycle_status IN (${placeholders})`;
+          params.push(...filters.status);
+          paramIndex += filters.status.length;
         }
-        params.push(filters.status);
-        paramIndex++;
       }
 
       if (filters.agentId) {
