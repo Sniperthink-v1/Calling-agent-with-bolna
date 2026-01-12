@@ -222,37 +222,6 @@ const CallLogs: React.FC<CallLogsProps> = ({
   // Check if any column filters are active
   const hasActiveColumnFilters = Object.values(columnFilters).some(arr => arr.length > 0);
 
-  // Get unique phone numbers from selected calls
-  const getSelectedPhoneNumbers = (): string[] => {
-    const selectedCalls = filteredCalls.filter(call => selectedCallIds.has(call.id));
-    const phoneNumbers = selectedCalls.map(call => call.phoneNumber);
-    // Deduplicate phone numbers (if same number has multiple call logs)
-    return Array.from(new Set(phoneNumbers));
-  };
-
-  // Check if all visible calls are selected
-  const isAllVisibleSelected = filteredCalls.length > 0 && filteredCalls.every(call => selectedCallIds.has(call.id));
-  const isSomeSelected = selectedCallIds.size > 0 && !isAllVisibleSelected;
-
-  // Handle select all (respects current filters)
-  const handleSelectAll = () => {
-    if (isAllVisibleSelected) {
-      // Deselect all visible
-      setSelectedCallIds(prev => {
-        const newSet = new Set(prev);
-        filteredCalls.forEach(call => newSet.delete(call.id));
-        return newSet;
-      });
-    } else {
-      // Select all visible
-      setSelectedCallIds(prev => {
-        const newSet = new Set(prev);
-        filteredCalls.forEach(call => newSet.add(call.id));
-        return newSet;
-      });
-    }
-  };
-
   // Handle individual call selection
   const handleCallSelect = (callId: string) => {
     setSelectedCallIds(prev => {
@@ -305,7 +274,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
   };
 
   // Handle create campaign from selected calls
-  const handleCreateCampaign = async () => {
+  const handleCreateCampaign = async (selectedCalls: Call[]) => {
     if (selectedCallIds.size === 0) {
       toast({
         title: 'No Calls Selected',
@@ -315,7 +284,8 @@ const CallLogs: React.FC<CallLogsProps> = ({
       return;
     }
 
-    const phoneNumbers = getSelectedPhoneNumbers();
+    // Get unique phone numbers from selected calls
+    const phoneNumbers = Array.from(new Set(selectedCalls.map(call => call.phoneNumber)));
     
     // Fetch existing contacts that match these phone numbers
     const contactIds = await fetchContactsByPhoneNumbers(phoneNumbers);
@@ -438,6 +408,36 @@ const CallLogs: React.FC<CallLogsProps> = ({
 
   // All filtering is now done server-side
   const filteredCalls = displayCalls;
+
+  // Get unique phone numbers from selected calls
+  const getSelectedPhoneNumbers = (): string[] => {
+    const selectedCalls = filteredCalls.filter(call => selectedCallIds.has(call.id));
+    const phoneNumbers = selectedCalls.map(call => call.phoneNumber);
+    // Deduplicate phone numbers (if same number has multiple call logs)
+    return Array.from(new Set(phoneNumbers));
+  };
+
+  // Check if all visible calls are selected
+  const isAllVisibleSelected = filteredCalls.length > 0 && filteredCalls.every(call => selectedCallIds.has(call.id));
+
+  // Handle select all (respects current filters)
+  const handleSelectAll = () => {
+    if (isAllVisibleSelected) {
+      // Deselect all visible
+      setSelectedCallIds(prev => {
+        const newSet = new Set(prev);
+        filteredCalls.forEach(call => newSet.delete(call.id));
+        return newSet;
+      });
+    } else {
+      // Select all visible
+      setSelectedCallIds(prev => {
+        const newSet = new Set(prev);
+        filteredCalls.forEach(call => newSet.add(call.id));
+        return newSet;
+      });
+    }
+  };
   
 
   // Update accumulated calls for infinite scroll
@@ -1386,7 +1386,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
             </>
           ) : (
             totalPages > 1 && (
-              <Pagination
+              <Pagination() => handleCreateCampaign(filteredCalls.filter(call => selectedCallIds.has(call.id)))
                 currentPage={currentPage}
                 totalPages={totalPages}
                 totalItems={totalCalls}
