@@ -12,6 +12,7 @@ import {
   X,
   Loader2,
   Check,
+  PhoneCall,
 } from "lucide-react";
 import { CallSourceIndicator, getCallSourceFromData } from "@/components/call/CallSourceIndicator";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,8 @@ import { useCalls } from "@/hooks/useCalls";
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { Call, CallListOptions } from "@/types";
 import { apiService } from "@/services/apiService";
+import CreateCampaignModal from "@/components/campaigns/CreateCampaignModal";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Column filter interface for Excel-like filtering
 interface ColumnFilters {
@@ -179,6 +182,12 @@ const CallLogs: React.FC<CallLogsProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [showVolumeControl, setShowVolumeControl] = useState(false);
 
+  // Multi-selection state for campaign creation
+  const [selectedCallIds, setSelectedCallIds] = useState<Set<string>>(new Set());
+  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [isFetchingContacts, setIsFetchingContacts] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<'createdAt' | 'durationSeconds' | 'contactName'>('createdAt');
@@ -212,6 +221,129 @@ const CallLogs: React.FC<CallLogsProps> = ({
 
   // Check if any column filters are active
   const hasActiveColumnFilters = Object.values(columnFilters).some(arr => arr.length > 0);
+
+  // Get unique phone numbers from selected calls
+  const getSelectedPhoneNumbers = (): string[] => {
+    const selectedCalls = filteredCalls.filter(call => selectedCallIds.has(call.id));
+    const phoneNumbers = selectedCalls.map(call => call.phoneNumber);
+    // Deduplicate phone numbers (if same number has multiple call logs)
+    return Array.from(new Set(phoneNumbers));
+  };
+
+  // Check if all visible calls are selected
+  const isAllVisibleSelected = filteredCalls.length > 0 && filteredCalls.every(call => selectedCallIds.has(call.id));
+  const isSomeSelected = selectedCallIds.size > 0 && !isAllVisibleSelected;
+
+  // Handle select all (respects current filters)
+  const handleSelectAll = () => {
+    if (isAllVisibleSelected) {
+      // Deselect all visible
+      setSelectedCallIds(prev => {
+        const newSet = new Set(prev);
+        filteredCalls.forEach(call => newSet.delete(call.id));
+        return newSet;
+      });
+    } else {
+      // Select all visible
+      setSelectedCallIds(prev => {
+        const newSet = new Set(prev);
+        filteredCalls.forEach(call => newSet.add(call.id));
+        return newSet;
+      });
+    }
+  };
+
+  // Handle individual call selection
+  const handleCallSelect = (callId: string) => {
+    setSelectedCallIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(callId)) {
+        newSet.delete(callId);
+      } else {
+        newSet.add(callId);
+      }
+      return newSet;
+    });
+  };
+
+  // Fetch existing contacts by phone numbers
+  const fetchContactsByPhoneNumbers = async (phoneNumbers: string[]): Promise<string[]> => {
+    try {
+      setIsFetchingContacts(true);
+      // Fetch contacts with matching phone numbers
+      const response = await apiService.get('/api/contacts', {
+        params: {
+          limit: 1000, // Large limit to get all matching contacts
+        },
+      });
+      
+      if (response.contacts) {
+        // Match contacts by phone number
+        const matchedContactIds: string[] = [];
+        const selectedPhones = new Set(phoneNumbers);
+        
+        response.contacts.forEach((contact: any) => {
+          if (selectedPhones.has(contact.phone_number)) {
+            matchedContactIds.push(contact.id);
+          }
+        });
+        
+        return matchedContactIds;
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch contacts:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch existing contacts. Creating campaign without contact linking.',
+        variant: 'destructive',
+      });
+      return [];
+    } finally {
+      setIsFetchingContacts(false);
+    }
+  };
+
+  // Handle create campaign from selected calls
+  const handleCreateCampaign = async () => {
+    if (selectedCallIds.size === 0) {
+      toast({
+        title: 'No Calls Selected',
+        description: 'Please select at least one call to create a campaign.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const phoneNumbers = getSelectedPhoneNumbers();
+    
+    // Fetch existing contacts that match these phone numbers
+    const contactIds = await fetchContactsByPhoneNumbers(phoneNumbers);
+    
+    if (contactIds.length === 0) {
+      toast({
+        title: 'No Contacts Found',
+        description: `No existing contacts found for ${phoneNumbers.length} phone number(s). Please create contacts first from the Contacts page.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (contactIds.length < phoneNumbers.length) {
+      toast({
+        title: 'Partial Match',
+        description: `Found ${contactIds.length} out of ${phoneNumbers.length} phone numbers in your contacts. Only matched contacts will be added to the campaign.`,
+      });
+    }
+    
+    setSelectedContactIds(contactIds);
+    setIsCreatingCampaign(true);
+  };
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedCallIds(new Set());
+  }, [columnFilters, startDate, endDate, debouncedSearchTerm]);
 
   // Clear all column filters
   const clearAllColumnFilters = () => {
@@ -709,9 +841,18 @@ const CallLogs: React.FC<CallLogsProps> = ({
       <div className="p-4 space-y-3">
         {/* Compact Header + Search Row */}
         <div className="flex items-center gap-4 flex-wrap">
-          <h2 className={`text-xl font-bold whitespace-nowrap ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-            Call Logs
-          </h2>
+          <div className="flex items-center gap-3">
+            {/* Select All Checkbox */}
+            <Checkbox
+              checked={isAllVisibleSelected}
+              onCheckedChange={handleSelectAll}
+              className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              aria-label="Select all visible calls"
+            />
+            <h2 className={`text-xl font-bold whitespace-nowrap ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+              Call Logs
+            </h2>
+          </div>
           <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`} />
             <Input
@@ -722,7 +863,12 @@ const CallLogs: React.FC<CallLogsProps> = ({
               className="pl-9 h-9"
             />
           </div>
-          <div className="text-xs text-gray-500 ml-auto whitespace-nowrap">
+          <div className="text-xs text-gray-500 ml-auto whitespace-nowrap flex items-center gap-2">
+            {selectedCallIds.size > 0 && (
+              <span className="text-primary font-medium">
+                {selectedCallIds.size} selected
+              </span>
+            )}
             {loading ? 'Loading...' : (
               useLazyLoading 
                 ? `${filteredCalls.length}${totalCalls > 0 ? ` / ${totalCalls}` : ''} calls`
@@ -926,11 +1072,20 @@ const CallLogs: React.FC<CallLogsProps> = ({
                 className={`overflow-hidden transition-all duration-200 hover:shadow-md ${theme === "dark"
                   ? "bg-slate-900/70 border-slate-800 hover:border-slate-600"
                   : "bg-white border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${selectedCallIds.has(call.id) ? 'ring-2 ring-primary ring-offset-2' : ''}`}
               >
                 {/* Main Content Row */}
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-4">
+                    {/* Selection Checkbox */}
+                    <div className="flex-shrink-0 pt-3">
+                      <Checkbox
+                        checked={selectedCallIds.has(call.id)}
+                        onCheckedChange={() => handleCallSelect(call.id)}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                        aria-label={`Select call from ${call.contactName || 'Unknown'}`}
+                      />
+                    </div>
                     {/* Left: Avatar + Contact Info */}
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       {/* Avatar with status indicator */}
@@ -1252,13 +1407,61 @@ const CallLogs: React.FC<CallLogsProps> = ({
             call={selectedCall}
           />
         )}
+
+        {/* Floating Action Button - Create Campaign */}
+        {selectedCallIds.size > 0 && (
+          <div className="fixed bottom-8 right-8 z-50">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="lg"
+                    onClick={handleCreateCampaign}
+                    disabled={isFetchingContacts}
+                    className="h-14 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 bg-primary hover:bg-primary/90 text-white"
+                  >
+                    {isFetchingContacts ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Fetching...
+                      </>
+                    ) : (
+                      <>
+                        <PhoneCall className="w-5 h-5 mr-2" />
+                        Create Campaign ({selectedCallIds.size})
+                      </>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>Create a campaign from {selectedCallIds.size} selected call{selectedCallIds.size !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {getSelectedPhoneNumbers().length} unique phone number{getSelectedPhoneNumbers().length !== 1 ? 's' : ''}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
       </div>
+
       {/* Calling Modal, moved outside of the main div for correct JSX structure */}
       <CallingModal
         isOpen={showCallingModal}
         onClose={() => setShowCallingModal(false)}
         leadName={currentCallLead?.name}
         leadPhone={currentCallLead?.phone}
+      />
+
+      {/* Create Campaign Modal */}
+      <CreateCampaignModal
+        isOpen={isCreatingCampaign}
+        onClose={() => {
+          setIsCreatingCampaign(false);
+          setSelectedContactIds([]);
+          setSelectedCallIds(new Set()); // Clear selection after campaign creation
+        }}
+        preSelectedContacts={selectedContactIds}
       />
     </TooltipProvider>
   );
