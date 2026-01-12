@@ -315,6 +315,14 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
   // Updated credits toast hook signature (remove non-existent showCreditInsufficient)
   const { showInsufficientCreditsToast } = useCreditToasts();
   
+  // Unified selected contacts view state
+  const [selectedContactsView, setSelectedContactsView] = useState<Array<{
+    id: string;
+    phoneNumber: string;
+    name?: string;
+    source: 'csv' | 'preselected' | 'initial' | 'manual';
+  }>>([]);
+  
   // WhatsApp service URL
   const WHATSAPP_SERVICE_URL = import.meta.env.VITE_WHATSAPP_SERVICE_URL || 'http://localhost:4000';
 
@@ -374,6 +382,14 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
       setCsvFile(file);
       setParsedContactCount(initialPhoneNumbers.length);
       
+      // Populate unified contacts view
+      const contacts = initialPhoneNumbers.map((phone, index) => ({
+        id: `initial-${index}`,
+        phoneNumber: phone,
+        source: 'initial' as const,
+      }));
+      setSelectedContactsView(contacts);
+      
       // Show toast notification
       toast({
         title: 'Phone Numbers Loaded',
@@ -381,6 +397,46 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
       });
     }
   }, [isOpen, initialPhoneNumbers]);
+
+  // Populate contacts view from preSelectedContacts
+  useEffect(() => {
+    if (isOpen && preSelectedContacts.length > 0) {
+      // If we already have contacts from initialPhoneNumbers, don't override
+      if (selectedContactsView.length === 0) {
+        const contacts = preSelectedContacts.map((contactId, index) => ({
+          id: `preselected-${contactId}`,
+          phoneNumber: '', // Will be fetched from contact details if needed
+          name: `Contact ${index + 1}`,
+          source: 'preselected' as const,
+        }));
+        setSelectedContactsView(contacts);
+      }
+    }
+  }, [isOpen, preSelectedContacts]);
+
+  // Remove contact from unified view
+  const handleRemoveContact = (contactId: string) => {
+    setSelectedContactsView(prev => prev.filter(c => c.id !== contactId));
+    
+    // Update parsed count
+    setParsedContactCount(prev => Math.max(0, prev - 1));
+    
+    // If removing from initialPhoneNumbers source, we need to clear CSV
+    const removedContact = selectedContactsView.find(c => c.id === contactId);
+    if (removedContact?.source === 'initial' || removedContact?.source === 'csv') {
+      // Recreate CSV without this contact
+      const remainingContacts = selectedContactsView.filter(c => c.id !== contactId);
+      if (remainingContacts.length === 0) {
+        setCsvFile(null);
+        setParsedContactCount(0);
+      } else {
+        const csvContent = 'phone\n' + remainingContacts.map(c => c.phoneNumber).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const file = new File([blob], 'updated-contacts.csv', { type: 'text/csv' });
+        setCsvFile(file);
+      }
+    }
+  };
 
 
   // Fetch phone numbers for selection
@@ -759,6 +815,13 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
           
           // Count valid contacts (skip header, count rows with valid phone numbers)
           let validCount = 0;
+          const parsedContacts: Array<{ id: string; phoneNumber: string; name?: string }> = [];
+          
+          // Find name column index
+          const nameIndex = headers.findIndex((h: string) => 
+            ['name', 'full_name', 'fullname', 'contact_name'].includes(h)
+          );
+          
           for (let i = 1; i < jsonData.length; i++) {
             const row = jsonData[i];
             
@@ -781,9 +844,22 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
             if (digitCount < 10) continue;
             
             validCount++;
+            
+            // Add to parsed contacts
+            parsedContacts.push({
+              id: `csv-${i}`,
+              phoneNumber: phoneStr,
+              name: nameIndex >= 0 && row[nameIndex] ? row[nameIndex].toString().trim() : undefined,
+            });
           }
           
           setParsedContactCount(validCount);
+          
+          // Update unified contacts view
+          setSelectedContactsView(parsedContacts.map(contact => ({
+            ...contact,
+            source: 'csv' as const,
+          })));
         }
       } catch (error) {
         console.error('Error parsing file:', error);
@@ -804,6 +880,7 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
     setCsvFile(null);
     setParsedContactCount(0);
     setUploadResult(null);
+    setSelectedContactsView([]);
   };
 
   // Handle email attachment upload
@@ -1609,6 +1686,9 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
     setEmailSubject('');
     setEmailBody('');
     setEmailAttachments([]);
+    // Reset unified contacts view
+    setSelectedContactsView([]);
+    setParsedContactCount(0);
     onClose();
   };
 
@@ -2581,6 +2661,96 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
                   {preSelectedContacts.length} contacts selected
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* Unified Selected Contacts View */}
+          {selectedContactsView.length > 0 && (
+            <div className={`rounded-lg border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+              <div className={`px-4 py-3 border-b flex items-center justify-between ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className="flex items-center">
+                  <CheckCircle className="w-5 h-5 mr-2 text-green-500" />
+                  <span className="font-semibold">
+                    Selected Contacts ({selectedContactsView.length})
+                  </span>
+                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedContactsView([]);
+                          setCsvFile(null);
+                          setParsedContactCount(0);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Clear all contacts</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              
+              <div className="max-h-64 overflow-y-auto p-2">
+                <div className="space-y-1">
+                  {selectedContactsView.map((contact) => (
+                    <div
+                      key={contact.id}
+                      className={`flex items-center justify-between p-3 rounded-md hover:bg-opacity-80 transition-colors ${
+                        theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
+                      }`}
+                    >
+                      <div className="flex items-center flex-1 min-w-0">
+                        <Phone className="w-4 h-4 mr-3 text-gray-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          {contact.name && (
+                            <p className="font-medium text-sm truncate">{contact.name}</p>
+                          )}
+                          <p className={`text-sm truncate ${contact.name ? 'text-gray-500' : 'font-medium'}`}>
+                            {contact.phoneNumber}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="ml-2 text-xs flex-shrink-0"
+                        >
+                          {contact.source === 'initial' ? 'Call Log' : 
+                           contact.source === 'csv' ? 'CSV' :
+                           contact.source === 'preselected' ? 'Selected' : 'Manual'}
+                        </Badge>
+                      </div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveContact(contact.id)}
+                              className="ml-2 flex-shrink-0"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Remove contact</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {selectedContactsView.length > 5 && (
+                <div className={`px-4 py-2 border-t text-xs text-center ${
+                  theme === 'dark' ? 'border-gray-700 text-gray-400' : 'border-gray-200 text-gray-500'
+                }`}>
+                  Scroll to see all {selectedContactsView.length} contacts
+                </div>
+              )}
             </div>
           )}
 
