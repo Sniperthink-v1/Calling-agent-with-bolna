@@ -42,6 +42,7 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { InfoIcon } from "@/components/ui/info-icon";
 import { apiService } from "@/services/apiService";
+import { API_ENDPOINTS } from "@/config/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import CallSourceExport from "./CallSourceExport";
 import { DemoScheduleModal } from "@/components/demo/DemoScheduleModal";
@@ -89,6 +90,12 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
   const [selectedDateOption, setSelectedDateOption] = useState("30 days");
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [selectedCallSource, setSelectedCallSource] = useState("");
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(() => {
+    // Load from sessionStorage on init
+    return sessionStorage.getItem('analyticsFilterCampaignId') || '';
+  });
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
 
   // State for demo modal
   const [showDemoModal, setShowDemoModal] = useState(false);
@@ -120,7 +127,39 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
     // Fetch analytics data
   useEffect(() => {
     fetchAnalyticsData();
-  }, [dateRange, selectedDateOption, selectedCallSource, selectedAgentId]);
+  }, [dateRange, selectedDateOption, selectedCallSource, selectedAgentId, selectedCampaignId]);
+
+  // Fetch campaigns on mount
+  useEffect(() => {
+    fetchCampaigns();
+  }, []);
+
+  // Save campaign selection to sessionStorage
+  useEffect(() => {
+    if (selectedCampaignId) {
+      sessionStorage.setItem('analyticsFilterCampaignId', selectedCampaignId);
+    } else {
+      sessionStorage.removeItem('analyticsFilterCampaignId');
+    }
+  }, [selectedCampaignId]);
+
+  const fetchCampaigns = async () => {
+    try {
+      setLoadingCampaigns(true);
+      const response = await apiService.request<any>(API_ENDPOINTS.CAMPAIGNS.BASE);
+      console.log('📊 Campaigns API Response:', response);
+      if (response.success) {
+        // Backend returns { success: true, campaigns: [...], total: N }
+        const campaignsList = response.campaigns || [];
+        console.log('📊 Setting campaigns:', campaignsList);
+        setCampaigns(campaignsList);
+      }
+    } catch (err) {
+      console.error('Error fetching campaigns:', err);
+    } finally {
+      setLoadingCampaigns(false);
+    }
+  };
 
   const getDateRange = () => {
     const now = new Date();
@@ -165,9 +204,11 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
         ...(selectedCallSource && { callSource: selectedCallSource }),
         // Add agent filtering using the agent UUID directly
         ...(selectedAgentId && { agentId: selectedAgentId }),
+        // Add campaign filtering
+        ...(selectedCampaignId && { campaignId: selectedCampaignId }),
       };
 
-      console.log('📊 Analytics API params:', params, 'selectedAgentId:', selectedAgentId);
+      console.log('📊 Analytics API params:', params, 'selectedAgentId:', selectedAgentId, 'selectedCampaignId:', selectedCampaignId);
 
       // Fetch all analytics data in parallel
       const [
@@ -616,6 +657,34 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
     );
   }
 
+  // Check if campaign filter is applied but no data is returned
+  const hasNoData = selectedCampaignId && kpiData.length === 0 && !loading && !error;
+  if (hasNoData) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <div className="text-center max-w-md">
+          <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+          <h3 className={`text-xl font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            No Data for This Campaign
+          </h3>
+          <p className={`mb-4 ${theme === "dark" ? "text-slate-400" : "text-gray-600"}`}>
+            The selected campaign has no call data yet. Try selecting a different campaign or check back later.
+          </p>
+          <Button 
+            onClick={() => setSelectedCampaignId("")} 
+            variant="outline"
+            className="mr-2"
+          >
+            Clear Campaign Filter
+          </Button>
+          <Button onClick={fetchAnalyticsData} variant="outline">
+            Refresh
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       {/* Global Header Section */}
@@ -719,13 +788,21 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
               className={`text-sm mb-2 block ${theme === "dark" ? "text-slate-300" : "text-gray-700"
                 }`}
             >
-              Call Status
+              Campaign
             </label>
             <div className="relative">
-              <select className="appearance-none bg-background border rounded px-3 py-1 pr-8 text-sm border-slate-600 w-full">
-                <option>All Calls</option>
-                <option>Connected</option>
-                <option>Missed</option>
+              <select 
+                value={selectedCampaignId}
+                onChange={(e) => setSelectedCampaignId(e.target.value)}
+                disabled={loadingCampaigns}
+                className="appearance-none bg-background border rounded px-3 py-1 pr-8 text-sm border-slate-600 w-full disabled:opacity-50"
+              >
+                <option value="">All Campaigns</option>
+                {campaigns.length > 0 && campaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.name}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400" />
             </div>
@@ -777,6 +854,7 @@ const CallAnalytics = ({ selectedAgentId }: CallAnalyticsProps) => {
               setDateRange(undefined);
               setShowCustomRange(false);
               setSelectedCallSource("");
+              setSelectedCampaignId("");
             }}
             className={
               theme === "dark"

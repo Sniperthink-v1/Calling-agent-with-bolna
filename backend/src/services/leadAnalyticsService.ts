@@ -101,6 +101,7 @@ class LeadAnalyticsService {
       requirements: analysis.extraction?.requirements ?? undefined,
       custom_cta: analysis.extraction?.custom_cta ?? undefined,
       in_detail_summary: analysis.extraction?.in_detail_summary ?? undefined,
+      transcript_summary: analysis.transcript_summary ?? undefined, // Bolna's summary
     };
   }
 

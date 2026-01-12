@@ -1627,7 +1627,7 @@ class ApiService {
   }
 
   // Call Analytics API methods with optional agent filtering
-  async getCallAnalyticsKPIs(params?: { dateFrom?: string; dateTo?: string; agentId?: string }): Promise<ApiResponse<any>> {
+  async getCallAnalyticsKPIs(params?: { dateFrom?: string; dateTo?: string; agentId?: string; campaignId?: string }): Promise<ApiResponse<any>> {
     let url = API_ENDPOINTS.CALL_ANALYTICS.KPIS;
     if (params) {
       const queryParams = new URLSearchParams();
@@ -1641,6 +1641,11 @@ class ApiService {
         queryParams.append('agentId', params.agentId);
       }
 
+      // Add campaign filtering
+      if (params.campaignId) {
+        queryParams.append('campaignId', params.campaignId);
+      }
+
       if (queryParams.toString()) {
         url += `?${queryParams.toString()}`;
       }
@@ -1648,7 +1653,7 @@ class ApiService {
     return this.request<any>(url);
   }
 
-  async getCallAnalyticsLeadQuality(params?: { dateFrom?: string; dateTo?: string; agentId?: string }): Promise<ApiResponse<any>> {
+  async getCallAnalyticsLeadQuality(params?: { dateFrom?: string; dateTo?: string; agentId?: string; campaignId?: string }): Promise<ApiResponse<any>> {
     let url = API_ENDPOINTS.CALL_ANALYTICS.LEAD_QUALITY;
     if (params) {
       const queryParams = new URLSearchParams();
@@ -1662,6 +1667,11 @@ class ApiService {
         queryParams.append('agentId', params.agentId);
       }
 
+      // Add campaign filtering
+      if (params.campaignId) {
+        queryParams.append('campaignId', params.campaignId);
+      }
+
       if (queryParams.toString()) {
         url += `?${queryParams.toString()}`;
       }
@@ -1669,7 +1679,7 @@ class ApiService {
     return this.request<any>(url);
   }
 
-  async getCallAnalyticsFunnel(params?: { dateFrom?: string; dateTo?: string; agentId?: string }): Promise<ApiResponse<any>> {
+  async getCallAnalyticsFunnel(params?: { dateFrom?: string; dateTo?: string; agentId?: string; campaignId?: string }): Promise<ApiResponse<any>> {
     let url = API_ENDPOINTS.CALL_ANALYTICS.FUNNEL;
     if (params) {
       const queryParams = new URLSearchParams();
@@ -1683,6 +1693,11 @@ class ApiService {
         queryParams.append('agentId', params.agentId);
       }
 
+      // Add campaign filtering
+      if (params.campaignId) {
+        queryParams.append('campaignId', params.campaignId);
+      }
+
       if (queryParams.toString()) {
         url += `?${queryParams.toString()}`;
       }
@@ -1690,7 +1705,7 @@ class ApiService {
     return this.request<any>(url);
   }
 
-  async getCallAnalyticsIntentBudget(params?: { dateFrom?: string; dateTo?: string; agentId?: string }): Promise<ApiResponse<any>> {
+  async getCallAnalyticsIntentBudget(params?: { dateFrom?: string; dateTo?: string; agentId?: string; campaignId?: string }): Promise<ApiResponse<any>> {
     let url = API_ENDPOINTS.CALL_ANALYTICS.INTENT_BUDGET;
     if (params) {
       const queryParams = new URLSearchParams();
@@ -1702,6 +1717,11 @@ class ApiService {
         // Validate user context and agent ownership before making request
         await this.validateAgentOwnership(params.agentId);
         queryParams.append('agentId', params.agentId);
+      }
+
+      // Add campaign filtering
+      if (params.campaignId) {
+        queryParams.append('campaignId', params.campaignId);
       }
 
       if (queryParams.toString()) {
@@ -1997,7 +2017,7 @@ class ApiService {
     return this.request<any>(API_ENDPOINTS.ADMIN.PROFILE);
   }
 
-  async getCallAnalyticsSourceBreakdown(params?: { dateFrom?: string; dateTo?: string; agentId?: string }): Promise<ApiResponse<any>> {
+  async getCallAnalyticsSourceBreakdown(params?: { dateFrom?: string; dateTo?: string; agentId?: string; campaignId?: string }): Promise<ApiResponse<any>> {
     let url = API_ENDPOINTS.CALL_ANALYTICS.SOURCE_BREAKDOWN;
     if (params) {
       const queryParams = new URLSearchParams();
@@ -2013,6 +2033,11 @@ class ApiService {
         queryParams.append('agentId', params.agentId);
       }
 
+      // Add campaign filtering
+      if (params.campaignId) {
+        queryParams.append('campaignId', params.campaignId);
+      }
+
       if (queryParams.toString()) {
         url += `?${queryParams.toString()}`;
       }
@@ -2020,7 +2045,7 @@ class ApiService {
     return this.request<any>(url);
   }
 
-  async getCallSourceAnalytics(params?: { dateFrom?: string; dateTo?: string; agentId?: string }): Promise<ApiResponse<any>> {
+  async getCallSourceAnalytics(params?: { dateFrom?: string; dateTo?: string; agentId?: string; campaignId?: string }): Promise<ApiResponse<any>> {
     let url = API_ENDPOINTS.CALL_ANALYTICS.CALL_SOURCE_ANALYTICS;
     if (params) {
       const queryParams = new URLSearchParams();
@@ -2034,6 +2059,11 @@ class ApiService {
           throw createApiError('Invalid agent ID format', 400, 'VALIDATION_ERROR', { field: 'agentId' });
         }
         queryParams.append('agentId', params.agentId);
+      }
+
+      // Add campaign filtering
+      if (params.campaignId) {
+        queryParams.append('campaignId', params.campaignId);
       }
 
       if (queryParams.toString()) {

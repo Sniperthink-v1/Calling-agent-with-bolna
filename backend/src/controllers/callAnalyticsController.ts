@@ -13,8 +13,23 @@ export class CallAnalyticsController {
   async getCallAnalyticsKPIs(req: AgentOwnershipRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.id;
-      const { dateFrom, dateTo } = req.query;
+      const { dateFrom, dateTo, campaignId } = req.query;
       const agent = req.agent; // Validated agent if agentId was provided
+
+      // Validate campaign ownership if campaignId is provided
+      if (campaignId) {
+        const campaignCheck = await database.query(
+          'SELECT id FROM call_campaigns WHERE id = $1 AND user_id = $2',
+          [campaignId, userId]
+        );
+        if (campaignCheck.rows.length === 0) {
+          res.status(404).json({
+            success: false,
+            error: 'Campaign not found or access denied'
+          });
+          return;
+        }
+      }
 
       // Parse date filters
       const fromDate = dateFrom ? new Date(dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
@@ -53,21 +68,35 @@ export class CallAnalyticsController {
           AND c.created_at <= $3`;
 
       const queryParams = [userId, fromDate, toDate];
+      let paramIndex = 4;
       
       // Add agent filtering if agent is specified and validated
       if (agent) {
-        kpiQuery += ` AND c.agent_id = $4`;
+        kpiQuery += ` AND c.agent_id = $${paramIndex}`;
         queryParams.push(agent.id);
+        paramIndex++;
+      }
+      
+      // Add campaign filtering if campaignId is specified
+      if (campaignId) {
+        kpiQuery += ` AND c.campaign_id = $${paramIndex}`;
+        queryParams.push(campaignId);
+        paramIndex++;
+      }
+
+      if (agent) {
         logger.info('Analytics KPIs query with agent filter', { 
           agentId: agent.id, 
           agentName: agent.name,
           userId,
+          campaignId: campaignId || null,
           dateFrom: fromDate.toISOString(),
           dateTo: toDate.toISOString() 
         });
       } else {
         logger.info('Analytics KPIs query for all agents', { 
           userId,
+          campaignId: campaignId || null,
           dateFrom: fromDate.toISOString(),
           dateTo: toDate.toISOString() 
         });
@@ -95,12 +124,16 @@ export class CallAnalyticsController {
       const prevFromDate = new Date(fromDate.getTime() - (toDate.getTime() - fromDate.getTime()));
       const prevToDate = fromDate;
 
-      // Build previous period query with same agent filtering
+      // Build previous period query with same agent and campaign filtering
       let prevKpiQuery = kpiQuery.replace('AND c.created_at >= $2 AND c.created_at <= $3', 'AND c.created_at >= $2 AND c.created_at <= $3');
       const prevQueryParams = [userId, prevFromDate, prevToDate];
       
       if (agent) {
         prevQueryParams.push(agent.id);
+      }
+      
+      if (campaignId) {
+        prevQueryParams.push(campaignId);
       }
 
       const prevResult = await database.query(prevKpiQuery, prevQueryParams);
@@ -231,8 +264,23 @@ export class CallAnalyticsController {
   async getLeadQualityDistribution(req: AgentOwnershipRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.id;
-      const { dateFrom, dateTo } = req.query;
+      const { dateFrom, dateTo, campaignId } = req.query;
       const agent = req.agent;
+
+      // Validate campaign ownership if campaignId is provided
+      if (campaignId) {
+        const campaignCheck = await database.query(
+          'SELECT id FROM call_campaigns WHERE id = $1 AND user_id = $2',
+          [campaignId, userId]
+        );
+        if (campaignCheck.rows.length === 0) {
+          res.status(404).json({
+            success: false,
+            error: 'Campaign not found or access denied'
+          });
+          return;
+        }
+      }
 
       const fromDate = dateFrom ? new Date(dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const toDate = dateTo ? new Date(dateTo as string) : new Date();
@@ -264,11 +312,20 @@ export class CallAnalyticsController {
             AND c.created_at <= $3`;
 
       const queryParams = [userId, fromDate, toDate];
+      let paramIndex = 4;
       
       if (agent) {
-        query += ` AND c.agent_id = $4`;
+        query += ` AND c.agent_id = $${paramIndex}`;
         queryParams.push(agent.id);
+        paramIndex++;
         console.log('📊 Lead Quality Query with agent filter - Agent ID:', agent.id, 'Agent Name:', agent.name);
+      }
+      
+      if (campaignId) {
+        query += ` AND c.campaign_id = $${paramIndex}`;
+        queryParams.push(campaignId);
+        paramIndex++;
+        console.log('📊 Lead Quality Query with campaign filter - Campaign ID:', campaignId);
       }
 
       console.log('📊 Executing Lead Quality Query:', query);
@@ -324,8 +381,23 @@ export class CallAnalyticsController {
   async getFunnelData(req: AgentOwnershipRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.id;
-      const { dateFrom, dateTo } = req.query;
+      const { dateFrom, dateTo, campaignId } = req.query;
       const agent = req.agent;
+
+      // Validate campaign ownership if campaignId is provided
+      if (campaignId) {
+        const campaignCheck = await database.query(
+          'SELECT id FROM call_campaigns WHERE id = $1 AND user_id = $2',
+          [campaignId, userId]
+        );
+        if (campaignCheck.rows.length === 0) {
+          res.status(404).json({
+            success: false,
+            error: 'Campaign not found or access denied'
+          });
+          return;
+        }
+      }
 
       const fromDate = dateFrom ? new Date(dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const toDate = dateTo ? new Date(dateTo as string) : new Date();
@@ -335,6 +407,8 @@ export class CallAnalyticsController {
       const contactsParams = [userId];
       
       // Query meetings table for demo bookings count
+      // Note: calendar_meetings doesn't have campaign_id, so we don't filter by campaign here
+      // Meetings are associated with contacts, not directly with campaigns
       let meetingsQuery = `
         SELECT COUNT(DISTINCT cm.contact_id) as unique_demo_booked
         FROM calendar_meetings cm
@@ -342,6 +416,8 @@ export class CallAnalyticsController {
           AND cm.meeting_start_time >= $2
           AND cm.meeting_start_time <= $3
           AND cm.status != 'cancelled'`;
+      
+      const meetingsQueryParams: any[] = [userId, fromDate, toDate];
       
       let query = `
         SELECT 
@@ -353,19 +429,26 @@ export class CallAnalyticsController {
           AND c.created_at >= $2 
           AND c.created_at <= $3`;
 
-      const queryParams = [userId, fromDate, toDate];
+      let paramIndex = 4;
+      const queryParams: any[] = [userId, fromDate, toDate];
       
       if (agent) {
-        query += ` AND c.agent_id = $4`;
+        query += ` AND c.agent_id = $${paramIndex}`;
         queryParams.push(agent.id);
+        paramIndex++;
+      }
+      
+      if (campaignId) {
+        query += ` AND c.campaign_id = $${paramIndex}`;
+        queryParams.push(campaignId);
+        paramIndex++;
       }
 
       // Execute all queries
-      const meetingsParams = [userId, fromDate, toDate];
       const [contactsResult, callsResult, meetingsResult] = await Promise.all([
         database.query(contactsQuery, contactsParams),
         database.query(query, queryParams),
-        database.query(meetingsQuery, meetingsParams)
+        database.query(meetingsQuery, meetingsQueryParams)
       ]);
       
       const contactsStats = contactsResult.rows[0];
@@ -418,8 +501,23 @@ export class CallAnalyticsController {
   async getIntentBudgetData(req: AgentOwnershipRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.id;
-      const { dateFrom, dateTo } = req.query;
+      const { dateFrom, dateTo, campaignId } = req.query;
       const agent = req.agent;
+
+      // Validate campaign ownership if campaignId is provided
+      if (campaignId) {
+        const campaignCheck = await database.query(
+          'SELECT id FROM call_campaigns WHERE id = $1 AND user_id = $2',
+          [campaignId, userId]
+        );
+        if (campaignCheck.rows.length === 0) {
+          res.status(404).json({
+            success: false,
+            error: 'Campaign not found or access denied'
+          });
+          return;
+        }
+      }
 
       const fromDate = dateFrom ? new Date(dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const toDate = dateTo ? new Date(dateTo as string) : new Date();
@@ -443,9 +541,18 @@ export class CallAnalyticsController {
           AND c.created_at <= $3`;
 
       const queryParams: any[] = [userId, fromDate, toDate];
+      let paramIndex = 4;
+      
       if (agent) {
-        query += ` AND c.agent_id = $4`;
+        query += ` AND c.agent_id = $${paramIndex}`;
         queryParams.push(agent.id);
+        paramIndex++;
+      }
+      
+      if (campaignId) {
+        query += ` AND c.campaign_id = $${paramIndex}`;
+        queryParams.push(campaignId);
+        paramIndex++;
       }
 
       query += `
@@ -487,8 +594,23 @@ export class CallAnalyticsController {
   async getSourceBreakdown(req: AgentOwnershipRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.id;
-      const { dateFrom, dateTo } = req.query;
+      const { dateFrom, dateTo, campaignId } = req.query;
       const agent = req.agent;
+
+      // Validate campaign ownership if campaignId is provided
+      if (campaignId) {
+        const campaignCheck = await database.query(
+          'SELECT id FROM call_campaigns WHERE id = $1 AND user_id = $2',
+          [campaignId, userId]
+        );
+        if (campaignCheck.rows.length === 0) {
+          res.status(404).json({
+            success: false,
+            error: 'Campaign not found or access denied'
+          });
+          return;
+        }
+      }
 
       const fromDate = dateFrom ? new Date(dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const toDate = dateTo ? new Date(dateTo as string) : new Date();
@@ -518,10 +640,18 @@ export class CallAnalyticsController {
           AND c.created_at <= $3`;
 
       const queryParams = [userId, fromDate, toDate];
+      let paramIndex = 4;
       
       if (agent) {
-        query += ` AND c.agent_id = $4`;
+        query += ` AND c.agent_id = $${paramIndex}`;
         queryParams.push(agent.id);
+        paramIndex++;
+      }
+      
+      if (campaignId) {
+        query += ` AND c.campaign_id = $${paramIndex}`;
+        queryParams.push(campaignId);
+        paramIndex++;
       }
 
       query += ` GROUP BY call_source ORDER BY call_count DESC`;
@@ -591,8 +721,23 @@ export class CallAnalyticsController {
   async getCallSourceAnalytics(req: AgentOwnershipRequest, res: Response): Promise<void> {
     try {
       const userId = req.user!.id;
-      const { dateFrom, dateTo } = req.query;
+      const { dateFrom, dateTo, campaignId } = req.query;
       const agent = req.agent;
+
+      // Validate campaign ownership if campaignId is provided
+      if (campaignId) {
+        const campaignCheck = await database.query(
+          'SELECT id FROM call_campaigns WHERE id = $1 AND user_id = $2',
+          [campaignId, userId]
+        );
+        if (campaignCheck.rows.length === 0) {
+          res.status(404).json({
+            success: false,
+            error: 'Campaign not found or access denied'
+          });
+          return;
+        }
+      }
 
       const fromDate = dateFrom ? new Date(dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const toDate = dateTo ? new Date(dateTo as string) : new Date();
@@ -633,10 +778,18 @@ export class CallAnalyticsController {
           AND c.created_at <= $3`;
 
       const queryParams = [userId, fromDate, toDate];
+      let paramIndex = 4;
       
       if (agent) {
-        query += ` AND c.agent_id = $4`;
+        query += ` AND c.agent_id = $${paramIndex}`;
         queryParams.push(agent.id);
+        paramIndex++;
+      }
+      
+      if (campaignId) {
+        query += ` AND c.campaign_id = $${paramIndex}`;
+        queryParams.push(campaignId);
+        paramIndex++;
       }
 
       query += ` GROUP BY call_source ORDER BY total_calls DESC`;
@@ -649,9 +802,16 @@ export class CallAnalyticsController {
 
       let prevQuery = query.replace('AND c.created_at >= $2 AND c.created_at <= $3', 'AND c.created_at >= $2 AND c.created_at <= $3');
       const prevQueryParams = [userId, prevFromDate, prevToDate];
+      let prevParamIndex = 4;
       
       if (agent) {
         prevQueryParams.push(agent.id);
+        prevParamIndex++;
+      }
+      
+      if (campaignId) {
+        prevQueryParams.push(campaignId);
+        prevParamIndex++;
       }
 
       const prevResult = await database.query(prevQuery, prevQueryParams);

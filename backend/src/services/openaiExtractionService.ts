@@ -54,6 +54,7 @@ export interface IndividualAnalysis {
   total_score: number;
   lead_status_tag: string;
   demo_book_datetime: string | null;
+  transcript_summary?: string | null; // Bolna's AI-generated summary
   reasoning: {
     intent: string;
     urgency: string;

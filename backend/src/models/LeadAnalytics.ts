@@ -39,6 +39,7 @@ export interface LeadAnalyticsInterface extends BaseModelInterface {
   requirements?: string;
   custom_cta?: string;
   in_detail_summary?: string;
+  transcript_summary?: string; // Bolna's AI-generated summary
   // New enhanced analytics fields
   smart_notification?: string;
   demo_book_datetime?: string;
@@ -73,6 +74,7 @@ export interface CreateLeadAnalyticsData {
   requirements?: string;
   custom_cta?: string;
   in_detail_summary?: string;
+  transcript_summary?: string; // Bolna's AI-generated summary
   // New enhanced analytics fields
   smart_notification?: string;
   demo_book_datetime?: string;
@@ -134,7 +136,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         engagement_health, engagement_score,
         total_score, lead_status_tag,
         reasoning,
-        company_name, extracted_name, extracted_email, requirements, custom_cta, in_detail_summary,
+        company_name, extracted_name, extracted_email, requirements, custom_cta, in_detail_summary, transcript_summary,
         smart_notification, demo_book_datetime
       )
       VALUES (
@@ -147,8 +149,8 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         $15, $16,
         $17, $18,
         $19,
-        $20, $21, $22, $23, $24, $25,
-        $26, $27
+        $20, $21, $22, $23, $24, $25, $26,
+        $27, $28
       )
       ON CONFLICT (user_id, phone_number, analysis_type) WHERE (analysis_type = 'complete')
       DO UPDATE SET
@@ -174,6 +176,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         requirements = EXCLUDED.requirements,
         custom_cta = EXCLUDED.custom_cta,
         in_detail_summary = EXCLUDED.in_detail_summary,
+        transcript_summary = EXCLUDED.transcript_summary,
         smart_notification = EXCLUDED.smart_notification,
         demo_book_datetime = EXCLUDED.demo_book_datetime,
         analysis_timestamp = CURRENT_TIMESTAMP
@@ -206,6 +209,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
       analyticsData.requirements ?? null,
       analyticsData.custom_cta ?? null,
       analyticsData.in_detail_summary ?? null,
+      analyticsData.transcript_summary ?? null,
       analyticsData.smart_notification ?? null,
       analyticsData.demo_book_datetime ?? null,
     ];

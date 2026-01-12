@@ -840,6 +840,15 @@ class WebhookService {
               user?.openai_individual_prompt_id
             );
 
+            // Add Bolna's summary to individual analysis
+            if (payload.summary) {
+              individualData.transcript_summary = payload.summary;
+              logger.info('💾 Added Bolna summary to individual analysis', {
+                execution_id: executionId,
+                summary_length: payload.summary.length
+              });
+            }
+
             // ⚠️ DEBUG: Log the COMPLETE individualData object immediately after extraction
             logger.info('🔍 DEBUG: IndividualData extracted', {
               execution_id: executionId,
