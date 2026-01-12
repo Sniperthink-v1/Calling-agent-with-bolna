@@ -1410,34 +1410,56 @@ const CallLogs: React.FC<CallLogsProps> = ({
 
         {/* Floating Action Button - Create Campaign */}
         {selectedCallIds.size > 0 && (
-          <div className="fixed bottom-8 right-8 z-50">
+          <div className="fixed bottom-8 right-8 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     size="lg"
-                    onClick={handleCreateCampaign}
+                    onClick={() => handleCreateCampaign(filteredCalls.filter(call => selectedCallIds.has(call.id)))}
                     disabled={isFetchingContacts}
-                    className="h-14 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 bg-primary hover:bg-primary/90 text-white"
+                    className="h-16 px-8 rounded-full shadow-2xl hover:shadow-[0_20px_50px_rgba(8,_112,_184,_0.7)] transition-all duration-300 text-white font-semibold text-base group relative overflow-hidden"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #1A6262 0%, #2d8a8a 100%)',
+                    }}
                   >
-                    {isFetchingContacts ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Fetching...
-                      </>
-                    ) : (
-                      <>
-                        <PhoneCall className="w-5 h-5 mr-2" />
-                        Create Campaign ({selectedCallIds.size})
-                      </>
-                    )}
+                    {/* Animated background overlay */}
+                    <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    
+                    {/* Content */}
+                    <div className="relative flex items-center">
+                      {isFetchingContacts ? (
+                        <>
+                          <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                          <span>Fetching Contacts...</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="relative mr-3">
+                            <PhoneCall className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
+                            {/* Pulsing ring effect */}
+                            <div className="absolute inset-0 rounded-full bg-white/30 animate-ping"></div>
+                          </div>
+                          <span className="group-hover:tracking-wide transition-all duration-300">
+                            Create Campaign
+                          </span>
+                          <span className="ml-2 bg-white/20 px-3 py-1 rounded-full text-sm font-bold backdrop-blur-sm">
+                            {getSelectedPhoneNumbers().length}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="left">
-                  <p>Create a campaign from {selectedCallIds.size} selected call{selectedCallIds.size !== 1 ? 's' : ''}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {getSelectedPhoneNumbers().length} unique phone number{getSelectedPhoneNumbers().length !== 1 ? 's' : ''}
-                  </p>
+                <TooltipContent side="left" className="max-w-xs">
+                  <div className="space-y-2">
+                    <p className="font-semibold">Create Campaign from Selected Calls</p>
+                    <div className="text-xs space-y-1 text-muted-foreground">
+                      <p>✓ {selectedCallIds.size} call{selectedCallIds.size !== 1 ? 's' : ''} selected</p>
+                      <p>✓ {getSelectedPhoneNumbers().length} unique phone number{getSelectedPhoneNumbers().length !== 1 ? 's' : ''}</p>
+                      <p className="text-primary mt-2">Click to link contacts and create campaign</p>
+                    </div>
+                  </div>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
