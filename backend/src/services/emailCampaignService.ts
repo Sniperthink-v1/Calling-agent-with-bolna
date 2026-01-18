@@ -281,10 +281,13 @@ export class EmailCampaignService {
           // Link email to lead_analytics if a lead analytics record exists for this contact
           await client.query(
             `UPDATE lead_analytics 
-             SET email_id = $1, updated_at = NOW()
-             WHERE user_id = $2 AND phone_number = $3 AND email_id IS NULL
-             ORDER BY created_at DESC
-             LIMIT 1`,
+             SET email_id = $1
+             WHERE id = (
+               SELECT id FROM lead_analytics
+               WHERE user_id = $2 AND phone_number = $3 AND email_id IS NULL
+               ORDER BY created_at DESC
+               LIMIT 1
+             )`,
             [emailId, userId, contact.phone_number]
           );
 

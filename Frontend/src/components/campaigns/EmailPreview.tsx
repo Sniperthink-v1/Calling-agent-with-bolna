@@ -84,6 +84,42 @@ function replaceTokens(text: string, contact: Contact): string {
   });
 }
 
+/**
+ * Replace tokens with HTML highlighting for missing values
+ */
+function replaceTokensWithHighlight(text: string, contact: Contact): string {
+  if (!text) return '';
+
+  const tokenMap: Record<string, string> = {
+    first_name: extractFirstName(contact.name),
+    last_name: extractLastName(contact.name),
+    name: contact.name || '',
+    email: contact.email || '',
+    phone_number: contact.phone_number || '',
+    company: contact.company || '',
+    city: contact.city || '',
+    country: contact.country || '',
+    business_context: contact.business_context || '',
+  };
+
+  // Replace {token|fallback} or {token}
+  return text.replace(/\{([a-z_]+)(?:\|([^}]+))?\}/g, (match, token, fallback) => {
+    const value = tokenMap[token];
+    if (value && value.trim()) {
+      return value;
+    }
+    
+    // If no value and no fallback, highlight in red with tooltip
+    if (!fallback) {
+      const tokenDisplay = `{${token}}`;
+      return `<span class="inline-block px-1 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded font-mono text-xs cursor-help" title="Missing data for '${token}' - Add fallback like {${token}|default value} to avoid this">${tokenDisplay}</span>`;
+    }
+    
+    // Use fallback value
+    return fallback;
+  });
+}
+
 export const EmailPreview: React.FC<EmailPreviewProps> = ({
   subject,
   body,
@@ -100,13 +136,25 @@ export const EmailPreview: React.FC<EmailPreviewProps> = ({
       }
 
       const response = await authenticatedFetch(
-        `${API_ENDPOINTS.CONTACTS}?ids=${selectedContactIds.join(',')}`
+        `${API_ENDPOINTS.CONTACTS.LIST}?ids=${selectedContactIds.join(',')}`
       );
       if (!response.ok) {
         throw new Error('Failed to fetch contacts');
       }
       const data = await response.json();
-      return data.data || [];
+      
+      // Handle different response formats
+      if (Array.isArray(data)) {
+        return data; // Direct array response
+      }
+      if (data.data?.contacts && Array.isArray(data.data.contacts)) {
+        return data.data.contacts; // Nested structure
+      }
+      if (data.data && Array.isArray(data.data)) {
+        return data.data; // data property is array
+      }
+      
+      return [];
     },
     enabled: selectedContactIds && selectedContactIds.length > 0,
   });
@@ -130,8 +178,8 @@ export const EmailPreview: React.FC<EmailPreviewProps> = ({
     }
 
     return {
-      subject: replaceTokens(subject, selectedContact),
-      body: replaceTokens(body, selectedContact),
+      subject: replaceTokensWithHighlight(subject, selectedContact),
+      body: replaceTokensWithHighlight(body, selectedContact),
     };
   }, [subject, body, selectedContact]);
 
@@ -149,6 +197,42 @@ export const EmailPreview: React.FC<EmailPreviewProps> = ({
   const allTokens = useMemo(() => {
     return [...new Set([...tokensInSubject, ...tokensInBody])];
   }, [tokensInSubject, tokensInBody]);
+
+  // Validate tokens for all selected contacts
+  const validationWarnings = useMemo(() => {
+    if (!contacts || contacts.length === 0 || allTokens.length === 0) {
+      return [];
+    }
+
+    const warnings: Array<{ contactId: string; contactName: string; missingTokens: string[] }> = [];
+
+    contacts.forEach(contact => {
+      const missingTokens: string[] = [];
+      
+      allTokens.forEach(tokenStr => {
+        // Parse token (remove braces and extract token name, ignore fallback)
+        const match = tokenStr.match(/\{([a-z_]+)(?:\|[^}]+)?\}/);
+        if (!match) return;
+        
+        const token = match[1];
+        const hasData = replaceTokens(tokenStr, contact) !== tokenStr;
+        
+        if (!hasData) {
+          missingTokens.push(token);
+        }
+      });
+
+      if (missingTokens.length > 0) {
+        warnings.push({
+          contactId: contact.id,
+          contactName: contact.name || contact.email,
+          missingTokens
+        });
+      }
+    });
+
+    return warnings;
+  }, [contacts, allTokens]);
 
   if (!contacts || contacts.length === 0) {
     return (
@@ -219,6 +303,30 @@ export const EmailPreview: React.FC<EmailPreviewProps> = ({
           </div>
         )}
 
+        {/* Validation Warnings */}
+        {validationWarnings.length > 0 && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <p className="font-semibold">Missing Data for Tokens:</p>
+                <div className="space-y-1 text-xs">
+                  {validationWarnings.map((warning) => (
+                    <div key={warning.contactId}>
+                      <strong>{warning.contactName}:</strong>{' '}
+                      {warning.missingTokens.map(t => `{${t}}`).join(', ')}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs mt-2">
+                  These contacts are missing data for the tokens above. Add fallback text using{' '}
+                  <code className="font-mono">{'{token|fallback}'}</code> syntax or ensure contacts have complete data.
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Email Preview */}
         <div className="space-y-3 rounded-lg border bg-muted/50 p-4">
           {/* Subject Line */}
@@ -226,9 +334,10 @@ export const EmailPreview: React.FC<EmailPreviewProps> = ({
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
               Subject:
             </label>
-            <p className="text-sm font-semibold">
-              {preview.subject || '(Empty subject)'}
-            </p>
+            <div 
+              className="text-sm font-semibold"
+              dangerouslySetInnerHTML={{ __html: preview.subject || '(Empty subject)' }}
+            />
           </div>
 
           {/* Divider */}

@@ -20,8 +20,16 @@ export class ContactController {
         limit = '50', 
         offset = '0', 
         sortBy = 'name', 
-        sortOrder = 'asc' 
+        sortOrder = 'asc',
+        ids
       } = req.query;
+
+      // Handle specific IDs query
+      if (ids) {
+        const contactIds = (ids as string).split(',').map(id => id.trim());
+        const result = await ContactService.getContactsByIds(userId, contactIds);
+        return res.json(result.contacts);
+      }
 
       const options = {
         search: search as string,

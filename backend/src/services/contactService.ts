@@ -181,6 +181,66 @@ export class ContactService {
   }
 
   /**
+   * Get specific contacts by IDs
+   */
+  static async getContactsByIds(userId: string, contactIds: string[]): Promise<{ contacts: any[] }> {
+    try {
+      if (!contactIds || contactIds.length === 0) {
+        return { contacts: [] };
+      }
+
+      // Build placeholders for IN clause
+      const placeholders = contactIds.map((_, i) => `$${i + 2}`).join(',');
+      
+      const query = `
+        SELECT 
+          c.id,
+          c.user_id,
+          c.name,
+          c.phone_number,
+          c.email,
+          c.company,
+          c.notes,
+          c.city,
+          c.country,
+          c.business_context,
+          c.created_at,
+          c.updated_at,
+          c.auto_created_from_call_id,
+          c.is_auto_created,
+          c.auto_creation_source,
+          c.is_customer,
+          c.not_connected,
+          c.last_contact_at,
+          c.call_attempted_busy,
+          c.call_attempted_no_answer,
+          c.call_attempted_failed,
+          c.last_email_sent_at,
+          c.total_emails_sent,
+          c.total_emails_opened,
+          c.lead_stage,
+          c.lead_stage_updated_at
+        FROM contacts c
+        WHERE c.user_id = $1 AND c.id IN (${placeholders})
+        ORDER BY c.name
+      `;
+
+      const result = await ContactModel.query(query, [userId, ...contactIds]);
+      
+      // Add empty tags array to each contact
+      const contactsWithTags = result.rows.map(contact => ({
+        ...contact,
+        tags: []
+      }));
+      
+      return { contacts: contactsWithTags };
+    } catch (error) {
+      logger.error('Error getting contacts by IDs:', error);
+      throw new Error('Failed to retrieve contacts');
+    }
+  }
+
+  /**
    * Create a new contact
    */
   static async createContact(userId: string, contactData: Omit<CreateContactData, 'user_id'>): Promise<ContactInterface> {

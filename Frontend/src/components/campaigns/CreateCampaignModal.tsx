@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Upload, X, FileText, CheckCircle, AlertCircle, Download, HelpCircle, Loader2, Phone, MessageSquare, Mail, Plus, Trash2 } from 'lucide-react';
+import { Upload, X, FileText, CheckCircle, AlertCircle, Download, HelpCircle, Loader2, Phone, MessageSquare, Mail, Plus, Trash2, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -38,6 +38,9 @@ import CampaignTimezoneSelectorCard from '@/components/campaigns/CampaignTimezon
 import { detectBrowserTimezone } from '@/utils/timezone';
 import { API_ENDPOINTS } from '@/config/api';
 import * as XLSX from 'xlsx';
+import { EmailTokenPicker } from './EmailTokenPicker';
+import { EmailTemplateSelector, EmailTemplate } from './EmailTemplateSelector';
+import { EmailPreview } from './EmailPreview';
 
 // Campaign type
 type CampaignType = 'call' | 'whatsapp' | 'email';
@@ -205,6 +208,23 @@ function getDateInTimezone(timezone: string): string {
     day: '2-digit',
   });
   return formatter.format(new Date()); // Returns YYYY-MM-DD format
+}
+
+/**
+ * Highlight tokens with missing data in red
+ */
+function highlightMissingTokens(text: string): string {
+  if (!text) return '';
+  
+  // Match all tokens {token} or {token|fallback}
+  return text.replace(/\{([a-z_]+)(?:\|([^}]+))?\}/g, (match, token, fallback) => {
+    // If no fallback provided, highlight in red
+    if (!fallback) {
+      return `<span class="inline-block px-1 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded font-mono text-xs cursor-help" title="Missing fallback - Add like {${token}|default value}">${match}</span>`;
+    }
+    // If fallback exists, show in green (valid)
+    return `<span class="inline-block px-1 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded font-mono text-xs" title="Will use fallback: ${fallback}">${match}</span>`;
+  });
 }
 
 interface CreateCampaignModalProps {
@@ -950,6 +970,28 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
 
   const handleRemoveAttachment = (index: number) => {
     setEmailAttachments(emailAttachments.filter((_, i) => i !== index));
+  };
+
+  // Insert token into email subject
+  const insertTokenIntoSubject = (token: string) => {
+    const formattedToken = `{${token}}`;
+    setEmailSubject(prev => prev + formattedToken);
+  };
+
+  // Insert token into email body
+  const insertTokenIntoBody = (token: string) => {
+    const formattedToken = `{${token}}`;
+    setEmailBody(prev => prev + formattedToken);
+  };
+
+  // Handle email template selection
+  const handleSelectTemplate = (template: EmailTemplate) => {
+    setEmailSubject(template.subject);
+    setEmailBody(template.body);
+    toast({
+      title: 'Template Applied',
+      description: `"${template.name}" template has been loaded. You can customize it as needed.`,
+    });
   };
 
   const handleDownloadTemplate = async () => {
@@ -2118,29 +2160,75 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
               )}
 
               <div>
-                <Label htmlFor="emailSubject">Email Subject *</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label htmlFor="emailSubject">Email Subject *</Label>
+                  <EmailTokenPicker onInsertToken={insertTokenIntoSubject} />
+                </div>
                 <Input
                   id="emailSubject"
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
-                  placeholder="Enter email subject line"
+                  placeholder="e.g., Hi {first_name}, Special offer just for you!"
                   className="mt-1"
                 />
+                {/* Inline token validation preview */}
+                {emailSubject && emailSubject.includes('{') && (
+                  <div 
+                    className="mt-2 p-2 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-sm"
+                    dangerouslySetInnerHTML={{ __html: highlightMissingTokens(emailSubject) }}
+                  />
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Use tokens like {'{first_name}'} for personalization. Add fallback: {'{first_name|Customer}'}
+                </p>
               </div>
 
               <div>
-                <Label htmlFor="emailBody">Email Message *</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label htmlFor="emailBody">Email Message *</Label>
+                  <div className="flex gap-2">
+                    <EmailTemplateSelector onSelectTemplate={handleSelectTemplate} />
+                    <EmailTokenPicker onInsertToken={insertTokenIntoBody} />
+                  </div>
+                </div>
                 <Textarea
                   id="emailBody"
                   value={emailBody}
                   onChange={(e) => setEmailBody(e.target.value)}
-                  placeholder="Type your email message here..."
-                  className="mt-1 min-h-[150px] resize-none"
+                  placeholder="Dear {first_name|Customer},\n\nWe're excited to share...\n\nHTML is supported for formatting."
+                  className="mt-1 min-h-[200px] font-mono text-sm"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Tip: Keep your message clear and personalized for better engagement
-                </p>
+                {/* Inline token validation preview */}
+                {emailBody && emailBody.includes('{') && (
+                  <div 
+                    className="mt-2 p-3 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-sm whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: highlightMissingTokens(emailBody) }}
+                  />
+                )}
+                <div className="text-xs text-muted-foreground mt-2 space-y-1">
+                  <p><strong>💡 Personalization:</strong> Use tokens like {'{first_name}'}, {'{company}'}, {'{email}'}</p>
+                  <p><strong>🎨 Formatting:</strong> HTML tags supported (e.g., &lt;p&gt;, &lt;strong&gt;, &lt;a&gt;)</p>
+                  <p><strong>🛡️ Fallbacks:</strong> Add defaults with | (e.g., {'{first_name|Valued Customer}'})</p>
+                </div>
               </div>
+
+              {/* Live Preview - Always Visible */}
+              {preSelectedContacts.length > 0 && (
+                <div className="border-2 border-blue-500/20 rounded-lg p-4 bg-blue-50/10 dark:bg-blue-900/10">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Eye className="h-5 w-5 text-blue-500" />
+                    <h3 className="text-base font-semibold text-blue-600 dark:text-blue-400">
+                      Live Preview - Updates as you type
+                    </h3>
+                  </div>
+                  
+                  <EmailPreview
+                    subject={emailSubject}
+                    body={emailBody}
+                    selectedContactIds={preSelectedContacts}
+                  />
+                </div>
+              )}
 
               {/* Email Attachments */}
               <div className="space-y-2">
