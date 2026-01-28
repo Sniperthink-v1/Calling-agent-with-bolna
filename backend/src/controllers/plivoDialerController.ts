@@ -395,14 +395,14 @@ export class PlivoDialerController {
            -- Success rates (answered vs total)
            CASE 
              WHEN COUNT(*) > 0 
-             THEN ROUND((COUNT(*) FILTER (WHERE answered_at IS NOT NULL)::float / COUNT(*)::float * 100), 2)
+             THEN ROUND((COUNT(*) FILTER (WHERE answered_at IS NOT NULL)::float / COUNT(*)::float * 100)::numeric, 2)
              ELSE 0 
            END AS answer_rate_percentage,
            
            -- Connection rate (any call that progressed beyond initiated)
            CASE 
              WHEN COUNT(*) > 0 
-             THEN ROUND((COUNT(*) FILTER (WHERE status NOT IN ('failed', 'network_error', 'invalid_number'))::float / COUNT(*)::float * 100), 2)
+             THEN ROUND((COUNT(*) FILTER (WHERE status NOT IN ('failed', 'network_error', 'invalid_number'))::float / COUNT(*)::float * 100)::numeric, 2)
              ELSE 0 
            END AS connection_rate_percentage
            
