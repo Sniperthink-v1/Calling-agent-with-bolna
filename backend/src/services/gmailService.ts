@@ -11,6 +11,7 @@ import { pool } from '../config/database';
 import { logger } from '../utils/logger';
 import googleAuthService from './googleAuthService';
 import { hasGmailScope } from '../types/googleCalendar';
+import emailTrackingService from './emailTrackingService';
 
 interface GmailRecipient {
   address: string;
@@ -31,12 +32,20 @@ interface SendGmailOptions {
   cc?: GmailRecipient[];
   bcc?: GmailRecipient[];
   attachments?: GmailAttachment[];
+  // Sender options
+  fromName?: string; // Display name for the sender (e.g., "Siddhant Jaiswal")
+  fromEmail?: string; // Sender email (defaults to user's Gmail)
+  // Tracking options
+  trackingId?: string; // Pre-generated tracking ID (for campaign emails)
+  enableTracking?: boolean; // Whether to inject tracking pixel (default: true)
+  enableLinkTracking?: boolean; // Whether to wrap links for click tracking (default: false)
 }
 
 interface GmailSendResult {
   success: boolean;
   messageId?: string;
   threadId?: string;
+  trackingId?: string; // The tracking ID used for this email
   error?: string;
   requiresReconnect?: boolean;
 }
@@ -230,8 +239,31 @@ class GmailService {
 
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-      // Build the email message
-      const rawMessage = this.buildRawMessage(options);
+      // Generate or use provided tracking ID
+      const enableTracking = options.enableTracking !== false; // Default to true
+      const trackingId = enableTracking 
+        ? (options.trackingId || emailTrackingService.generateTrackingId())
+        : undefined;
+
+      // Process HTML body for tracking
+      let processedHtmlBody = options.htmlBody;
+      if (trackingId && enableTracking) {
+        // Inject tracking pixel
+        processedHtmlBody = emailTrackingService.injectTrackingPixel(processedHtmlBody, trackingId);
+        
+        // Optionally wrap links for click tracking
+        if (options.enableLinkTracking) {
+          processedHtmlBody = emailTrackingService.wrapLinksForTracking(processedHtmlBody, trackingId);
+        }
+        
+        logger.info('📧 Tracking pixel injected', { trackingId, enableLinkTracking: options.enableLinkTracking });
+      }
+
+      // Build the email message with processed body
+      const rawMessage = this.buildRawMessage({
+        ...options,
+        htmlBody: processedHtmlBody
+      });
 
       // Send the email
       const response = await gmail.users.messages.send({
@@ -245,13 +277,15 @@ class GmailService {
         userId,
         messageId: response.data.id,
         threadId: response.data.threadId,
+        trackingId,
         to: Array.isArray(options.to) ? options.to.map(r => r.address) : [options.to.address]
       });
 
       return {
         success: true,
         messageId: response.data.id || undefined,
-        threadId: response.data.threadId || undefined
+        threadId: response.data.threadId || undefined,
+        trackingId
       };
     } catch (error: any) {
       logger.error('❌ Failed to send email via Gmail:', error);
@@ -288,11 +322,22 @@ class GmailService {
     };
 
     // Build headers
-    let headers = [
-      `To: ${toRecipients.map(formatRecipient).join(', ')}`,
-      `Subject: =?UTF-8?B?${Buffer.from(options.subject).toString('base64')}?=`,
-      'MIME-Version: 1.0'
-    ];
+    let headers: string[] = [];
+    
+    // Add From header with display name if provided
+    if (options.fromEmail) {
+      if (options.fromName) {
+        // Encode name in UTF-8 for international characters
+        const encodedName = `=?UTF-8?B?${Buffer.from(options.fromName).toString('base64')}?=`;
+        headers.push(`From: ${encodedName} <${options.fromEmail}>`);
+      } else {
+        headers.push(`From: ${options.fromEmail}`);
+      }
+    }
+    
+    headers.push(`To: ${toRecipients.map(formatRecipient).join(', ')}`);
+    headers.push(`Subject: =?UTF-8?B?${Buffer.from(options.subject).toString('base64')}?=`);
+    headers.push('MIME-Version: 1.0');
 
     if (options.cc && options.cc.length > 0) {
       headers.push(`Cc: ${options.cc.map(formatRecipient).join(', ')}`);

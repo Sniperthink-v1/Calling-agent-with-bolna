@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EmailCampaignService } from '../services/emailCampaignService';
+import emailTrackingService from '../services/emailTrackingService';
 import { logger } from '../utils/logger';
 import { EmailCampaignController } from '../controllers/emailCampaignController';
 import { authenticateToken } from '../middleware/auth';
@@ -157,6 +158,60 @@ router.post('/:id/cancel', async (req: Request, res: Response): Promise<any> => 
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to cancel email campaign',
+    });
+  }
+});
+
+/**
+ * @route   GET /api/email-campaigns/:id/tracking
+ * @desc    Get tracking statistics for an email campaign
+ * @access  Private
+ */
+router.get('/:id/tracking', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const stats = await emailTrackingService.getCampaignTrackingStats(req.params.id, userId);
+
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    logger.error('Error fetching campaign tracking stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch tracking stats',
+    });
+  }
+});
+
+/**
+ * @route   GET /api/email-campaigns/:campaignId/emails/:emailId/tracking
+ * @desc    Get tracking statistics for a specific email
+ * @access  Private
+ */
+router.get('/:campaignId/emails/:emailId/tracking', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const stats = await emailTrackingService.getEmailTrackingStats(req.params.emailId, userId);
+
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    logger.error('Error fetching email tracking stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch tracking stats',
     });
   }
 });

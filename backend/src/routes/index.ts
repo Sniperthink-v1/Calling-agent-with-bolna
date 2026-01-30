@@ -40,6 +40,7 @@ import chatLeadsRoutes from './chatLeads';
 import teamMemberRoutes from './teamMembers';
 import extractionsRoutes from './extractions';
 import plivoDialerRoutes from './plivoDialer';
+import emailTrackingRoutes from './emailTracking';
 
 // Import rate limiting middleware
 import { generalRateLimit, authRateLimit } from '../middleware/rateLimit';
@@ -76,6 +77,7 @@ router.use('/auth', authRateLimit, authRoutes);
 // Public routes - use IP-based rate limiting
 router.use('/email', generalRateLimit, emailRoutes);
 router.use('/webhooks', webhookRoutes); // Webhooks have their own rate limiting
+router.use('/track', emailTrackingRoutes); // Email tracking (open/click pixels) - public, no rate limiting to avoid blocking email clients
 
 // Protected routes - authentication + user-based rate limiting
 router.use('/user', authenticatedRateLimit, userRoutes);

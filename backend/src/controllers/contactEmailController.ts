@@ -82,12 +82,21 @@ export class ContactEmailController {
         });
       }
 
+      // Get user's name for sender display
+      const userResult = await pool.query(
+        'SELECT name FROM users WHERE id = $1',
+        [userId]
+      );
+      const fromName = userResult.rows[0]?.name || '';
+
       // Send email via Gmail API
       const result = await gmailService.sendEmail(userId, {
         to: { address: to, name: toName },
         subject,
         htmlBody: bodyHtml,
         textBody: bodyText || bodyHtml.replace(/<[^>]*>/g, ''), // Strip HTML for text
+        fromName, // User's display name
+        fromEmail: gmailStatus.email, // User's Gmail address
         cc: cc?.map(email => ({ address: email })),
         bcc: bcc?.map(email => ({ address: email })),
         attachments: attachments?.map(att => ({

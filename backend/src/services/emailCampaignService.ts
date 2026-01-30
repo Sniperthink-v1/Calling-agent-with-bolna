@@ -1,6 +1,7 @@
 import { pool } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import gmailService from './gmailService';
+import emailTrackingService from './emailTrackingService';
 import { logger } from '../utils/logger';
 import { 
   replaceTokens, 
@@ -216,6 +217,13 @@ export class EmailCampaignService {
 
     const fromEmail = gmailStatus.email || '';
 
+    // Get user's name for the sender display name
+    const userResult = await client.query(
+      'SELECT name FROM users WHERE id = $1',
+      [userId]
+    );
+    const fromName = userResult.rows[0]?.name || '';
+
     // Get contacts
     const contactsResult = await client.query(
       'SELECT id, email, name, phone_number, company, city, country, business_context FROM contacts WHERE id = ANY($1::uuid[]) AND user_id = $2',
@@ -239,28 +247,36 @@ export class EmailCampaignService {
         const personalizedBodyHtml = replaceTokens(bodyHtml, contact);
         const personalizedBodyText = replaceTokens(bodyText, contact);
 
-        // Send email via Gmail API
+        // Generate tracking ID for this email
+        const trackingId = emailTrackingService.generateTrackingId();
+
+        // Send email via Gmail API with tracking enabled
         const result = await gmailService.sendEmail(userId, {
           to: { address: contact.email, name: contact.name || contact.email.split('@')[0] },
           subject: personalizedSubject,
           htmlBody: personalizedBodyHtml,
           textBody: personalizedBodyText,
+          fromName, // User's display name for the sender
+          fromEmail, // User's Gmail address
           attachments: attachments?.map(att => ({
             filename: att.filename,
             content: att.content,
             contentType: att.contentType || 'application/octet-stream',
-          }))
+          })),
+          trackingId, // Use pre-generated tracking ID
+          enableTracking: true, // Enable open tracking
+          enableLinkTracking: true // Enable click tracking for campaigns
         });
 
         if (result.success) {
-          // Store email record
+          // Store email record with tracking ID
           const emailId = uuidv4();
           await client.query(
             `INSERT INTO emails (
               id, user_id, contact_id, campaign_id, from_email, from_name,
               to_email, to_name, subject, body_html, body_text,
-              has_attachments, attachment_count, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'sent')`,
+              has_attachments, attachment_count, status, tracking_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'sent', $14)`,
             [
               emailId,
               userId,
@@ -275,6 +291,7 @@ export class EmailCampaignService {
               personalizedBodyText,
               attachments && attachments.length > 0,
               attachments?.length || 0,
+              trackingId, // Store the tracking ID
             ]
           );
 

@@ -1,0 +1,311 @@
+{
+  "name": "Gmail Lead to AI Call - SniperThink",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 0],
+      "id": "244cd52a-9c63-4cd1-bd8a-53cabe92acab",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "44uk1BreriHiEzZC",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}",
+        "simple": false,
+        "options": {
+          "dataPropertyAttachmentsPrefixName": "attachment_",
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [224, 0],
+      "id": "5096f0d1-48f1-40e4-aaf5-68f3e1d3b779",
+      "name": "Get Email with Attachments",
+      "webhookId": "ba8c5fa4-2a50-48a0-aad2-7e344fcb6943",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "44uk1BreriHiEzZC",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\nfor (let i = 0; i < items.length; i++) {\n  const binary = items[i].binary;\n  if (!binary) continue;\n  \n  for (const key in binary) {\n    if (!key.startsWith(\"attachment_\")) continue;\n    \n    const buffer = await this.helpers.getBinaryDataBuffer(i, key);\n    results.push({\n      json: {\n        attachmentName: key,\n        rawEml: buffer.toString(\"utf8\"),\n      }\n    });\n  }\n}\n\nreturn results.length ? results : [{ json: { error: \"NO_EML_ATTACHMENTS_FOUND\" } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 0],
+      "id": "e9102383-2107-45f7-b4dc-3697c6c2ef93",
+      "name": "Extract EML Attachments"
+    },
+    {
+      "parameters": {
+        "jsCode": "// -----------------------------------------------------------------------\n// CONFIGURATION\n// -----------------------------------------------------------------------\nconst inputItems = items;\nconst outputItems = [];\n\n// -----------------------------------------------------------------------\n// 1. HELPER FUNCTIONS\n// -----------------------------------------------------------------------\n\nfunction decodeQuotedPrintable(text) {\n  if (!text) return \"\";\n  return text\n    .replace(/=\\r?\\n/g, '')\n    .replace(/=[0-9A-F]{2}/gi, (match) => String.fromCharCode(parseInt(match.substr(1), 16)));\n}\n\nfunction cleanText(text) {\n  if (!text) return \"NULL\";\n  let clean = text.replace(/<[^>]*>?/gm, ' ');\n  clean = clean.replace(/['\"]/g, ''); \n  clean = clean.replace(/\\s+/g, ' ').trim();\n  return clean || \"NULL\";\n}\n\nfunction extractPhones(text) {\n  if (!text) return [];\n  const pattern = /(?:\\+91|91)?[\\-\\s]?[6-9]\\d{9}/g;\n  const matches = text.match(pattern) || [];\n  \n  const uniquePhones = [];\n  matches.forEach(p => {\n    let cleanP = p.replace(/\\D/g, '');\n    \n    if (cleanP.length > 10 && cleanP.startsWith('91')) {\n      cleanP = \"+\" + cleanP;\n    } else if (cleanP.length === 10) {\n      cleanP = \"+91\" + cleanP;\n    }\n    \n    if (!uniquePhones.includes(cleanP)) {\n      uniquePhones.push(cleanP);\n    }\n  });\n  return uniquePhones;\n}\n\n// -----------------------------------------------------------------------\n// 2. MAIN PARSING LOGIC\n// -----------------------------------------------------------------------\n\nfor (const item of inputItems) {\n  let rawEml = item.json.rawEml;\n  if (!rawEml) continue;\n\n  if (rawEml.length > 25000) {\n    rawEml = rawEml.substring(0, 25000);\n  }\n\n  const decodedEml = decodeQuotedPrintable(rawEml);\n\n  const subjectMatch = decodedEml.match(/^Subject:\\s*(.*)/m);\n  const subject = subjectMatch ? cleanText(subjectMatch[1]) : \"\";\n\n  const fromMatch = decodedEml.match(/^From:\\s*(.*)/m);\n  const fromHeader = fromMatch ? fromMatch[1] : \"\";\n\n  const dateMatch = decodedEml.match(/^Date:\\s*(.*)/m);\n  let dateStr = \"NULL\";\n  if (dateMatch) {\n    try {\n      const d = new Date(dateMatch[1]);\n      if (!isNaN(d)) {\n        dateStr = d.toISOString().split('T')[0];\n      }\n    } catch (e) {}\n  }\n\n  let source = \"Other\";\n  if (/tradeindia/i.test(fromHeader) || /tradeindia/i.test(subject)) {\n    source = \"TradeIndia\";\n  } else if (/indiamart/i.test(fromHeader) || /indiamart/i.test(subject)) {\n    source = \"IndiaMART\";\n  }\n\n  const data = {};\n  \n  if (source === \"TradeIndia\") {\n    const patterns = {\n      \"Sender Name\": /Sender Name\\s*:\\s*([^*\\r\\n]*)/i,\n      \"Company Name\": /Company\\s*:\\s*([^*\\r\\n]*)/i,\n      \"Mobile\": /Mobile No\\s*:\\s*(.*)/i,\n      \"Phone\": /Phone No\\s*:\\s*(.*)/i,\n      \"Email\": /Email\\s*:\\s*(.*)/i,\n      \"City\": /City\\s*:\\s*(.*)/i,\n      \"State\": /State\\s*:\\s*(.*)/i,\n      \"Country\": /IP\\/Country\\s*:\\s*.*?\\/([^\\n\\r]*)/i,\n      \"Product Name\": /Product Details\\s*:\\s*(.*)/i,\n      \"Quantity\": /Quantity Required\\s*:\\s*(.*)/i,\n      \"Order Value\": /Approximate Order Value\\(INR\\)\\s*:\\s*(.*)/i,\n      \"Requirement Type\": /Requirement Type\\s*:\\s*(.*)/i,\n      \"Requirement Details\": /Requirement Details\\s*:\\s*([\\s\\S]*?)(?=\\*|\\n\\n)/i \n    };\n\n    for (const [key, regex] of Object.entries(patterns)) {\n      const match = decodedEml.match(regex);\n      if (match) data[key] = cleanText(match[1]);\n    }\n\n  } else {\n    const patterns = {\n      \"Sender Name\": /Name\\s*:\\s*(.*)/i,\n      \"Company Name\": /Company Name\\s*:\\s*(.*)/i,\n      \"Mobile\": /Mobile\\s*:\\s*(.*)/i,\n      \"Email\": /Email\\s*:\\s*(.*)/i,\n      \"City\": /City\\s*:\\s*(.*)/i,\n      \"Product Name\": /I am looking for\\s*(.*)/i,\n      \"Quantity\": /Quantity\\s*:\\s*(.*)/i,\n      \"Requirement Type\": /Probable Requirement Type\\s*:\\s*(.*)/i,\n      \"Order Value\": /Probable Order Value\\s*:\\s*(.*)/i,\n      \"Application\": /Application\\s*:\\s*(.*)/i,\n      \"GSM\": /GSM\\s*:\\s*(.*)/i\n    };\n\n    for (const [key, regex] of Object.entries(patterns)) {\n      const match = decodedEml.match(regex);\n      if (match) data[key] = cleanText(match[1]);\n    }\n    \n    if (!data[\"Product Name\"] || data[\"Product Name\"] === \"NULL\") {\n      const subjParts = subject.split(\"Enquiry for\");\n      if (subjParts.length > 1) {\n        data[\"Product Name\"] = cleanText(subjParts[1].split(\"from\")[0]);\n      }\n    }\n    \n    if (!data[\"City\"] || data[\"City\"] === \"NULL\") {\n       const addrMatch = decodedEml.match(/([A-Za-z\\s]+),\\s*([A-Za-z\\s]+),\\s*India/);\n       if (addrMatch) {\n         data[\"City\"] = cleanText(addrMatch[1]);\n         data[\"State\"] = cleanText(addrMatch[2]);\n         data[\"Country\"] = \"India\";\n       }\n    }\n  }\n\n  const rawPhones = (data[\"Mobile\"] || \"\") + \" \" + (data[\"Phone\"] || \"\");\n  const phoneList = extractPhones(rawPhones);\n\n  let reqParts = [];\n  if (subject) reqParts.push(`Subject: ${subject}`);\n  \n  if (data[\"Requirement Details\"] && data[\"Requirement Details\"] !== \"NULL\") {\n    reqParts.push(data[\"Requirement Details\"]);\n  }\n  if (data[\"Application\"] && data[\"Application\"] !== \"NULL\") {\n    reqParts.push(`Application: ${data[\"Application\"]}`);\n  }\n  if (data[\"GSM\"] && data[\"GSM\"] !== \"NULL\") {\n    reqParts.push(`GSM: ${data[\"GSM\"]}`);\n  }\n  \n  const buyerFilled = decodedEml.match(/Buyer Filled Details\\s*:\\s*(.*)/i);\n  if (buyerFilled) reqParts.push(`Note: ${cleanText(buyerFilled[1])}`);\n\n  const finalReqDetails = reqParts.join(\" | \");\n\n  const row = {\n    \"Date\": dateStr,\n    \"Source\": source,\n    \"Sender Name\": data[\"Sender Name\"] || \"NULL\",\n    \"Company Name\": data[\"Company Name\"] || \"NULL\",\n    \"Phone Number 1\": phoneList[0] || \"NULL\",\n    \"Phone Number 2\": phoneList[1] || \"NULL\",\n    \"Phone Number 3\": phoneList[2] || \"NULL\",\n    \"Email Address\": data[\"Email\"] || \"NULL\",\n    \"City\": data[\"City\"] || \"NULL\",\n    \"State\": data[\"State\"] || \"NULL\",\n    \"Country\": data[\"Country\"] || \"India\",\n    \"Product Name\": data[\"Product Name\"] || \"NULL\",\n    \"Quantity\": data[\"Quantity\"] || \"NULL\",\n    \"Requirement Details\": finalReqDetails || \"NULL\",\n    \"Order Value\": data[\"Order Value\"] || \"NULL\",\n    \"Requirement Type\": data[\"Requirement Type\"] || \"NULL\"\n  };\n\n  outputItems.push({ json: row });\n}\n\nreturn outputItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [672, 0],
+      "id": "42c6daa1-d977-4f63-9acb-af9f70c795ff",
+      "name": "Parse Lead Data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "filter-valid-phone",
+              "leftValue": "={{ $json['Phone Number 1'] }}",
+              "rightValue": "NULL",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "filter-has-phone",
+              "leftValue": "={{ $json['Phone Number 1'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [896, 0],
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Filter Valid Leads"
+    },
+    {
+      "parameters": {
+        "jsCode": "// -----------------------------------------------------------------------\n// PREPARE PAYLOAD FOR SNIPERTHINK AI CALLING API\n// -----------------------------------------------------------------------\n// Maps parsed lead data to the API webhook format\n// Endpoint: POST /api/webhooks/n8n/lead-call\n// -----------------------------------------------------------------------\n\n// ⚠️ IMPORTANT: Replace with your actual Agent ID from the dashboard\nconst AGENT_ID = \"YOUR-AGENT-UUID-FROM-DASHBOARD\";\n\nconst outputItems = [];\n\nfor (const item of items) {\n  const lead = item.json;\n  \n  // Skip if no valid phone number\n  if (!lead[\"Phone Number 1\"] || lead[\"Phone Number 1\"] === \"NULL\") {\n    continue;\n  }\n  \n  // Build the lead name (use Sender Name, fallback to Company Name)\n  let leadName = lead[\"Sender Name\"];\n  if (!leadName || leadName === \"NULL\") {\n    leadName = lead[\"Company Name\"];\n  }\n  if (!leadName || leadName === \"NULL\") {\n    leadName = \"Lead from \" + (lead[\"Source\"] || \"Email\");\n  }\n  \n  // Build comprehensive notes from all available info\n  const notesParts = [];\n  \n  if (lead[\"Product Name\"] && lead[\"Product Name\"] !== \"NULL\") {\n    notesParts.push(`Product: ${lead[\"Product Name\"]}`);\n  }\n  if (lead[\"Quantity\"] && lead[\"Quantity\"] !== \"NULL\") {\n    notesParts.push(`Qty: ${lead[\"Quantity\"]}`);\n  }\n  if (lead[\"Order Value\"] && lead[\"Order Value\"] !== \"NULL\") {\n    notesParts.push(`Value: ${lead[\"Order Value\"]}`);\n  }\n  if (lead[\"Requirement Details\"] && lead[\"Requirement Details\"] !== \"NULL\") {\n    notesParts.push(lead[\"Requirement Details\"]);\n  }\n  if (lead[\"Requirement Type\"] && lead[\"Requirement Type\"] !== \"NULL\") {\n    notesParts.push(`Type: ${lead[\"Requirement Type\"]}`);\n  }\n  if (lead[\"Date\"] && lead[\"Date\"] !== \"NULL\") {\n    notesParts.push(`Lead Date: ${lead[\"Date\"]}`);\n  }\n  \n  // Construct API payload\n  const payload = {\n    agent_id: AGENT_ID,\n    lead_name: leadName,\n    recipient_phone_number: lead[\"Phone Number 1\"],\n    email: lead[\"Email Address\"] !== \"NULL\" ? lead[\"Email Address\"] : undefined,\n    Source: lead[\"Source\"] || \"n8n_gmail\",\n    Notes: notesParts.join(\" | \") || undefined,\n    company: lead[\"Company Name\"] !== \"NULL\" ? lead[\"Company Name\"] : undefined,\n    city: lead[\"City\"] !== \"NULL\" ? lead[\"City\"] : undefined,\n    country: lead[\"Country\"] !== \"NULL\" ? lead[\"Country\"] : \"India\"\n  };\n  \n  // Remove undefined fields\n  Object.keys(payload).forEach(key => {\n    if (payload[key] === undefined) {\n      delete payload[key];\n    }\n  });\n  \n  outputItems.push({ json: payload });\n}\n\nreturn outputItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 0],
+      "id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+      "name": "Prepare API Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://calling-agent-with-bolna-production.up.railway.app/api/webhooks/n8n/lead-call",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1344, 0],
+      "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+      "name": "Trigger AI Call",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-success",
+              "leftValue": "={{ $json.body.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1568, 0],
+      "id": "d4e5f6a7-b8c9-0123-def4-567890123456",
+      "name": "Check API Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log successful call initiation\nconst response = $input.first().json;\n\nreturn [{\n  json: {\n    status: \"SUCCESS\",\n    message: \"AI call initiated successfully\",\n    contact_id: response.body?.data?.contact_id,\n    call_id: response.body?.data?.call_id,\n    execution_id: response.body?.data?.execution_id,\n    contact_created: response.body?.data?.contact_created,\n    request_id: response.body?.request_id,\n    processing_time_ms: response.body?.processing_time_ms\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1792, -100],
+      "id": "e5f6a7b8-c9d0-1234-ef56-789012345678",
+      "name": "Log Success"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log failed call initiation for debugging\nconst response = $input.first().json;\n\nreturn [{\n  json: {\n    status: \"FAILED\",\n    error: response.body?.error || \"Unknown error\",\n    statusCode: response.statusCode,\n    request_id: response.body?.request_id,\n    full_response: response\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1792, 100],
+      "id": "f6a7b8c9-d0e1-2345-f678-901234567890",
+      "name": "Log Failure"
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Email with Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Email with Attachments": {
+      "main": [
+        [
+          {
+            "node": "Extract EML Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract EML Attachments": {
+      "main": [
+        [
+          {
+            "node": "Parse Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Leads": {
+      "main": [
+        [
+          {
+            "node": "Prepare API Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare API Payload": {
+      "main": [
+        [
+          {
+            "node": "Trigger AI Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger AI Call": {
+      "main": [
+        [
+          {
+            "node": "Check API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check API Response": {
+      "main": [
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f08c51c4b19c1a7d78ae662c37e055a457839279b897437e7c5977acf1150855"
+  }
+}

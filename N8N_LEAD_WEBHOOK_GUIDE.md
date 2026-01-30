@@ -26,7 +26,7 @@ Returns health status of the endpoint and database connectivity.
 
 ```json
 {
-  "agent_id": "uuid",                         // REQUIRED: Your agent ID (from dashboard)
+  "agent_id": "uuid",                         // REQUIRED: Bolna Agent ID (from Bolna dashboard or agent settings)
   "lead_name": "John Doe",                    // REQUIRED: Lead's name
   "recipient_phone_number": "+919876543210",  // REQUIRED: Phone number with ISD code
   "email": "john@example.com",                // Optional: Email address
@@ -42,7 +42,7 @@ Returns health status of the endpoint and database connectivity.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `agent_id` | UUID | ✅ Yes | Your agent ID from the dashboard (NOT Bolna agent ID) |
+| `agent_id` | UUID | ✅ Yes | Bolna Agent ID (the `bolna_agent_id` field from your agent) |
 | `lead_name` | String | ✅ Yes | Full name of the lead |
 | `recipient_phone_number` | String | ✅ Yes | Phone number with ISD code (e.g., +91 for India) |
 | `email` | String | No | Email address for follow-up |
@@ -54,10 +54,10 @@ Returns health status of the endpoint and database connectivity.
 
 ## Authentication
 
-Authentication is handled via the `agent_id` field:
-- The `agent_id` must exist in the database
+Authentication is handled via the `agent_id` field (which is the Bolna Agent ID):
+- The `agent_id` must match a `bolna_agent_id` in the agents table
 - The agent must be active (`is_active = true`)
-- The agent must be configured for calling (`bolna_agent_id` must be set)
+- The associated user must have sufficient credits
 
 The user associated with the agent is used for all operations (contact creation, call billing, etc.).
 
@@ -125,7 +125,7 @@ Configure your trigger to capture lead data.
 
 ```json
 {
-  "agent_id": "your-agent-uuid-from-dashboard",
+  "agent_id": "your-bolna-agent-id",
   "lead_name": "{{ $json.name }}",
   "recipient_phone_number": "{{ $json.phone }}",
   "email": "{{ $json.email }}",
@@ -154,7 +154,7 @@ The endpoint does not have explicit rate limiting, but:
 curl -X POST https://your-domain.com/api/webhooks/n8n/lead-call \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_id": "12345678-1234-1234-1234-123456789012",
+    "agent_id": "8b63ccd2-a002-4f6d-9950-93056ceb8c9c",  # Your Bolna Agent ID
     "lead_name": "Rahul Sharma",
     "recipient_phone_number": "+919876543210",
     "email": "rahul@example.com",
@@ -169,12 +169,13 @@ curl -X POST https://your-domain.com/api/webhooks/n8n/lead-call \
 ## Troubleshooting
 
 ### "Invalid agent_id - agent not found"
-- Verify the agent_id is correct (check dashboard)
-- Ensure you're using the agent's UUID, not the Bolna agent ID
+- Verify you're using the correct Bolna Agent ID
+- Check your agent's `bolna_agent_id` in the dashboard or database
+- NOT the internal database `id` - use the `bolna_agent_id` field
 
-### "Agent is not configured for calling"
-- The agent needs to be registered with Bolna.ai first
-- Check that `bolna_agent_id` is set in the agent record
+### "Agent is not active"
+- The agent exists but `is_active` is set to false
+- Activate the agent in the dashboard
 
 ### "Concurrency limit reached"
 - The user has too many active calls
