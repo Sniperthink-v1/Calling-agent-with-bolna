@@ -21,7 +21,15 @@ export class ContactController {
         offset = '0', 
         sortBy = 'name', 
         sortOrder = 'asc',
-        ids
+        ids,
+        // Server-side column filters (comma-separated values)
+        filterTags,
+        filterLastStatus,
+        filterCallType,
+        filterSource,
+        filterCity,
+        filterCountry,
+        filterLeadStage
       } = req.query;
 
       // Handle specific IDs query
@@ -31,12 +39,32 @@ export class ContactController {
         return res.json(result.contacts);
       }
 
+      // Parse filter arrays from comma-separated strings
+      const parseFilterArray = (value: unknown): string[] => {
+        if (!value) return [];
+        if (typeof value === 'string') {
+          return value.split(',').map(v => v.trim()).filter(Boolean);
+        }
+        if (Array.isArray(value)) {
+          return value.map(v => String(v).trim()).filter(Boolean);
+        }
+        return [];
+      };
+
       const options = {
         search: search as string,
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
         sortBy: sortBy as 'name' | 'created_at' | 'phone_number',
-        sortOrder: sortOrder as 'asc' | 'desc'
+        sortOrder: sortOrder as 'asc' | 'desc',
+        // Server-side filters
+        filterTags: parseFilterArray(filterTags),
+        filterLastStatus: parseFilterArray(filterLastStatus),
+        filterCallType: parseFilterArray(filterCallType),
+        filterSource: parseFilterArray(filterSource),
+        filterCity: parseFilterArray(filterCity),
+        filterCountry: parseFilterArray(filterCountry),
+        filterLeadStage: parseFilterArray(filterLeadStage)
       };
 
       // Only cache first 2 pages (40-50 items) for better memory management

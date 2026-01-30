@@ -247,13 +247,36 @@ export const ContactList: React.FC<ContactListProps> = ({
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Prepare options for useContacts hook
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentOffset(0);
+    setAllLoadedContacts([]);
+    lastLoadedOffsetRef.current = -1;
+  }, [
+    columnFilters.tags.join(','),
+    columnFilters.lastStatus.join(','),
+    columnFilters.callType.join(','),
+    columnFilters.source.join(','),
+    columnFilters.city.join(','),
+    columnFilters.country.join(','),
+    columnFilters.leadStage.join(',')
+  ]);
+
+  // Prepare options for useContacts hook with server-side filters
   const contactsOptions: ContactsListOptions = {
     search: debouncedSearchTerm,
     sortBy,
     sortOrder,
     limit: ITEMS_PER_BATCH,
     offset: currentOffset,
+    // Server-side column filters
+    filterTags: columnFilters.tags,
+    filterLastStatus: columnFilters.lastStatus,
+    filterCallType: columnFilters.callType,
+    filterSource: columnFilters.source,
+    filterCity: columnFilters.city,
+    filterCountry: columnFilters.country,
+    filterLeadStage: columnFilters.leadStage,
   };
 
   // Fetch contacts
@@ -303,63 +326,8 @@ export const ContactList: React.FC<ContactListProps> = ({
     }
   }, [displayContacts]);
 
-  // Apply filter - with null safety check
-  const filteredContacts = displayContacts.filter(contact => {
-    // Skip null/undefined contacts
-    if (!contact || !contact.id) return false;
-    
-    // Tag filter (multi-select)
-    if (columnFilters.tags.length > 0) {
-      const contactTags = contact.tags || [];
-      const hasMatchingTag = columnFilters.tags.some(tag => contactTags.includes(tag));
-      if (!hasMatchingTag) return false;
-    }
-    
-    // Last Status filter (multi-select)
-    if (columnFilters.lastStatus.length > 0) {
-      if (!contact.lastCallStatus || !columnFilters.lastStatus.includes(contact.lastCallStatus)) {
-        return false;
-      }
-    }
-    
-    // Call Type filter (multi-select)
-    if (columnFilters.callType.length > 0) {
-      if (!contact.callType || !columnFilters.callType.includes(contact.callType)) {
-        return false;
-      }
-    }
-    
-    // Source filter (multi-select)
-    if (columnFilters.source.length > 0) {
-      const contactSource = contact.autoCreationSource || (contact.isAutoCreated ? 'webhook' : 'manual');
-      if (!columnFilters.source.includes(contactSource)) {
-        return false;
-      }
-    }
-    
-    // City filter (multi-select)
-    if (columnFilters.city.length > 0) {
-      if (!contact.city || !columnFilters.city.includes(contact.city)) {
-        return false;
-      }
-    }
-    
-    // Country filter (multi-select)
-    if (columnFilters.country.length > 0) {
-      if (!contact.country || !columnFilters.country.includes(contact.country)) {
-        return false;
-      }
-    }
-    
-    // Lead Stage filter (multi-select)
-    if (columnFilters.leadStage.length > 0) {
-      if (!contact.leadStage || !columnFilters.leadStage.includes(contact.leadStage)) {
-        return false;
-      }
-    }
-    
-    return true;
-  });
+  // Since filtering is now done server-side, just filter out null/undefined contacts
+  const filteredContacts = displayContacts.filter(contact => contact && contact.id);
 
   // Update accumulated contacts when new batch arrives
   useEffect(() => {

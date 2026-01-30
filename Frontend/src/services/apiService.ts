@@ -1143,6 +1143,29 @@ class ApiService {
       if (options.sortOrder) queryParams.append('sortOrder', options.sortOrder);
       if (options.limit) queryParams.append('limit', options.limit.toString());
       if (options.offset) queryParams.append('offset', options.offset.toString());
+      
+      // Server-side column filters (pass as comma-separated strings)
+      if (options.filterTags && options.filterTags.length > 0) {
+        queryParams.append('filterTags', options.filterTags.join(','));
+      }
+      if (options.filterLastStatus && options.filterLastStatus.length > 0) {
+        queryParams.append('filterLastStatus', options.filterLastStatus.join(','));
+      }
+      if (options.filterCallType && options.filterCallType.length > 0) {
+        queryParams.append('filterCallType', options.filterCallType.join(','));
+      }
+      if (options.filterSource && options.filterSource.length > 0) {
+        queryParams.append('filterSource', options.filterSource.join(','));
+      }
+      if (options.filterCity && options.filterCity.length > 0) {
+        queryParams.append('filterCity', options.filterCity.join(','));
+      }
+      if (options.filterCountry && options.filterCountry.length > 0) {
+        queryParams.append('filterCountry', options.filterCountry.join(','));
+      }
+      if (options.filterLeadStage && options.filterLeadStage.length > 0) {
+        queryParams.append('filterLeadStage', options.filterLeadStage.join(','));
+      }
 
       if (queryParams.toString()) {
         url += `?${queryParams.toString()}`;

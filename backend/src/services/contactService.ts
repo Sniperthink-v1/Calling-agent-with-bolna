@@ -17,97 +17,122 @@ export class ContactService {
       offset?: number;
       sortBy?: 'name' | 'created_at' | 'phone_number';
       sortOrder?: 'asc' | 'desc';
+      // Server-side column filters
+      filterTags?: string[];
+      filterLastStatus?: string[];
+      filterCallType?: string[];
+      filterSource?: string[];
+      filterCity?: string[];
+      filterCountry?: string[];
+      filterLeadStage?: string[];
     } = {}
   ): Promise<{ contacts: ContactInterface[]; total: number }> {
     try {
-      const { search, limit = 50, offset = 0, sortBy = 'created_at', sortOrder = 'desc' } = options;
+      const { 
+        search, 
+        limit = 50, 
+        offset = 0, 
+        sortBy = 'created_at', 
+        sortOrder = 'desc',
+        filterTags = [],
+        filterLastStatus = [],
+        filterCallType = [],
+        filterSource = [],
+        filterCity = [],
+        filterCountry = [],
+        filterLeadStage = []
+      } = options;
+      
+      // Check if any filters are active
+      const hasFilters = filterTags.length > 0 || filterLastStatus.length > 0 || 
+        filterCallType.length > 0 || filterSource.length > 0 || 
+        filterCity.length > 0 || filterCountry.length > 0 || filterLeadStage.length > 0;
 
       let contacts: ContactInterface[];
       let total: number;
 
+      // Build the base query with CTE for computed columns
+      const validSortColumns: Record<string, string> = {
+        'name': 'c.name',
+        'created_at': 'c.created_at',
+        'phone_number': 'c.phone_number'
+      };
+      const sortColumn = validSortColumns[sortBy] || 'c.created_at';
+      const sortDirection = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+      
+      // Build dynamic filter conditions and parameters
+      let paramIndex = 1;
+      const params: any[] = [userId];
+      paramIndex++;
+      
+      // Search condition
+      let searchCondition = '';
       if (search) {
-        // Enhanced search with auto-creation info and meeting data
-        // Universal search across Name, Company, Phone, Email, Notes, Tags
-        const query = `
-          SELECT c.*, 
-            calls.bolna_execution_id as linked_call_id,
-            CASE 
-              WHEN c.auto_created_from_call_id IS NOT NULL THEN 'auto_created'
-              WHEN EXISTS(SELECT 1 FROM calls WHERE contact_id = c.id) THEN 'manually_linked'
-              ELSE 'not_linked'
-            END as call_link_type,
-            CASE 
-              WHEN (SELECT COUNT(*) FROM calls WHERE contact_id = c.id) = 0 THEN 'Not contacted'
-              WHEN (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1) = 'inbound'
-                AND (c.call_attempted_busy > 0 OR c.call_attempted_no_answer > 0)
-                THEN 'Callback Received'
-              ELSE COALESCE(last_call.call_lifecycle_status, 'Not contacted')
-            END as last_call_status,
-            COALESCE(
-              (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
-              'outbound'
-            ) as call_type,
-            -- Meeting data from calendar_meetings (latest upcoming or most recent meeting)
-            latest_meeting.meeting_link,
-            latest_meeting.meeting_start_time,
-            latest_meeting.meeting_end_time,
-            latest_meeting.meeting_title,
-            latest_meeting.meeting_id,
-            latest_meeting.meeting_status
-          FROM contacts c
-          LEFT JOIN calls ON c.auto_created_from_call_id = calls.id
-          LEFT JOIN LATERAL (
-            SELECT call_lifecycle_status
-            FROM calls
-            WHERE (contact_id = c.id OR phone_number = c.phone_number)
-            ORDER BY created_at DESC
-            LIMIT 1
-          ) last_call ON true
-          LEFT JOIN LATERAL (
-            SELECT 
-              cm.id as meeting_id,
-              cm.meeting_link,
-              cm.meeting_start_time,
-              cm.meeting_end_time,
-              cm.meeting_title,
-              cm.status as meeting_status
-            FROM calendar_meetings cm
-            WHERE cm.contact_id = c.id 
-              AND cm.status IN ('scheduled', 'rescheduled')
-            ORDER BY 
-              CASE WHEN cm.meeting_start_time >= NOW() THEN 0 ELSE 1 END,
-              ABS(EXTRACT(EPOCH FROM (cm.meeting_start_time - NOW())))
-            LIMIT 1
-          ) latest_meeting ON true
-          WHERE c.user_id = $1 
+        searchCondition = `
           AND (
-            c.name ILIKE $2 
-            OR c.phone_number LIKE $3 
-            OR c.email ILIKE $2 
-            OR c.company ILIKE $2
-            OR c.notes ILIKE $2
-            OR EXISTS (SELECT 1 FROM unnest(c.tags) tag WHERE tag ILIKE $2)
+            c.name ILIKE $${paramIndex}
+            OR c.phone_number LIKE $${paramIndex}
+            OR c.email ILIKE $${paramIndex}
+            OR c.company ILIKE $${paramIndex}
+            OR c.notes ILIKE $${paramIndex}
+            OR EXISTS (SELECT 1 FROM unnest(c.tags) tag WHERE tag ILIKE $${paramIndex})
           )
-          ORDER BY c.created_at DESC
         `;
-        const result = await ContactModel.query(query, [userId, `%${search}%`, `%${search}%`]);
-        contacts = result.rows;
-        total = contacts.length;
-        
-        // Apply pagination to search results
-        contacts = contacts.slice(offset, offset + limit);
-      } else {
-        // Get all contacts with pagination, sorting, auto-creation info, and meeting data
-        // Using CASE statement for safe dynamic sorting
-        const validSortColumns: Record<string, string> = {
-          'name': 'c.name',
-          'created_at': 'c.created_at',
-          'phone_number': 'c.phone_number'
-        };
-        const sortColumn = validSortColumns[sortBy] || 'c.name';
-        const sortDirection = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-        
-        const query = `
+        params.push(`%${search}%`);
+        paramIndex++;
+      }
+      
+      // Build filter conditions that can be applied in WHERE clause (direct contact columns)
+      let directFilterConditions: string[] = [];
+      
+      // Tag filter (array contains any)
+      if (filterTags.length > 0) {
+        directFilterConditions.push(`c.tags && $${paramIndex}::text[]`);
+        params.push(filterTags);
+        paramIndex++;
+      }
+      
+      // City filter
+      if (filterCity.length > 0) {
+        directFilterConditions.push(`c.city = ANY($${paramIndex}::text[])`);
+        params.push(filterCity);
+        paramIndex++;
+      }
+      
+      // Country filter
+      if (filterCountry.length > 0) {
+        directFilterConditions.push(`c.country = ANY($${paramIndex}::text[])`);
+        params.push(filterCountry);
+        paramIndex++;
+      }
+      
+      // Lead Stage filter
+      if (filterLeadStage.length > 0) {
+        directFilterConditions.push(`c.lead_stage = ANY($${paramIndex}::text[])`);
+        params.push(filterLeadStage);
+        paramIndex++;
+      }
+      
+      // Source filter (needs computed column)
+      let sourceFilterCondition = '';
+      if (filterSource.length > 0) {
+        sourceFilterCondition = `
+          AND COALESCE(c.auto_creation_source, CASE WHEN c.is_auto_created THEN 'webhook' ELSE 'manual' END) = ANY($${paramIndex}::text[])
+        `;
+        params.push(filterSource);
+        paramIndex++;
+      }
+      
+      const directFiltersSQL = directFilterConditions.length > 0 
+        ? 'AND ' + directFilterConditions.join(' AND ')
+        : '';
+      
+      // Filters that require computed columns (last_call_status, call_type) - apply as outer WHERE
+      const needsComputedFilter = filterLastStatus.length > 0 || filterCallType.length > 0;
+      
+      // Base CTE query that computes derived columns
+      const baseQuery = `
+        WITH contact_data AS (
           SELECT c.*, 
             calls.bolna_execution_id as linked_call_id,
             CASE 
@@ -126,7 +151,6 @@ export class ContactService {
               (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
               'outbound'
             ) as call_type,
-            -- Meeting data from calendar_meetings (latest upcoming or most recent meeting)
             latest_meeting.meeting_link,
             latest_meeting.meeting_start_time,
             latest_meeting.meeting_end_time,
@@ -158,20 +182,54 @@ export class ContactService {
               ABS(EXTRACT(EPOCH FROM (cm.meeting_start_time - NOW())))
             LIMIT 1
           ) latest_meeting ON true
-          WHERE c.user_id = $1 
-          ORDER BY ${sortColumn} ${sortDirection}
-          LIMIT $2 OFFSET $3
-        `;
-        const result = await ContactModel.query(query, [userId, limit, offset]);
-        contacts = result.rows;
-
-        // Get total count
-        const countResult = await ContactModel.query(
-          'SELECT COUNT(*) as count FROM contacts WHERE user_id = $1',
-          [userId]
-        );
-        total = parseInt(countResult.rows[0].count);
+          WHERE c.user_id = $1
+          ${searchCondition}
+          ${directFiltersSQL}
+          ${sourceFilterCondition}
+        )
+      `;
+      
+      // Build computed column filters (last_call_status, call_type)
+      let computedFilterConditions: string[] = [];
+      
+      if (filterLastStatus.length > 0) {
+        computedFilterConditions.push(`last_call_status = ANY($${paramIndex}::text[])`);
+        params.push(filterLastStatus);
+        paramIndex++;
       }
+      
+      if (filterCallType.length > 0) {
+        computedFilterConditions.push(`call_type = ANY($${paramIndex}::text[])`);
+        params.push(filterCallType);
+        paramIndex++;
+      }
+      
+      const computedFiltersSQL = computedFilterConditions.length > 0
+        ? 'WHERE ' + computedFilterConditions.join(' AND ')
+        : '';
+      
+      // Final query with pagination
+      const paginatedQuery = `
+        ${baseQuery}
+        SELECT * FROM contact_data
+        ${computedFiltersSQL}
+        ORDER BY ${sortColumn.replace('c.', '')} ${sortDirection}
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+      params.push(limit, offset);
+      
+      const result = await ContactModel.query(paginatedQuery, params);
+      contacts = result.rows;
+      
+      // Count query (same filters but no LIMIT/OFFSET)
+      const countParams = params.slice(0, -2); // Remove limit and offset
+      const countQuery = `
+        ${baseQuery}
+        SELECT COUNT(*) as count FROM contact_data
+        ${computedFiltersSQL}
+      `;
+      const countResult = await ContactModel.query(countQuery, countParams);
+      total = parseInt(countResult.rows[0].count);
 
       return { contacts, total };
     } catch (error) {

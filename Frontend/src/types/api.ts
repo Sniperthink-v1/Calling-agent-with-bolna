@@ -337,6 +337,14 @@ export interface ContactsListOptions {
   offset?: number;
   sortBy?: 'name' | 'created_at' | 'phone_number';
   sortOrder?: 'asc' | 'desc';
+  // Server-side column filters
+  filterTags?: string[];
+  filterLastStatus?: string[];
+  filterCallType?: string[];
+  filterSource?: string[];
+  filterCity?: string[];
+  filterCountry?: string[];
+  filterLeadStage?: string[];
 }
 
 export interface ContactStats {
