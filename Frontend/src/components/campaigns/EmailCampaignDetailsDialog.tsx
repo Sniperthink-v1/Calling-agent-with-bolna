@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { authenticatedFetch } from '@/utils/auth';
+import { Mail, MousePointerClick, Eye, TrendingUp, Users } from 'lucide-react';
 
 interface EmailAttachmentMetadata {
   id: string;
@@ -65,6 +66,16 @@ interface EmailCampaignDetailsResponse {
   error?: string;
 }
 
+interface TrackingStats {
+  totalEmails: number;
+  sentEmails: number;
+  openedEmails: number;
+  clickedEmails: number;
+  openRate: number;
+  clickRate: number;
+  clickToOpenRate: number;
+}
+
 interface EmailCampaignDetailsDialogProps {
   campaignId: string;
   onClose: () => void;
@@ -86,6 +97,20 @@ const EmailCampaignDetailsDialog: React.FC<EmailCampaignDetailsDialogProps> = ({
     staleTime: 30000,
     refetchOnWindowFocus: false,
   });
+
+  // Fetch tracking stats
+  const { data: trackingData } = useQuery({
+    queryKey: ['email-campaign-tracking', campaignId],
+    queryFn: async (): Promise<{ success: boolean; data: TrackingStats }> => {
+      const response = await authenticatedFetch(`/api/email-campaigns/${encodeURIComponent(campaignId)}/tracking`);
+      if (!response.ok) throw new Error('Failed to fetch tracking stats');
+      return response.json();
+    },
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+  });
+
+  const trackingStats = trackingData?.data;
 
   const campaign = data?.data?.campaign;
   const emails = data?.data?.emails || [];
@@ -160,6 +185,60 @@ const EmailCampaignDetailsDialog: React.FC<EmailCampaignDetailsDialogProps> = ({
                     <p className="font-medium">{campaign.successful_emails ?? 0} / {campaign.failed_emails ?? 0}</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Email Tracking Stats */}
+              <div className={`p-4 rounded-lg space-y-3 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                <h3 className="font-semibold flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  Email Tracking Analytics
+                </h3>
+                {trackingStats ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users className="w-4 h-4 text-blue-500" />
+                        <span className="text-xs text-gray-500 uppercase">Sent</span>
+                      </div>
+                      <p className="text-2xl font-bold">{trackingStats.sentEmails}</p>
+                      <p className="text-xs text-gray-500">of {trackingStats.totalEmails} total</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Eye className="w-4 h-4 text-green-500" />
+                        <span className="text-xs text-gray-500 uppercase">Opened</span>
+                      </div>
+                      <p className="text-2xl font-bold">{trackingStats.openedEmails}</p>
+                      <p className="text-xs text-green-500 font-medium">{trackingStats.openRate.toFixed(1)}% open rate</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <MousePointerClick className="w-4 h-4 text-purple-500" />
+                        <span className="text-xs text-gray-500 uppercase">Clicked</span>
+                      </div>
+                      <p className="text-2xl font-bold">{trackingStats.clickedEmails}</p>
+                      <p className="text-xs text-purple-500 font-medium">{trackingStats.clickRate.toFixed(1)}% click rate</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Mail className="w-4 h-4 text-orange-500" />
+                        <span className="text-xs text-gray-500 uppercase">Click-to-Open</span>
+                      </div>
+                      <p className="text-2xl font-bold">{trackingStats.clickToOpenRate.toFixed(1)}%</p>
+                      <p className="text-xs text-gray-500">of opened emails clicked</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} animate-pulse`}>
+                        <div className="h-4 w-16 bg-gray-300 dark:bg-gray-700 rounded mb-2"></div>
+                        <div className="h-8 w-12 bg-gray-300 dark:bg-gray-700 rounded mb-1"></div>
+                        <div className="h-3 w-20 bg-gray-300 dark:bg-gray-700 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className={`p-4 rounded-lg space-y-3 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
