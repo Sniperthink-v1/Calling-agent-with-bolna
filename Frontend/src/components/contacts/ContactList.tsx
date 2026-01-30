@@ -57,6 +57,7 @@ import { Badge } from '@/components/ui/badge';
 import { LeadStageDropdown } from '@/components/LeadStageDropdown';
 import { useContacts } from '@/hooks/useContacts';
 import { useLeadStages } from '@/hooks/useLeadStages';
+import { useContactFilterOptions } from '@/hooks/useContactFilterOptions';
 import { useToast } from '@/components/ui/use-toast';
 import DeleteContactDialog from './DeleteContactDialog';
 import BulkContactUpload from './BulkContactUpload';
@@ -182,6 +183,7 @@ export const ContactList: React.FC<ContactListProps> = ({
 }) => {
   const { toast } = useToast();
   const { stages, bulkUpdateLeadStage, bulkUpdating } = useLeadStages();
+  const { filterOptions: backendFilterOptions, loading: loadingFilterOptions } = useContactFilterOptions();
   
   // State
   const [searchTerm, setSearchTerm] = useState('');
@@ -743,69 +745,98 @@ export const ContactList: React.FC<ContactListProps> = ({
     return 'Manual Entry';
   };
 
-  // Helper: Get all unique tags from contacts
+  // Use backend filter options - these contain ALL distinct values across all contacts
+  // Fallback to locally-derived values only if backend data isn't loaded yet
   const allUniqueTags = React.useMemo(() => {
+    if (backendFilterOptions.tags.length > 0) {
+      return backendFilterOptions.tags;
+    }
+    // Fallback: derive from loaded contacts
     const tagSet = new Set<string>();
     displayContacts.forEach(contact => {
       (contact.tags || []).forEach(tag => tagSet.add(tag));
     });
     return Array.from(tagSet).sort();
-  }, [displayContacts]);
+  }, [backendFilterOptions.tags, displayContacts]);
 
-  // Helper: Get all unique statuses
   const allUniqueStatuses = React.useMemo(() => {
+    if (backendFilterOptions.lastStatus.length > 0) {
+      return backendFilterOptions.lastStatus;
+    }
+    // Fallback: derive from loaded contacts
     const statusSet = new Set<string>();
     displayContacts.forEach(contact => {
       if (contact.lastCallStatus) statusSet.add(contact.lastCallStatus);
     });
     return Array.from(statusSet).sort();
-  }, [displayContacts]);
+  }, [backendFilterOptions.lastStatus, displayContacts]);
 
-  // Helper: Get all unique call types
   const allUniqueCallTypes = React.useMemo(() => {
+    if (backendFilterOptions.callType.length > 0) {
+      return backendFilterOptions.callType;
+    }
+    // Fallback: derive from loaded contacts
     const typeSet = new Set<string>();
     displayContacts.forEach(contact => {
       if (contact.callType) typeSet.add(contact.callType);
     });
     return Array.from(typeSet).sort();
-  }, [displayContacts]);
+  }, [backendFilterOptions.callType, displayContacts]);
 
-  // Helper: Get all unique cities
   const allUniqueCities = React.useMemo(() => {
+    if (backendFilterOptions.city.length > 0) {
+      return backendFilterOptions.city;
+    }
+    // Fallback: derive from loaded contacts
     const citySet = new Set<string>();
     displayContacts.forEach(contact => {
       if (contact.city) citySet.add(contact.city);
     });
     return Array.from(citySet).sort();
-  }, [displayContacts]);
+  }, [backendFilterOptions.city, displayContacts]);
 
-  // Helper: Get all unique countries
   const allUniqueCountries = React.useMemo(() => {
+    if (backendFilterOptions.country.length > 0) {
+      return backendFilterOptions.country;
+    }
+    // Fallback: derive from loaded contacts
     const countrySet = new Set<string>();
     displayContacts.forEach(contact => {
       if (contact.country) countrySet.add(contact.country);
     });
     return Array.from(countrySet).sort();
-  }, [displayContacts]);
+  }, [backendFilterOptions.country, displayContacts]);
 
-  // Helper: Get all unique sources
   const allUniqueSources = React.useMemo(() => {
+    if (backendFilterOptions.source.length > 0) {
+      return backendFilterOptions.source;
+    }
+    // Fallback: derive from loaded contacts
     const sourceSet = new Set<string>();
     displayContacts.forEach(contact => {
       const source = contact.autoCreationSource || (contact.isAutoCreated ? 'webhook' : 'manual');
       sourceSet.add(source);
     });
     return Array.from(sourceSet).sort();
-  }, [displayContacts]);
+  }, [backendFilterOptions.source, displayContacts]);
 
-  // Helper: Get all unique lead stages
+  // Lead stages: Use backend filter options which include BOTH data from contacts AND configured stages
   const allUniqueLeadStages = React.useMemo(() => {
+    if (backendFilterOptions.leadStage.length > 0) {
+      return backendFilterOptions.leadStage;
+    }
+    // Fallback: merge loaded contacts data with configured stages
     const stageSet = new Set<string>();
+    // Add stages from loaded contacts
     displayContacts.forEach(contact => {
       if (contact.leadStage) stageSet.add(contact.leadStage);
     });
+    // Also add all configured stages (from useLeadStages hook)
+    stages.forEach(stage => {
+      if (stage.name) stageSet.add(stage.name);
+    });
     return Array.from(stageSet).sort();
-  }, [displayContacts]);
+  }, [backendFilterOptions.leadStage, displayContacts, stages]);
 
   // Helper to update a specific column filter
   const updateColumnFilter = (column: keyof ColumnFilters, values: string[]) => {

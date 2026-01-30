@@ -1258,4 +1258,91 @@ export class ContactService {
     if (lower.includes('cold')) return 'Cold';
     return null;
   }
+
+  /**
+   * Get all distinct filter options for a user's contacts
+   * This queries all unique values for filterable columns across ALL contacts
+   */
+  static async getFilterOptions(userId: string): Promise<{
+    tags: string[];
+    lastStatus: string[];
+    callType: string[];
+    source: string[];
+    city: string[];
+    country: string[];
+    leadStage: string[];
+  }> {
+    try {
+      // Query all distinct values in a single query for efficiency
+      const query = `
+        WITH contact_data AS (
+          SELECT 
+            c.id,
+            c.tags,
+            c.auto_creation_source,
+            c.is_auto_created,
+            c.city,
+            c.country,
+            la.lead_stage,
+            CASE 
+              WHEN (SELECT COUNT(*) FROM calls WHERE contact_id = c.id) = 0 THEN 'Not contacted'
+              WHEN (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1) = 'inbound'
+                AND (c.call_attempted_busy > 0 OR c.call_attempted_no_answer > 0)
+                THEN 'Callback Received'
+              ELSE COALESCE(
+                (SELECT call_lifecycle_status FROM calls WHERE (contact_id = c.id OR phone_number = c.phone_number) ORDER BY created_at DESC LIMIT 1),
+                'Not contacted'
+              )
+            END as last_call_status,
+            COALESCE(
+              (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
+              'outbound'
+            ) as call_type
+          FROM contacts c
+          LEFT JOIN lead_analytics la ON la.phone_number = c.phone_number 
+            AND la.user_id = c.user_id 
+            AND la.analysis_type = 'complete'
+          WHERE c.user_id = $1
+        )
+        SELECT 
+          COALESCE(array_agg(DISTINCT unnested_tag) FILTER (WHERE unnested_tag IS NOT NULL), '{}') as tags,
+          COALESCE(array_agg(DISTINCT last_call_status) FILTER (WHERE last_call_status IS NOT NULL), '{}') as statuses,
+          COALESCE(array_agg(DISTINCT call_type) FILTER (WHERE call_type IS NOT NULL), '{}') as call_types,
+          COALESCE(array_agg(DISTINCT COALESCE(auto_creation_source, CASE WHEN is_auto_created THEN 'webhook' ELSE 'manual' END)) FILTER (WHERE COALESCE(auto_creation_source, CASE WHEN is_auto_created THEN 'webhook' ELSE 'manual' END) IS NOT NULL), '{}') as sources,
+          COALESCE(array_agg(DISTINCT city) FILTER (WHERE city IS NOT NULL AND city != ''), '{}') as cities,
+          COALESCE(array_agg(DISTINCT country) FILTER (WHERE country IS NOT NULL AND country != ''), '{}') as countries,
+          COALESCE(array_agg(DISTINCT lead_stage) FILTER (WHERE lead_stage IS NOT NULL), '{}') as lead_stages
+        FROM contact_data
+        LEFT JOIN LATERAL unnest(tags) AS unnested_tag ON true
+      `;
+
+      const result = await ContactModel.query(query, [userId]);
+      const row = result.rows[0] || {};
+
+      // Also get lead stages from user's lead_stages configuration
+      const leadStagesQuery = `
+        SELECT stages FROM users WHERE id = $1
+      `;
+      const leadStagesResult = await ContactModel.query(leadStagesQuery, [userId]);
+      const userStages = leadStagesResult.rows[0]?.stages || [];
+      
+      // Merge lead stages from data with configured stages
+      const dataLeadStages: string[] = row.lead_stages || [];
+      const configuredStageNames = userStages.map((s: any) => s.name || s);
+      const allLeadStages = [...new Set([...dataLeadStages, ...configuredStageNames])].filter(Boolean).sort();
+
+      return {
+        tags: (row.tags || []).filter(Boolean).sort(),
+        lastStatus: (row.statuses || []).filter(Boolean).sort(),
+        callType: (row.call_types || []).filter(Boolean).sort(),
+        source: (row.sources || []).filter(Boolean).sort(),
+        city: (row.cities || []).filter(Boolean).sort(),
+        country: (row.countries || []).filter(Boolean).sort(),
+        leadStage: allLeadStages
+      };
+    } catch (error) {
+      logger.error('Error getting filter options:', error);
+      throw new Error('Failed to retrieve filter options');
+    }
+  }
 }

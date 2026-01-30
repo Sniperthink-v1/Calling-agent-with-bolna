@@ -1217,6 +1217,18 @@ class ApiService {
     return this.request<ContactStats>(API_ENDPOINTS.CONTACTS.STATS);
   }
 
+  async getContactFilterOptions(): Promise<ApiResponse<{
+    tags: string[];
+    lastStatus: string[];
+    callType: string[];
+    source: string[];
+    city: string[];
+    country: string[];
+    leadStage: string[];
+  }>> {
+    return this.request(API_ENDPOINTS.CONTACTS.FILTER_OPTIONS);
+  }
+
   async lookupContact(phone: string): Promise<ApiResponse<ContactLookupResult>> {
     return this.request<ContactLookupResult>(API_ENDPOINTS.CONTACTS.LOOKUP(phone));
   }

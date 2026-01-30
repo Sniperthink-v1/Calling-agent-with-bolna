@@ -50,6 +50,9 @@ router.post('/upload',
   ContactController.uploadContacts
 );
 
+// Get all distinct filter options (for column filtering)
+router.get('/filter-options', authenticateToken, requireAuth, ContactController.getFilterOptions);
+
 // Parameterized routes (must be after specific routes)
 router.get('/:id', authenticateToken, requireAuth, ContactController.getContact);
 router.put('/:id', authenticateToken, requireAuth, ContactController.updateContact);

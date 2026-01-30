@@ -771,4 +771,30 @@ export class ContactController {
       });
     }
   }
+
+  /**
+   * Get all distinct filter options for contacts
+   * Returns unique values for each filterable column across ALL user's contacts
+   */
+  static async getFilterOptions(req: Request, res: Response): Promise<Response | void> {
+    try {
+      const userId = (req.user as any)?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const filterOptions = await ContactService.getFilterOptions(userId);
+
+      res.json({
+        success: true,
+        data: filterOptions
+      });
+    } catch (error) {
+      logger.error('Error in getFilterOptions:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve filter options',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 }

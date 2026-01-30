@@ -115,6 +115,7 @@ export const API_ENDPOINTS = {
     TEMPLATE: `${API_URL}/contacts/template`,
     LOOKUP: (phone: string) => `${API_URL}/contacts/lookup/${phone}`,
     BATCH_LOOKUP: `${API_URL}/contacts/lookup/batch`,
+    FILTER_OPTIONS: `${API_URL}/contacts/filter-options`,
   },
 
   // Campaigns

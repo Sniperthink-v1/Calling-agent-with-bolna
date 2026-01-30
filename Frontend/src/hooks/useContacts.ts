@@ -194,6 +194,8 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
       // Invalidate and refetch contacts and stats to get the real data
       cacheUtils.invalidateContacts(user?.id);
       queryClient.invalidateQueries({ queryKey: queryKeys.contactStats(user?.id) });
+      // Invalidate filter options cache since a new contact might add new filter values
+      queryClient.invalidateQueries({ queryKey: ['contact-filter-options', user?.id] });
     },
   });
 
@@ -272,6 +274,8 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
         type: 'active' // Only refetch active queries (ones currently being displayed)
       });
       queryClient.refetchQueries({ queryKey: queryKeys.contactStats(user?.id) });
+      // Invalidate filter options cache since updating a contact might change filter values
+      queryClient.invalidateQueries({ queryKey: ['contact-filter-options', user?.id] });
     },
   });
 
@@ -304,6 +308,8 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
     onSuccess: () => {
       cacheUtils.invalidateContacts(user?.id);
       queryClient.invalidateQueries({ queryKey: queryKeys.contactStats(user?.id) });
+      // Invalidate filter options cache since deleting a contact might remove filter values
+      queryClient.invalidateQueries({ queryKey: ['contact-filter-options', user?.id] });
     },
   });
 
@@ -358,6 +364,12 @@ export const useContacts = (initialOptions?: ContactsListOptions): UseContactsRe
             refetchType: 'all' 
           });
           console.log('♻️ Invalidated contact stats');
+          
+          // Step 4: Invalidate filter options cache since bulk upload adds new contacts with potential new filter values
+          await queryClient.invalidateQueries({ 
+            queryKey: ['contact-filter-options', user?.id] 
+          });
+          console.log('🔧 Invalidated filter options');
         } catch (error) {
           console.error('❌ Error during refetch:', error);
         }
