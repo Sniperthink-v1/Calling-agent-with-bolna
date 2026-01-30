@@ -6,6 +6,11 @@ import { Response } from 'express';
 const router = Router();
 const leadIntelligenceController = new LeadIntelligenceController();
 
+// Get filter options for all lead intelligence columns (for dropdown filters)
+router.get('/filter-options', authenticateToken, (req, res) => {
+  return leadIntelligenceController.getFilterOptions(req as AuthenticatedRequest, res);
+});
+
 // Get grouped leads for intelligence view
 router.get('/', authenticateToken, (req, res) => {
   return leadIntelligenceController.getLeadIntelligence(req as AuthenticatedRequest, res);

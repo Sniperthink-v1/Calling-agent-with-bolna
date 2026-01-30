@@ -97,6 +97,120 @@ export class LeadIntelligenceController {
     this.pool = pool as any;
   }
 
+  /**
+   * Get all unique filter options for Lead Intelligence from the database
+   * This returns all distinct values across ALL leads, not just the first page
+   */
+  async getFilterOptions(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
+      }
+
+      // Query to get all unique filter values across lead_analytics table
+      // Uses COALESCE and UNION to get values from both 'complete' and 'individual' analysis types
+      const query = `
+        WITH all_lead_values AS (
+          -- Get values from lead_analytics (complete analysis)
+          SELECT 
+            la.lead_status_tag,
+            la.engagement_health,
+            la.intent_level,
+            la.budget_constraint,
+            la.urgency_level,
+            la.fit_alignment,
+            la.custom_cta,
+            c.lead_stage
+          FROM lead_analytics la
+          LEFT JOIN contacts c ON la.phone_number = c.phone_number AND la.user_id = c.user_id
+          WHERE la.user_id = $1 
+            AND la.analysis_type IN ('complete', 'human_edit')
+            AND la.phone_number IS NOT NULL
+
+          UNION ALL
+
+          -- Get values from individual lead_analytics
+          SELECT 
+            la.lead_status_tag,
+            la.engagement_health,
+            la.intent_level,
+            la.budget_constraint,
+            la.urgency_level,
+            la.fit_alignment,
+            la.custom_cta,
+            co.lead_stage
+          FROM calls c
+          LEFT JOIN lead_analytics la ON c.id = la.call_id
+          LEFT JOIN contacts co ON c.contact_id = co.id
+          WHERE c.user_id = $1
+            AND (co.is_customer IS NULL OR co.is_customer = false)
+        )
+        SELECT
+          COALESCE(
+            (SELECT json_agg(DISTINCT lead_status_tag) FILTER (WHERE lead_status_tag IS NOT NULL AND lead_status_tag != '') 
+             FROM all_lead_values),
+            '[]'::json
+          ) as lead_tags,
+          COALESCE(
+            (SELECT json_agg(DISTINCT lead_stage) FILTER (WHERE lead_stage IS NOT NULL AND lead_stage != '') 
+             FROM all_lead_values),
+            '[]'::json
+          ) as lead_stages,
+          COALESCE(
+            (SELECT json_agg(DISTINCT engagement_health) FILTER (WHERE engagement_health IS NOT NULL AND engagement_health != '') 
+             FROM all_lead_values),
+            '[]'::json
+          ) as engagement_levels,
+          COALESCE(
+            (SELECT json_agg(DISTINCT intent_level) FILTER (WHERE intent_level IS NOT NULL AND intent_level != '') 
+             FROM all_lead_values),
+            '[]'::json
+          ) as intent_levels,
+          COALESCE(
+            (SELECT json_agg(DISTINCT budget_constraint) FILTER (WHERE budget_constraint IS NOT NULL AND budget_constraint != '') 
+             FROM all_lead_values),
+            '[]'::json
+          ) as budget_constraints,
+          COALESCE(
+            (SELECT json_agg(DISTINCT urgency_level) FILTER (WHERE urgency_level IS NOT NULL AND urgency_level != '') 
+             FROM all_lead_values),
+            '[]'::json
+          ) as urgency_levels,
+          COALESCE(
+            (SELECT json_agg(DISTINCT fit_alignment) FILTER (WHERE fit_alignment IS NOT NULL AND fit_alignment != '') 
+             FROM all_lead_values),
+            '[]'::json
+          ) as fit_alignments,
+          COALESCE(
+            (SELECT json_agg(DISTINCT trim(cta_value)) 
+             FROM all_lead_values, 
+                  unnest(string_to_array(custom_cta, ',')) AS cta_value
+             WHERE custom_cta IS NOT NULL AND trim(cta_value) != ''),
+            '[]'::json
+          ) as cta_values
+      `;
+
+      const result = await this.pool.query(query, [userId]);
+      const row = result.rows[0] || {};
+
+      res.json({
+        leadTags: row.lead_tags || [],
+        leadStages: row.lead_stages || [],
+        engagementLevels: row.engagement_levels || [],
+        intentLevels: row.intent_levels || [],
+        budgetConstraints: row.budget_constraints || [],
+        urgencyLevels: row.urgency_levels || [],
+        fitAlignments: row.fit_alignments || [],
+        ctaValues: row.cta_values || [],
+      });
+    } catch (error) {
+      console.error('Error fetching lead intelligence filter options:', error);
+      res.status(500).json({ error: 'Failed to fetch filter options' });
+    }
+  }
+
   async getLeadIntelligence(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const userId = req.user?.id;
@@ -104,6 +218,100 @@ export class LeadIntelligenceController {
         res.status(401).json({ error: 'User not authenticated' });
         return;
       }
+
+      // Parse filter parameters from query string
+      const filterLeadTag = req.query.filterLeadTag as string | undefined;
+      const filterLeadStage = req.query.filterLeadStage as string | undefined;
+      const filterEngagement = req.query.filterEngagement as string | undefined;
+      const filterIntent = req.query.filterIntent as string | undefined;
+      const filterBudget = req.query.filterBudget as string | undefined;
+      const filterUrgency = req.query.filterUrgency as string | undefined;
+      const filterFit = req.query.filterFit as string | undefined;
+      const filterCta = req.query.filterCta as string | undefined;
+
+      // Build dynamic filter conditions
+      const filterConditions: string[] = [];
+      const queryParams: any[] = [userId];
+      let paramIndex = 2;
+
+      // Helper to parse comma-separated filter values
+      const parseFilterValues = (filterStr: string | undefined): string[] => {
+        if (!filterStr) return [];
+        return filterStr.split(',').map(v => v.trim()).filter(v => v);
+      };
+
+      // Lead Tag filter
+      const leadTagValues = parseFilterValues(filterLeadTag);
+      if (leadTagValues.length > 0) {
+        filterConditions.push(`al.recent_lead_tag = ANY($${paramIndex})`);
+        queryParams.push(leadTagValues);
+        paramIndex++;
+      }
+
+      // Lead Stage filter
+      const leadStageValues = parseFilterValues(filterLeadStage);
+      if (leadStageValues.length > 0) {
+        filterConditions.push(`al.lead_stage = ANY($${paramIndex})`);
+        queryParams.push(leadStageValues);
+        paramIndex++;
+      }
+
+      // Engagement filter
+      const engagementValues = parseFilterValues(filterEngagement);
+      if (engagementValues.length > 0) {
+        filterConditions.push(`al.recent_engagement_level = ANY($${paramIndex})`);
+        queryParams.push(engagementValues);
+        paramIndex++;
+      }
+
+      // Intent filter
+      const intentValues = parseFilterValues(filterIntent);
+      if (intentValues.length > 0) {
+        filterConditions.push(`al.recent_intent_level = ANY($${paramIndex})`);
+        queryParams.push(intentValues);
+        paramIndex++;
+      }
+
+      // Budget filter
+      const budgetValues = parseFilterValues(filterBudget);
+      if (budgetValues.length > 0) {
+        filterConditions.push(`al.recent_budget_constraint = ANY($${paramIndex})`);
+        queryParams.push(budgetValues);
+        paramIndex++;
+      }
+
+      // Urgency filter
+      const urgencyValues = parseFilterValues(filterUrgency);
+      if (urgencyValues.length > 0) {
+        filterConditions.push(`al.recent_timeline_urgency = ANY($${paramIndex})`);
+        queryParams.push(urgencyValues);
+        paramIndex++;
+      }
+
+      // Fit filter
+      const fitValues = parseFilterValues(filterFit);
+      if (fitValues.length > 0) {
+        filterConditions.push(`al.recent_fit_alignment = ANY($${paramIndex})`);
+        queryParams.push(fitValues);
+        paramIndex++;
+      }
+
+      // CTA filter (partial match since CTA is comma-separated string)
+      const ctaValues = parseFilterValues(filterCta);
+      if (ctaValues.length > 0) {
+        // Use ILIKE with any CTA value for partial matching
+        const ctaConditions = ctaValues.map((_, i) => `al.custom_cta ILIKE $${paramIndex + i}`);
+        filterConditions.push(`(${ctaConditions.join(' OR ')})`);
+        ctaValues.forEach(v => {
+          queryParams.push(`%${v}%`);
+        });
+        paramIndex += ctaValues.length;
+      }
+
+      // Build the WHERE clause for filters
+      const filterWhereClause = filterConditions.length > 0 
+        ? `WHERE ${filterConditions.join(' AND ')}`
+        : '';
 
       // Enhanced query to group leads and get their analytics with new fields
       // Priority: complete analysis (human-edited) > most recent individual call analytics
@@ -500,10 +708,11 @@ export class LeadIntelligenceController {
           LIMIT 1
         ) cm ON true
         LEFT JOIN team_members tm ON al.assigned_to_team_member_id = tm.id
+        ${filterWhereClause}
         ORDER BY al.last_contact DESC;
       `;
 
-      const result = await this.pool.query(query, [userId]);
+      const result = await this.pool.query(query, queryParams);
       
       const leadGroups: LeadGroup[] = result.rows.map((row, index) => ({
         id: `${row.group_type}_${row.group_key || index}`,

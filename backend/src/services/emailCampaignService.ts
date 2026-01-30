@@ -145,11 +145,11 @@ export class EmailCampaignService {
       const campaignId = uuidv4();
       const bodyText = data.body.replace(/<[^>]*>/g, ''); // Strip HTML for text version
 
-      // Create email campaign
+      // Create email campaign with 'pending' status - emails will be sent in background
       const campaignResult = await client.query(
         `INSERT INTO email_campaigns (
-          id, user_id, name, subject, body_html, body_text, status, scheduled_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          id, user_id, name, subject, body_html, body_text, status, scheduled_at, total_contacts
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
         [
           campaignId,
@@ -158,31 +158,31 @@ export class EmailCampaignService {
           data.subject,
           data.body,
           bodyText,
-          data.schedule ? 'scheduled' : 'in_progress',
+          data.schedule ? 'scheduled' : 'pending', // Use 'pending' instead of 'in_progress'
           data.schedule ? new Date(data.schedule) : null,
+          data.contact_ids?.length || 0,
         ]
       );
 
       const campaign = campaignResult.rows[0];
 
-      // If contacts are provided, send emails immediately (or schedule them)
+      // Store contact IDs and attachments for background processing
       if (data.contact_ids && data.contact_ids.length > 0) {
-        await this.sendCampaignEmails(
-          client, 
-          userId, 
-          campaignId, 
-          data.contact_ids, 
-          data.subject, 
-          data.body, 
-          bodyText,
-          data.attachments
-        );
-        
-        // Update total contacts count
-        await client.query(
-          'UPDATE email_campaigns SET total_contacts = $1 WHERE id = $2',
-          [data.contact_ids.length, campaignId]
-        );
+        // Start background email processing after transaction commits
+        // Use setImmediate to not block the response
+        setImmediate(() => {
+          this.processEmailCampaignInBackground(
+            userId,
+            campaignId,
+            data.contact_ids!,
+            data.subject,
+            data.body,
+            bodyText,
+            data.attachments
+          ).catch(error => {
+            logger.error(`Background email campaign processing failed for ${campaignId}:`, error);
+          });
+        });
       }
 
       logger.info(`Email campaign created: ${campaignId} for user ${userId}`);
@@ -192,7 +192,186 @@ export class EmailCampaignService {
   }
 
   /**
-   * Send emails to all contacts in the campaign
+   * Process email campaign in background (non-blocking)
+   */
+  private static async processEmailCampaignInBackground(
+    userId: string,
+    campaignId: string,
+    contactIds: string[],
+    subject: string,
+    bodyHtml: string,
+    bodyText: string,
+    attachments?: Array<{
+      filename: string;
+      content: string;
+      contentType: string;
+      size: number;
+    }>
+  ): Promise<void> {
+    try {
+      // Update status to in_progress
+      await pool.query(
+        `UPDATE email_campaigns SET status = 'in_progress', start_date = CURRENT_TIMESTAMP WHERE id = $1`,
+        [campaignId]
+      );
+
+      // Get Gmail status to get sender email
+      const gmailStatus = await gmailService.getGmailStatus(userId);
+      if (!gmailStatus.connected || !gmailStatus.hasGmailScope) {
+        await pool.query(
+          `UPDATE email_campaigns SET status = 'failed', end_date = CURRENT_TIMESTAMP WHERE id = $1`,
+          [campaignId]
+        );
+        throw new Error('Gmail is not connected. Cannot send campaign emails.');
+      }
+
+      const fromEmail = gmailStatus.email || '';
+
+      // Get user's name for the sender display name
+      const userResult = await pool.query(
+        'SELECT name FROM users WHERE id = $1',
+        [userId]
+      );
+      const fromName = userResult.rows[0]?.name || '';
+
+      // Get contacts
+      const contactsResult = await pool.query(
+        'SELECT id, email, name, phone_number, company, city, country, business_context FROM contacts WHERE id = ANY($1::uuid[]) AND user_id = $2',
+        [contactIds, userId]
+      );
+      const contacts = contactsResult.rows;
+
+      let successCount = 0;
+      let failCount = 0;
+
+      // Send emails to each contact
+      for (const contact of contacts) {
+        if (!contact.email) {
+          failCount++;
+          continue;
+        }
+
+        try {
+          // Personalize subject and body with token replacement
+          const personalizedSubject = replaceTokens(subject, contact);
+          const personalizedBodyHtml = replaceTokens(bodyHtml, contact);
+          const personalizedBodyText = replaceTokens(bodyText, contact);
+
+          // Generate tracking ID for this email
+          const trackingId = emailTrackingService.generateTrackingId();
+
+          // Send email via Gmail API with tracking enabled
+          const result = await gmailService.sendEmail(userId, {
+            to: { address: contact.email, name: contact.name || contact.email.split('@')[0] },
+            subject: personalizedSubject,
+            htmlBody: personalizedBodyHtml,
+            textBody: personalizedBodyText,
+            fromName,
+            fromEmail,
+            attachments: attachments?.map(att => ({
+              filename: att.filename,
+              content: att.content,
+              contentType: att.contentType || 'application/octet-stream',
+            })),
+            trackingId,
+            enableTracking: true,
+            enableLinkTracking: true
+          });
+
+          if (result.success) {
+            // Store email record with tracking ID
+            const emailId = uuidv4();
+            await pool.query(
+              `INSERT INTO emails (
+                id, user_id, contact_id, campaign_id, from_email, from_name,
+                to_email, to_name, subject, body_html, body_text,
+                has_attachments, attachment_count, status, tracking_id
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'sent', $14)`,
+              [
+                emailId,
+                userId,
+                contact.id,
+                campaignId,
+                fromEmail,
+                fromName,
+                contact.email,
+                contact.name || contact.email.split('@')[0],
+                personalizedSubject,
+                personalizedBodyHtml,
+                personalizedBodyText,
+                attachments && attachments.length > 0,
+                attachments?.length || 0,
+                trackingId,
+              ]
+            );
+
+            // Link email to lead_analytics if exists
+            await pool.query(
+              `UPDATE lead_analytics 
+               SET email_id = $1
+               WHERE id = (
+                 SELECT id FROM lead_analytics
+                 WHERE user_id = $2 AND phone_number = $3 AND email_id IS NULL
+                 ORDER BY created_at DESC
+                 LIMIT 1
+               )`,
+              [emailId, userId, contact.phone_number]
+            );
+
+            // Store attachments metadata if any
+            if (attachments && attachments.length > 0) {
+              const attachmentQueries = attachments.map((att) =>
+                pool.query(
+                  `INSERT INTO email_attachments (email_id, filename, content_type, file_size)
+                   VALUES ($1, $2, $3, $4)`,
+                  [emailId, att.filename, att.contentType || 'application/octet-stream', att.size || 0]
+                )
+              );
+              await Promise.all(attachmentQueries);
+            }
+
+            successCount++;
+          } else {
+            failCount++;
+            logger.error(`Failed to send campaign email to ${contact.email}: ${result.error}`);
+          }
+
+          // Update progress periodically (every 10 emails)
+          if ((successCount + failCount) % 10 === 0) {
+            await pool.query(
+              `UPDATE email_campaigns 
+               SET completed_emails = $1, successful_emails = $2, failed_emails = $3
+               WHERE id = $4`,
+              [successCount + failCount, successCount, failCount, campaignId]
+            );
+          }
+        } catch (error: any) {
+          logger.error(`Failed to send email to ${contact.email}:`, error);
+          failCount++;
+        }
+      }
+
+      // Final update - mark campaign as completed
+      await pool.query(
+        `UPDATE email_campaigns 
+         SET completed_emails = $1, successful_emails = $2, failed_emails = $3,
+             status = 'completed', end_date = CURRENT_TIMESTAMP
+         WHERE id = $4`,
+        [successCount + failCount, successCount, failCount, campaignId]
+      );
+
+      logger.info(`Email campaign ${campaignId} completed: ${successCount} sent, ${failCount} failed`);
+    } catch (error: any) {
+      logger.error(`Email campaign ${campaignId} failed:`, error);
+      await pool.query(
+        `UPDATE email_campaigns SET status = 'failed', end_date = CURRENT_TIMESTAMP WHERE id = $1`,
+        [campaignId]
+      );
+    }
+  }
+
+  /**
+   * Send emails to all contacts in the campaign (DEPRECATED - use processEmailCampaignInBackground)
    */
   private static async sendCampaignEmails(
     client: any,

@@ -1459,14 +1459,81 @@ class ApiService {
   }
 
   // Lead Intelligence API methods
-  async getLeadIntelligence(): Promise<ApiResponse<any[]>> {
+
+  /**
+   * Get filter options for Lead Intelligence from the server
+   * Returns all unique values for each filter column across ALL leads
+   */
+  async getLeadIntelligenceFilterOptions(): Promise<ApiResponse<{
+    leadTags: string[];
+    leadStages: string[];
+    engagementLevels: string[];
+    intentLevels: string[];
+    budgetConstraints: string[];
+    urgencyLevels: string[];
+    fitAlignments: string[];
+    ctaValues: string[];
+  }>> {
+    const user = this.getCurrentUser();
+    if (!user) {
+      throw createApiError('User must be authenticated to access filter options', 401, 'UNAUTHORIZED');
+    }
+
+    return this.request(`${API_ENDPOINTS.LEADS.INTELLIGENCE}/filter-options`);
+  }
+
+  /**
+   * Get lead intelligence with server-side filtering
+   */
+  async getLeadIntelligence(filters?: {
+    filterLeadTag?: string[];
+    filterLeadStage?: string[];
+    filterEngagement?: string[];
+    filterIntent?: string[];
+    filterBudget?: string[];
+    filterUrgency?: string[];
+    filterFit?: string[];
+    filterCta?: string[];
+  }): Promise<ApiResponse<any[]>> {
     // Validate user context before making request
     const user = this.getCurrentUser();
     if (!user) {
       throw createApiError('User must be authenticated to access lead intelligence', 401, 'UNAUTHORIZED');
     }
 
-    return this.request<any[]>(API_ENDPOINTS.LEADS.INTELLIGENCE);
+    // Build query string from filters
+    const params = new URLSearchParams();
+    if (filters?.filterLeadTag?.length) {
+      params.append('filterLeadTag', filters.filterLeadTag.join(','));
+    }
+    if (filters?.filterLeadStage?.length) {
+      params.append('filterLeadStage', filters.filterLeadStage.join(','));
+    }
+    if (filters?.filterEngagement?.length) {
+      params.append('filterEngagement', filters.filterEngagement.join(','));
+    }
+    if (filters?.filterIntent?.length) {
+      params.append('filterIntent', filters.filterIntent.join(','));
+    }
+    if (filters?.filterBudget?.length) {
+      params.append('filterBudget', filters.filterBudget.join(','));
+    }
+    if (filters?.filterUrgency?.length) {
+      params.append('filterUrgency', filters.filterUrgency.join(','));
+    }
+    if (filters?.filterFit?.length) {
+      params.append('filterFit', filters.filterFit.join(','));
+    }
+    if (filters?.filterCta?.length) {
+      params.append('filterCta', filters.filterCta.join(','));
+    }
+
+    const queryString = params.toString();
+    const url = queryString 
+      ? `${API_ENDPOINTS.LEADS.INTELLIGENCE}?${queryString}` 
+      : API_ENDPOINTS.LEADS.INTELLIGENCE;
+
+    return this.request<any[]>(url);
   }
 
   async getLeadIntelligenceTimeline(groupId: string): Promise<ApiResponse<any[]>> {

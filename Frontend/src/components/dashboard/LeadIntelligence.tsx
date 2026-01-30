@@ -284,6 +284,27 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     fit: [],
     cta: [],
   });
+  // Server-side filter options (fetched from backend)
+  const [serverFilterOptions, setServerFilterOptions] = useState<{
+    leadTags: string[];
+    leadStages: string[];
+    engagementLevels: string[];
+    intentLevels: string[];
+    budgetConstraints: string[];
+    urgencyLevels: string[];
+    fitAlignments: string[];
+    ctaValues: string[];
+  }>({
+    leadTags: [],
+    leadStages: [],
+    engagementLevels: [],
+    intentLevels: [],
+    budgetConstraints: [],
+    urgencyLevels: [],
+    fitAlignments: [],
+    ctaValues: [],
+  });
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
   const [selectedContact, setSelectedContact] = useState<LeadGroup | null>(null);
   const [contacts, setContacts] = useState<LeadGroup[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
@@ -364,12 +385,41 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     }
   };
 
-  // API functions
+  // Fetch filter options from server (called once on mount)
+  const fetchFilterOptions = async () => {
+    try {
+      setFilterOptionsLoading(true);
+      const response = await apiService.getLeadIntelligenceFilterOptions();
+      if (response.data) {
+        setServerFilterOptions(response.data);
+      }
+    } catch (error) {
+      console.warn('Failed to fetch filter options:', error);
+      // Filter options are optional - continue without them
+    } finally {
+      setFilterOptionsLoading(false);
+    }
+  };
+
+  // API functions - now uses server-side filtering
   const fetchLeadIntelligence = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getLeadIntelligence();
+      
+      // Pass column filters to backend API for server-side filtering
+      const filters = {
+        filterLeadTag: columnFilters.leadTag.length > 0 ? columnFilters.leadTag : undefined,
+        filterLeadStage: columnFilters.leadStage.length > 0 ? columnFilters.leadStage : undefined,
+        filterEngagement: columnFilters.engagement.length > 0 ? columnFilters.engagement : undefined,
+        filterIntent: columnFilters.intent.length > 0 ? columnFilters.intent : undefined,
+        filterBudget: columnFilters.budget.length > 0 ? columnFilters.budget : undefined,
+        filterUrgency: columnFilters.urgency.length > 0 ? columnFilters.urgency : undefined,
+        filterFit: columnFilters.fit.length > 0 ? columnFilters.fit : undefined,
+        filterCta: columnFilters.cta.length > 0 ? columnFilters.cta : undefined,
+      };
+      
+      const response = await apiService.getLeadIntelligence(filters);
       const contactsData = response.data || response as any;
       setContacts(contactsData);
       
@@ -474,10 +524,25 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     }
   };
 
-  // Load data on component mount
+  // Load data and filter options on component mount
   useEffect(() => {
+    fetchFilterOptions();
     fetchLeadIntelligence();
   }, []);
+
+  // Refetch data when column filters change (server-side filtering)
+  useEffect(() => {
+    // Skip initial render (handled by mount effect above)
+    // Only refetch when filters actually change
+    const hasFilters = Object.values(columnFilters).some(arr => arr.length > 0);
+    if (hasFilters || contacts.length > 0) {
+      // Debounce the filter change to avoid too many API calls
+      const timeoutId = setTimeout(() => {
+        fetchLeadIntelligence();
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [columnFilters]);
 
   // Auto-expand lead timeline when targetLeadIdentifier is provided (from notification click)
   useEffect(() => {
@@ -532,16 +597,17 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     }
   }, [targetLeadIdentifier, contacts, selectedContact, clearTargetLeadId]);
 
-  // Extract unique values for filter options
+  // Filter options now come from the server (fetched once on mount)
+  // This ensures all unique values are shown, not just from the current page
   const filterOptions = {
-    leadTag: [...new Set(contacts.map(c => c.recentLeadTag).filter(Boolean))],
-    leadStage: [...new Set(contacts.map(c => c.leadStage).filter(Boolean))],
-    engagement: [...new Set(contacts.map(c => c.recentEngagementLevel).filter(Boolean))],
-    intent: [...new Set(contacts.map(c => c.recentIntentLevel).filter(Boolean))],
-    budget: [...new Set(contacts.map(c => c.recentBudgetConstraint).filter(Boolean))],
-    urgency: [...new Set(contacts.map(c => c.recentTimelineUrgency).filter(Boolean))],
-    fit: [...new Set(contacts.map(c => c.recentFitAlignment).filter(Boolean))],
-    cta: [...new Set(contacts.flatMap(c => c.customCta ? c.customCta.split(',').map(s => s.trim()) : []).filter(Boolean))],
+    leadTag: serverFilterOptions.leadTags,
+    leadStage: serverFilterOptions.leadStages,
+    engagement: serverFilterOptions.engagementLevels,
+    intent: serverFilterOptions.intentLevels,
+    budget: serverFilterOptions.budgetConstraints,
+    urgency: serverFilterOptions.urgencyLevels,
+    fit: serverFilterOptions.fitAlignments,
+    cta: serverFilterOptions.ctaValues,
   };
 
   // Helper to update a specific column filter
@@ -566,33 +632,11 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     });
   };
 
+  // Server-side filtering is now handled by the backend
+  // Only apply client-side search filter for instant response
   const filteredContacts = contacts.filter((contact) => {
-    const matchesSearch = contact.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    
-    // Column filter matching
-    const matchesLeadTagFilter = columnFilters.leadTag.length === 0 || 
-      columnFilters.leadTag.includes(contact.recentLeadTag);
-    const matchesLeadStageFilter = columnFilters.leadStage.length === 0 || 
-      (contact.leadStage && columnFilters.leadStage.includes(contact.leadStage));
-    const matchesEngagementFilter = columnFilters.engagement.length === 0 || 
-      (contact.recentEngagementLevel && columnFilters.engagement.includes(contact.recentEngagementLevel));
-    const matchesIntentFilter = columnFilters.intent.length === 0 || 
-      (contact.recentIntentLevel && columnFilters.intent.includes(contact.recentIntentLevel));
-    const matchesBudgetFilter = columnFilters.budget.length === 0 || 
-      (contact.recentBudgetConstraint && columnFilters.budget.includes(contact.recentBudgetConstraint));
-    const matchesUrgencyFilter = columnFilters.urgency.length === 0 || 
-      (contact.recentTimelineUrgency && columnFilters.urgency.includes(contact.recentTimelineUrgency));
-    const matchesFitFilter = columnFilters.fit.length === 0 || 
-      (contact.recentFitAlignment && columnFilters.fit.includes(contact.recentFitAlignment));
-    const matchesCtaFilter = columnFilters.cta.length === 0 || 
-      (contact.customCta && columnFilters.cta.some(cta => contact.customCta?.toLowerCase().includes(cta.toLowerCase())));
-    
-    return matchesSearch && 
-      matchesLeadTagFilter && matchesLeadStageFilter && matchesEngagementFilter && 
-      matchesIntentFilter && matchesBudgetFilter && matchesUrgencyFilter && 
-      matchesFitFilter && matchesCtaFilter;
+    if (!searchTerm) return true;
+    return contact.name.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const handleContactClick = async (contact: LeadGroup) => {
