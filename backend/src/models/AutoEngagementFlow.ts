@@ -274,18 +274,42 @@ export class AutoEngagementFlowModel {
    * Update flow priorities (bulk operation)
    */
   static async updatePriorities(userId: string, priorityMap: { id: string; priority: number }[]): Promise<void> {
-    const client = await pool.connect();
+    if (!priorityMap.length) {
+      return;
+    }
+
+    const client = await pool.getClient();
     try {
       await client.query('BEGIN');
 
-      for (const { id, priority } of priorityMap) {
-        await client.query(
-          `UPDATE auto_engagement_flows 
-           SET priority = $1, updated_at = CURRENT_TIMESTAMP 
-           WHERE id = $2 AND user_id = $3`,
-          [priority, id, userId]
-        );
-      }
+      // Build a single CASE-based UPDATE to avoid transient UNIQUE (user_id, priority) violations
+      const ids = priorityMap.map(({ id }) => id);
+      const priorities = priorityMap.map(({ priority }) => priority);
+
+      const idParamsStart = 2;
+      const priorityParamsStart = idParamsStart + ids.length;
+
+      const caseClauses = ids
+        .map((_, index) => {
+          const idParamIndex = idParamsStart + index;
+          const priorityParamIndex = priorityParamsStart + index;
+          return `WHEN $${idParamIndex} THEN $${priorityParamIndex}`;
+        })
+        .join(' ');
+
+      const idInList = ids
+        .map((_, index) => `$${idParamsStart + index}`)
+        .join(', ');
+
+      const query = `
+        UPDATE auto_engagement_flows
+        SET priority = CASE id ${caseClauses} END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1 AND id IN (${idInList})
+      `;
+
+      const params = [userId, ...ids, ...priorities];
+      await client.query(query, params);
 
       await client.query('COMMIT');
     } catch (error) {

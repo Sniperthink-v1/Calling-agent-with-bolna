@@ -359,13 +359,3 @@ export interface FlowAnalytics {
   first_execution: Date | null;
   last_execution: Date | null;
 }
-
-export default {
-  ExecutionStatus,
-  ActionLogStatus,
-  ActionType,
-  ConditionType,
-  ConditionOperator,
-  ActionConditionType,
-  CallOutcome
-};

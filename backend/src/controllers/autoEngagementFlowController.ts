@@ -6,11 +6,74 @@ import { FlowExecutionModel, FlowActionLogModel } from '../models/FlowExecution'
 import {
   CreateFlowRequest,
   UpdateFlowRequest,
-  BulkPriorityUpdateRequest,
-  TestFlowRequest
+  BulkPriorityUpdateRequest
 } from '../types/autoEngagement';
 import { logger } from '../utils/logger';
 import { pool } from '../config/database';
+
+/**
+ * Validation helper functions
+ */
+const validateActionConfig = (actionType: string, actionConfig: any): { valid: boolean; error?: string } => {
+  switch (actionType) {
+    case 'ai_call':
+      if (!actionConfig.agent_id || !actionConfig.phone_number_id) {
+        return { valid: false, error: 'AI call action requires agent_id and phone_number_id' };
+      }
+      break;
+    case 'whatsapp_message':
+      if (!actionConfig.whatsapp_phone_number_id || !actionConfig.template_id) {
+        return { valid: false, error: 'WhatsApp action requires whatsapp_phone_number_id and template_id' };
+      }
+      break;
+    case 'email':
+      if (!actionConfig.email_template_id) {
+        return { valid: false, error: 'Email action requires email_template_id' };
+      }
+      break;
+    case 'wait':
+      if (!actionConfig.duration_minutes || actionConfig.duration_minutes <= 0) {
+        return { valid: false, error: 'Wait action requires positive duration_minutes' };
+      }
+      break;
+  }
+  return { valid: true };
+};
+
+const validateBusinessHours = (data: any): { valid: boolean; error?: string } => {
+  if (data.use_custom_business_hours) {
+    if (!data.business_hours_start || !data.business_hours_end) {
+      return { valid: false, error: 'Both business_hours_start and business_hours_end are required when use_custom_business_hours is true' };
+    }
+    
+    // Validate time format (HH:MM:SS)
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+    if (!timeRegex.test(data.business_hours_start) || !timeRegex.test(data.business_hours_end)) {
+      return { valid: false, error: 'Business hours must be in HH:MM:SS format' };
+    }
+    
+    // Validate start is before end
+    const [startHour, startMin] = data.business_hours_start.split(':').map(Number);
+    const [endHour, endMin] = data.business_hours_end.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    
+    if (startMinutes >= endMinutes) {
+      return { valid: false, error: 'business_hours_start must be before business_hours_end' };
+    }
+    
+    // Validate timezone if provided
+    if (data.business_hours_timezone) {
+      try {
+        // Try to use the timezone - this will throw if invalid
+        new Date().toLocaleString('en-US', { timeZone: data.business_hours_timezone });
+      } catch (e) {
+        return { valid: false, error: 'Invalid timezone identifier' };
+      }
+    }
+  }
+  return { valid: true };
+};
 
 /**
  * Controller for Auto Engagement Flow endpoints
@@ -99,6 +162,51 @@ export class AutoEngagementFlowController {
           error: 'Flow name is required'
         });
         return;
+      }
+
+      // Validate business hours
+      const businessHoursValidation = validateBusinessHours(flowData);
+      if (!businessHoursValidation.valid) {
+        res.status(400).json({
+          success: false,
+          error: businessHoursValidation.error
+        });
+        return;
+      }
+
+      // Validate actions if provided
+      if (flowData.actions && flowData.actions.length > 0) {
+        // Check for unique action orders
+        const actionOrders = flowData.actions.map(a => a.action_order);
+        const uniqueOrders = new Set(actionOrders);
+        if (actionOrders.length !== uniqueOrders.size) {
+          res.status(400).json({
+            success: false,
+            error: 'Action orders must be unique within a flow'
+          });
+          return;
+        }
+
+        // Check for positive action orders
+        if (actionOrders.some(order => order <= 0)) {
+          res.status(400).json({
+            success: false,
+            error: 'Action orders must be positive integers'
+          });
+          return;
+        }
+
+        // Validate action configs
+        for (const action of flowData.actions) {
+          const configValidation = validateActionConfig(action.action_type, action.action_config);
+          if (!configValidation.valid) {
+            res.status(400).json({
+              success: false,
+              error: configValidation.error
+            });
+            return;
+          }
+        }
       }
 
       // If priority not provided, get next available
@@ -318,16 +426,33 @@ export class AutoEngagementFlowController {
         return;
       }
 
-      // Validate all flows belong to user
-      for (const update of updates) {
-        const flow = await AutoEngagementFlowModel.findById(update.id, userId);
-        if (!flow) {
-          res.status(404).json({
-            success: false,
-            error: `Flow ${update.id} not found`
-          });
-          return;
-        }
+      // Validate no duplicate priorities
+      const priorities = updates.map(u => u.priority);
+      const uniquePriorities = new Set(priorities);
+      if (priorities.length !== uniquePriorities.size) {
+        res.status(400).json({
+          success: false,
+          error: 'Priority values must be unique'
+        });
+        return;
+      }
+
+      // Validate all flows belong to user using a single bulk query to avoid N+1 pattern
+      const flowIds = updates.map((update) => update.id);
+      const validateResult = await pool.query(
+        'SELECT id FROM auto_engagement_flows WHERE user_id = $1 AND id = ANY($2)',
+        [userId, flowIds]
+      );
+
+      const existingIds = new Set<string>(validateResult.rows.map((row: { id: string }) => row.id));
+      const missingUpdate = updates.find((update) => !existingIds.has(update.id));
+
+      if (missingUpdate) {
+        res.status(404).json({
+          success: false,
+          error: `Flow ${missingUpdate.id} not found`
+        });
+        return;
       }
 
       await AutoEngagementFlowModel.updatePriorities(userId, updates);
@@ -414,6 +539,41 @@ export class AutoEngagementFlowController {
           error: 'actions must be an array'
         });
         return;
+      }
+
+      // Validate actions
+      if (actions.length > 0) {
+        // Check for unique action orders
+        const actionOrders = actions.map((a: any) => a.actionOrder);
+        const uniqueOrders = new Set(actionOrders);
+        if (actionOrders.length !== uniqueOrders.size) {
+          res.status(400).json({
+            success: false,
+            error: 'Action orders must be unique within a flow'
+          });
+          return;
+        }
+
+        // Check for positive action orders
+        if (actionOrders.some((order: number) => order <= 0)) {
+          res.status(400).json({
+            success: false,
+            error: 'Action orders must be positive integers'
+          });
+          return;
+        }
+
+        // Validate action configs
+        for (const action of actions) {
+          const configValidation = validateActionConfig(action.actionType, action.actionConfig);
+          if (!configValidation.valid) {
+            res.status(400).json({
+              success: false,
+              error: configValidation.error
+            });
+            return;
+          }
+        }
       }
 
       const updatedActions = await FlowActionModel.replaceActions(id, actions);

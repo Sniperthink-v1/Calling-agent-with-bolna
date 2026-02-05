@@ -264,8 +264,8 @@ export class FlowExecutionModel {
     const result = await pool.query(
       `SELECT COUNT(*) as count FROM flow_executions 
        WHERE flow_id = $1 AND contact_id = $2 
-       AND triggered_at > NOW() - INTERVAL '${withinMinutes} minutes'`,
-      [flowId, contactId]
+       AND triggered_at > NOW() - INTERVAL '1 minute' * $3`,
+      [flowId, contactId, withinMinutes]
     );
     return parseInt(result.rows[0].count) > 0;
   }
