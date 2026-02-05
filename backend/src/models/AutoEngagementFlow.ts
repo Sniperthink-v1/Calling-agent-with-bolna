@@ -113,7 +113,7 @@ export class AutoEngagementFlowModel {
     }
 
     // Get all trigger conditions for these flows
-    const flowIds = flows.map(f => f.id);
+    const flowIds = flows.map((f: any) => f.id);
     const conditionsResult = await pool.query(
       `SELECT * FROM flow_trigger_conditions WHERE flow_id = ANY($1::uuid[])`,
       [flowIds]
@@ -126,19 +126,19 @@ export class AutoEngagementFlowModel {
     );
 
     // Map conditions and actions to flows
-    const conditionsByFlowId = conditionsResult.rows.reduce((acc, cond) => {
+    const conditionsByFlowId = conditionsResult.rows.reduce((acc: any, cond: any) => {
       if (!acc[cond.flow_id]) acc[cond.flow_id] = [];
       acc[cond.flow_id].push(cond);
       return acc;
     }, {} as Record<string, FlowTriggerCondition[]>);
 
-    const actionsByFlowId = actionsResult.rows.reduce((acc, action) => {
+    const actionsByFlowId = actionsResult.rows.reduce((acc: any, action: any) => {
       if (!acc[action.flow_id]) acc[action.flow_id] = [];
       acc[action.flow_id].push(action);
       return acc;
     }, {} as Record<string, FlowAction[]>);
 
-    return flows.map(flow => ({
+    return flows.map((flow: any) => ({
       ...flow,
       trigger_conditions: conditionsByFlowId[flow.id] || [],
       actions: actionsByFlowId[flow.id] || []

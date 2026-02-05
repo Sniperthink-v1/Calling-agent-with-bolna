@@ -13,7 +13,7 @@ import {
 } from '../types/autoEngagement';
 import { ContactInterface } from '../models/Contact';
 import { bolnaService } from './bolnaService';
-import { CallQueue } from '../models/CallQueue';
+import { CallQueueModel } from '../models/CallQueue';
 
 /**
  * FlowExecutionService
@@ -297,13 +297,13 @@ export class FlowExecutionService {
       });
 
       // Add call to queue - it will be processed by the existing queue system
-      const queueEntry = await CallQueue.addToQueue({
+      const queueEntry = await CallQueueModel.addDirectCallToQueue({
         user_id: userId,
         contact_id: contact.id,
         agent_id: config.agent_id,
-        phone_number_id: config.phone_number_id,
         phone_number: contact.phone_number,
-        campaign_type: 'direct' // Auto-engagement calls are treated as direct calls
+        contact_name: contact.name,
+        priority: 100 // Auto-engagement calls get high priority
       });
 
       return {
