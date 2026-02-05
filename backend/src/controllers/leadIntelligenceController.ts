@@ -4,6 +4,7 @@ import pool from '../config/database';
 import { AuthenticatedRequest } from '../middleware/auth';
 import LeadIntelligenceEventModel, { EventActorType, FieldChange } from '../models/LeadIntelligenceEvent';
 import TeamMemberModel from '../models/TeamMember';
+import { FIELD_LIBRARY } from '../config/fieldLibrary';
 
 export interface LeadGroup {
   id: string;
@@ -39,6 +40,8 @@ export interface LeadGroup {
     name: string;
     role: string;
   } | null;
+  // Custom fields (business-specific fields configured by admin)
+  customFields?: Record<string, any>;
 }
 
 export interface LeadTimelineEntry {
@@ -218,6 +221,14 @@ export class LeadIntelligenceController {
         res.status(401).json({ error: 'User not authenticated' });
         return;
       }
+
+      // Fetch user's field configuration to know which custom fields are enabled
+      const userConfigResult = await pool.query(
+        'SELECT field_configuration FROM users WHERE id = $1',
+        [userId]
+      );
+      const fieldConfiguration = userConfigResult.rows[0]?.field_configuration || { enabled_fields: [] };
+      const enabledFields = fieldConfiguration.enabled_fields || [];
 
       // Parse filter parameters from query string
       const filterLeadTag = req.query.filterLeadTag as string | undefined;
@@ -514,6 +525,33 @@ export class LeadIntelligenceController {
               ORDER BY cta.ts DESC
               LIMIT 1
             )::text as custom_cta,
+            -- Custom fields (business-specific fields configured by admin)
+            (
+              SELECT cf.custom_fields
+              FROM (
+                SELECT
+                  la_latest.custom_fields::jsonb as custom_fields,
+                  la_latest.analysis_timestamp as ts
+                FROM lead_analytics la_latest
+                WHERE la_latest.user_id = $1
+                  AND la_latest.phone_number = plb.phone
+                  AND la_latest.analysis_type IN ('complete', 'human_edit')
+                  AND la_latest.custom_fields IS NOT NULL
+
+                UNION ALL
+
+                SELECT
+                  pc_latest.lead_complete_analysis->'extraction'->'custom_fields' as custom_fields,
+                  COALESCE(pc_latest.lead_extraction_completed_at, pc_latest.created_at) as ts
+                FROM plivo_calls pc_latest
+                WHERE pc_latest.user_id = $1
+                  AND pc_latest.to_phone_number = plb.phone
+                  AND pc_latest.lead_extraction_status = 'completed'
+                  AND pc_latest.lead_complete_analysis IS NOT NULL
+              ) cf
+              ORDER BY cf.ts DESC
+              LIMIT 1
+            )::jsonb as custom_fields,
             -- Notes now come from contacts table
             (SELECT co_notes.notes 
              FROM contacts co_notes 
@@ -588,6 +626,15 @@ export class LeadIntelligenceController {
                AND la_ind.analysis_type = 'individual'
              ORDER BY c_ind.created_at DESC 
              LIMIT 1)::text as custom_cta,
+            -- Custom fields for email-only leads
+            (SELECT la_ind.custom_fields 
+             FROM lead_analytics la_ind 
+             JOIN calls c_ind ON la_ind.call_id = c_ind.id
+             WHERE la_ind.user_id = $1 
+               AND la_ind.extracted_email = elb.email 
+               AND la_ind.analysis_type = 'individual'
+             ORDER BY c_ind.created_at DESC 
+             LIMIT 1)::jsonb as custom_fields,
             -- Notes from contacts (email-only leads may not have contact record)
             NULL::text as contact_notes,
             NULL::uuid as assigned_to_team_member_id
@@ -628,6 +675,7 @@ export class LeadIntelligenceController {
             COALESCE(a.name, '')::text as interacted_agents,
             la.requirements::text as requirements,
             la.custom_cta::text as custom_cta,
+            la.custom_fields::jsonb as custom_fields,
             co.notes::text as contact_notes,
             1::bigint as rn,
             NULL::uuid as assigned_to_team_member_id
@@ -646,7 +694,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
-            interacted_agents, requirements, custom_cta, contact_notes, rn, assigned_to_team_member_id
+            interacted_agents, requirements, custom_cta, custom_fields, contact_notes, rn, assigned_to_team_member_id
           FROM phone_leads
           UNION ALL
           SELECT 
@@ -654,7 +702,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
-            interacted_agents, requirements, custom_cta, contact_notes, rn, assigned_to_team_member_id
+            interacted_agents, requirements, custom_cta, custom_fields, contact_notes, rn, assigned_to_team_member_id
           FROM email_leads
           UNION ALL
           SELECT 
@@ -662,7 +710,7 @@ export class LeadIntelligenceController {
             recent_lead_tag, recent_engagement_level, recent_intent_level,
             recent_budget_constraint, recent_timeline_urgency, recent_fit_alignment,
             escalated_to_human, last_contact, demo_book_datetime, lead_stage, contact_id, interactions,
-            interacted_agents, requirements, custom_cta, contact_notes, rn, assigned_to_team_member_id
+            interacted_agents, requirements, custom_cta, custom_fields, contact_notes, rn, assigned_to_team_member_id
           FROM individual_leads
         )
         SELECT 
@@ -742,6 +790,7 @@ export class LeadIntelligenceController {
         groupType: row.group_type,
         requirements: row.requirements, // From complete analysis (phone leads) or individual analysis (email/individual leads)
         customCta: row.custom_cta, // Custom CTA string from extraction
+        customFields: row.custom_fields || {}, // Custom business-specific fields from extraction
         contactNotes: row.contact_notes, // Notes from contacts table
         leadStage: row.lead_stage, // Lead stage for pipeline tracking
         contactId: row.contact_id, // Contact ID for updating lead stage
@@ -752,7 +801,13 @@ export class LeadIntelligenceController {
         } : null
       }));
 
-      res.json(leadGroups);
+      res.json({ 
+        leadGroups, 
+        enabledFields: enabledFields.map((key: string) => {
+          const field = FIELD_LIBRARY.find(f => f.key === key);
+          return field ? { key: field.key, label: field.label, type: field.type } : null;
+        }).filter(Boolean)
+      });
     } catch (error) {
       console.error('Error fetching lead intelligence:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -822,6 +877,7 @@ export class LeadIntelligenceController {
               e.subject as smart_notification,
               NULL as requirements,
               NULL as custom_cta,
+              NULL::jsonb as custom_fields,
               NULL as duration,
               NULL as engagement_level,
               NULL as intent_level,
@@ -872,6 +928,7 @@ export class LeadIntelligenceController {
             'Manual intelligence update' as smart_notification,
             la.requirements,
             la.custom_cta,
+            la.custom_fields::jsonb as custom_fields,
             NULL::text as duration,
             la.engagement_health as engagement_level,
             la.intent_level,
@@ -931,6 +988,7 @@ export class LeadIntelligenceController {
               la.smart_notification,
               la.requirements,
               la.custom_cta,
+              la.custom_fields::jsonb as custom_fields,
               CASE 
                 WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                   LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -1016,6 +1074,10 @@ export class LeadIntelligenceController {
                 pc.lead_individual_analysis->'extraction'->>'custom_cta',
                 pc.lead_complete_analysis->'extraction'->>'custom_cta'
               ) as custom_cta,
+              COALESCE(
+                pc.lead_individual_analysis->'extraction'->'custom_fields',
+                pc.lead_complete_analysis->'extraction'->'custom_fields'
+              )::jsonb as custom_fields,
               CASE
                 WHEN COALESCE(pc.duration_seconds, 0) > 0 THEN
                   LPAD(((pc.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((pc.duration_seconds % 60)::text, 2, '0')
@@ -1152,6 +1214,7 @@ export class LeadIntelligenceController {
             la.smart_notification,
             la.requirements,
             la.custom_cta,
+            la.custom_fields::jsonb as custom_fields,
             CASE 
               WHEN COALESCE(c.duration_seconds, 0) > 0 THEN 
                 LPAD(((c.duration_seconds / 60))::text, 2, '0') || ':' || LPAD((c.duration_seconds % 60)::text, 2, '0')
@@ -1207,6 +1270,7 @@ export class LeadIntelligenceController {
         smartNotification: row.smart_notification,
         requirements: row.requirements,
         customCta: row.custom_cta,
+        customFields: row.custom_fields || {},
         duration: row.duration,
         engagementLevel: row.engagement_level,
         intentLevel: row.intent_level,

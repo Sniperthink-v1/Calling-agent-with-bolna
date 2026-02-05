@@ -43,6 +43,7 @@ export interface LeadAnalyticsInterface extends BaseModelInterface {
   // New enhanced analytics fields
   smart_notification?: string;
   demo_book_datetime?: string;
+  custom_fields?: Record<string, any>; // Business-specific custom fields
   created_at: Date;
 }
 
@@ -78,6 +79,7 @@ export interface CreateLeadAnalyticsData {
   // New enhanced analytics fields
   smart_notification?: string;
   demo_book_datetime?: string;
+  custom_fields?: Record<string, any>; // Business-specific custom fields
 }
 
 export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
@@ -137,7 +139,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         total_score, lead_status_tag,
         reasoning,
         company_name, extracted_name, extracted_email, requirements, custom_cta, in_detail_summary, transcript_summary,
-        smart_notification, demo_book_datetime
+        smart_notification, demo_book_datetime, custom_fields
       )
       VALUES (
         $1, $2, $3, 'complete',
@@ -150,7 +152,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         $17, $18,
         $19,
         $20, $21, $22, $23, $24, $25, $26,
-        $27, $28
+        $27, $28, $29
       )
       ON CONFLICT (user_id, phone_number, analysis_type) WHERE (analysis_type = 'complete')
       DO UPDATE SET
@@ -179,6 +181,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
         transcript_summary = EXCLUDED.transcript_summary,
         smart_notification = EXCLUDED.smart_notification,
         demo_book_datetime = EXCLUDED.demo_book_datetime,
+        custom_fields = EXCLUDED.custom_fields,
         analysis_timestamp = CURRENT_TIMESTAMP
       RETURNING *
     `;
@@ -212,6 +215,7 @@ export class LeadAnalyticsModel extends BaseModel<LeadAnalyticsInterface> {
       analyticsData.transcript_summary ?? null,
       analyticsData.smart_notification ?? null,
       analyticsData.demo_book_datetime ?? null,
+      analyticsData.custom_fields ? JSON.stringify(analyticsData.custom_fields) : '{}',
     ];
 
     const result = await this.query(query, params);

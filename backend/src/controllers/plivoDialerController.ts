@@ -56,7 +56,7 @@ export class PlivoDialerController {
       const authReq = req as AuthenticatedRequest;
       const { userId, teamMemberId } = getActorContext(authReq);
 
-      const { fromPhoneNumberId, toPhoneNumber } = req.body || {};
+      const { fromPhoneNumberId, toPhoneNumber, contactId } = req.body || {};
 
       if (!fromPhoneNumberId || typeof fromPhoneNumberId !== 'string') {
         return res.status(400).json({ success: false, error: 'fromPhoneNumberId is required' });
@@ -89,23 +89,38 @@ export class PlivoDialerController {
 
       const fromPhoneNumber = pn.rows[0].phone_number as string;
 
-      // Phase-2: auto-create contact by default (or fetch existing) for the destination number.
-      // We keep it minimal: phone_number unique per user, name required.
-      const contactUpsert = await pool.query(
-        `INSERT INTO contacts (
-            user_id,
-            name,
-            phone_number,
-            is_auto_created,
-            auto_creation_source
-         ) VALUES ($1, $2, $3, true, 'manual')
-         ON CONFLICT (user_id, phone_number)
-         DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-         RETURNING id`,
-        [userId, `Anonymous ${normalizedToPhone}`, normalizedToPhone]
-      );
+      // If contactId is provided from frontend (user selected from search), use it
+      // Otherwise, auto-create contact by default (or fetch existing) for the destination number
+      let finalContactId: string | undefined;
 
-      const contactId = contactUpsert.rows[0]?.id as string | undefined;
+      if (contactId && typeof contactId === 'string') {
+        // Verify the contact belongs to this user
+        const contactCheck = await pool.query(
+          `SELECT id FROM contacts WHERE id = $1 AND user_id = $2`,
+          [contactId, userId]
+        );
+        if (contactCheck.rows.length > 0) {
+          finalContactId = contactId;
+        }
+      }
+
+      // If no valid contactId provided, auto-create/upsert contact
+      if (!finalContactId) {
+        const contactUpsert = await pool.query(
+          `INSERT INTO contacts (
+              user_id,
+              name,
+              phone_number,
+              is_auto_created,
+              auto_creation_source
+           ) VALUES ($1, $2, $3, true, 'manual')
+           ON CONFLICT (user_id, phone_number)
+           DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+           RETURNING id`,
+          [userId, `Anonymous ${normalizedToPhone}`, normalizedToPhone]
+        );
+        finalContactId = contactUpsert.rows[0]?.id as string | undefined;
+      }
 
       const insert = await pool.query(
         `INSERT INTO plivo_calls (
@@ -118,7 +133,7 @@ export class PlivoDialerController {
             status
          ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated')
          RETURNING id, created_at`,
-        [userId, teamMemberId, fromPhoneNumberId, fromPhoneNumber, normalizedToPhone, contactId || null]
+        [userId, teamMemberId, fromPhoneNumberId, fromPhoneNumber, normalizedToPhone, finalContactId || null]
       );
 
       return res.status(201).json({

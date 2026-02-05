@@ -1,8 +1,8 @@
 # Complete Database Schema Documentation
 
-*Generated on: 2026-01-23T00:00:00.000Z*
+*Generated on: 2026-02-05T00:00:00.000Z*
 *Database: Neon PostgreSQL*
-*Last Updated: January 23, 2026 - Added new tables (emails, email_campaigns, team_members, etc.) and columns (interaction_platform, email_id, requirements, lead_stage, retry_strategy, etc.)*
+*Last Updated: February 5, 2026 - Added Plivo dialer tables (plivo_calls), email tracking (email_tracking_events), salesperson analytics (team_member_analytics), custom fields support (lead_analytics.custom_fields, users.field_configuration)*
 
 ## Table of Contents
 
@@ -19,6 +19,7 @@
 - [public.customers](#publiccustomers)
 - [public.email_campaigns](#publicemailcampaigns)
 - [public.emails](#publicemails)
+- [public.email_tracking_events](#publicemailtrackingevents)
 - [public.failure_logs](#publicfailure_logs)
 - [public.follow_ups](#publicfollow_ups)
 - [public.lead_analytics](#publiclead_analytics)
@@ -29,7 +30,9 @@
 - [public.notifications](#publicnotifications)
 - [public.pending_user_syncs](#publicpendingusersyncs)
 - [public.phone_numbers](#publicphone_numbers)
+- [public.plivo_calls](#publicplivocalls)
 - [public.system_config](#publicsystem_config)
+- [public.team_member_analytics](#publicteammemberanalytics)
 - [public.team_member_sessions](#publicteammembersessions)
 - [public.team_members](#publicteammembers)
 - [public.transcripts](#publictranscripts)
@@ -960,6 +963,7 @@ CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON public.customers FOR
 | `successful_emails` | integer | NO | 0 |  |  | Number of successfully delivered emails |
 | `failed_emails` | integer | NO | 0 |  |  | Number of failed emails |
 | `opened_emails` | integer | NO | 0 |  |  | Number of opened emails |
+| `clicked_emails` | integer | NO | 0 |  |  | Number of emails with link clicks |
 | `start_date` | date | NO | - |  |  | Campaign start date |
 | `end_date` | date | YES | - |  |  | Campaign end date |
 | `scheduled_at` | timestamp with time zone | YES | - |  |  | When to start sending emails |
@@ -1028,6 +1032,13 @@ CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON public.customers FOR
 | `failed_at` | timestamp with time zone | YES | - |  |  | When email failed |
 | `external_message_id` | character varying(500) | YES | - |  |  | ZeptoMail or other provider message ID |
 | `error_message` | text | YES | - |  |  | Error message if failed |
+| `open_count` | integer | NO | 0 |  |  | Number of times email was opened |
+| `click_count` | integer | NO | 0 |  |  | Number of times links were clicked |
+| `first_opened_at` | timestamp with time zone | YES | - |  |  | First time email was opened |
+| `last_opened_at` | timestamp with time zone | YES | - |  |  | Most recent time email was opened |
+| `first_clicked_at` | timestamp with time zone | YES | - |  |  | First time a link was clicked |
+| `last_clicked_at` | timestamp with time zone | YES | - |  |  | Most recent time a link was clicked |
+| `tracking_id` | character varying(100) | YES | - |  |  | Unique tracking identifier for open/click tracking |
 | `created_at` | timestamp with time zone | YES | now() |  |  |  |
 | `updated_at` | timestamp with time zone | YES | now() |  |  |  |
 
@@ -1054,6 +1065,7 @@ CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON public.customers FOR
 | `idx_emails_sent_at` | CREATE INDEX idx_emails_sent_at ON public.emails USING btree (sent_at DESC) |
 | `idx_emails_status` | CREATE INDEX idx_emails_status ON public.emails USING btree (status) |
 | `idx_emails_to_email` | CREATE INDEX idx_emails_to_email ON public.emails USING btree (to_email) |
+| `idx_emails_tracking_id` | CREATE INDEX idx_emails_tracking_id ON public.emails USING btree (tracking_id) WHERE (tracking_id IS NOT NULL) |
 
 ### Foreign Keys
 
@@ -1081,6 +1093,72 @@ CREATE TRIGGER trigger_update_contact_email_stats_insert AFTER INSERT ON public.
 - **Definition**:
 ```sql
 CREATE TRIGGER trigger_update_contact_email_stats_update AFTER UPDATE ON public.emails FOR EACH ROW WHEN (((new.contact_id IS NOT NULL) AND ((new.status)::text = 'opened'::text) AND ((old.status)::text <> 'opened'::text))) EXECUTE FUNCTION update_contact_email_stats()
+```
+
+**Current Row Count**: 0
+
+---
+
+## public.email_tracking_events
+
+**Description**: Stores detailed tracking events for email opens and link clicks with device and geo metadata
+
+### Columns
+
+| Column Name | Data Type | Nullable | Default | Primary Key | Unique | Description |
+|-------------|-----------|----------|---------|-------------|--------|-------------|
+| `id` | uuid | NO | gen_random_uuid() | ✓ | ✓ |  |
+| `email_id` | uuid | NO | - |  |  | Reference to the email that was tracked |
+| `user_id` | uuid | NO | - |  |  | Multi-tenant isolation |
+| `event_type` | character varying(20) | NO | - |  |  | Type of tracking event: open or click |
+| `occurred_at` | timestamp with time zone | NO | now() |  |  | When the event occurred |
+| `ip_address` | inet | YES | - |  |  | IP address of the user |
+| `user_agent` | text | YES | - |  |  | Browser user agent string |
+| `clicked_url` | text | YES | - |  |  | For click events: the URL that was clicked |
+| `link_id` | character varying(100) | YES | - |  |  | Unique identifier for tracked links within an email |
+| `geo_country` | character varying(100) | YES | - |  |  | Country from IP lookup |
+| `geo_city` | character varying(100) | YES | - |  |  | City from IP lookup |
+| `geo_region` | character varying(100) | YES | - |  |  | Region from IP lookup |
+| `device_type` | character varying(50) | YES | - |  |  | Device type: desktop, mobile, tablet |
+| `email_client` | character varying(100) | YES | - |  |  | Email client: Gmail, Outlook, Apple Mail, etc. |
+| `created_at` | timestamp with time zone | NO | now() |  |  |  |
+
+### Constraints
+
+| Constraint Name | Type | Definition |
+|-----------------|------|------------|
+| `email_tracking_events_event_type_check` | CHECK | CHECK (((event_type)::text = ANY ((ARRAY['open'::character varying, 'click'::character varying])::text[]))) |
+| `email_tracking_events_email_id_fkey` | FOREIGN KEY | FOREIGN KEY (email_id) REFERENCES emails(id) ON DELETE CASCADE |
+| `email_tracking_events_user_id_fkey` | FOREIGN KEY | FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE |
+| `email_tracking_events_pkey` | PRIMARY KEY | PRIMARY KEY (id) |
+
+### Indexes
+
+| Index Name | Definition |
+|------------|------------|
+| `email_tracking_events_pkey` | CREATE UNIQUE INDEX email_tracking_events_pkey ON public.email_tracking_events USING btree (id) |
+| `idx_email_tracking_events_email_id` | CREATE INDEX idx_email_tracking_events_email_id ON public.email_tracking_events USING btree (email_id) |
+| `idx_email_tracking_events_user_id` | CREATE INDEX idx_email_tracking_events_user_id ON public.email_tracking_events USING btree (user_id) |
+| `idx_email_tracking_events_event_type` | CREATE INDEX idx_email_tracking_events_event_type ON public.email_tracking_events USING btree (event_type) |
+| `idx_email_tracking_events_occurred_at` | CREATE INDEX idx_email_tracking_events_occurred_at ON public.email_tracking_events USING btree (occurred_at DESC) |
+| `idx_email_tracking_events_email_type` | CREATE INDEX idx_email_tracking_events_email_type ON public.email_tracking_events USING btree (email_id, event_type) |
+
+### Foreign Keys
+
+| Column | References | On Update | On Delete |
+|--------|------------|-----------|------------|
+| `email_id` | `public.emails(id)` | NO ACTION | CASCADE |
+| `user_id` | `public.users(id)` | NO ACTION | CASCADE |
+
+### Triggers
+
+#### trigger_update_email_on_tracking_event
+
+- **Timing**: AFTER
+- **Event**: INSERT
+- **Definition**:
+```sql
+CREATE TRIGGER trigger_update_email_on_tracking_event AFTER INSERT ON public.email_tracking_events FOR EACH ROW EXECUTE FUNCTION update_email_on_tracking_event()
 ```
 
 **Current Row Count**: 0
@@ -1169,12 +1247,14 @@ CREATE TRIGGER trigger_update_contact_email_stats_update AFTER UPDATE ON public.
 | `completed_by` | uuid | YES | - |  |  |  |
 | `follow_up_status` | character varying(20) | NO | 'pending'::character varying |  |  | Status of follow-up: pending, completed, cancelled |
 | `call_id` | uuid | YES | - |  |  | Reference to the specific call that triggered this follow-up |
+| `assigned_to_team_member_id` | uuid | YES | - |  |  | Team member assigned to handle this follow-up |
 
 ### Constraints
 
 | Constraint Name | Type | Definition |
 |-----------------|------|------------|
 | `follow_ups_follow_up_status_check` | CHECK | CHECK (((follow_up_status)::text = ANY ((ARRAY['pending'::character varying, 'completed'::character varying, 'cancelled'::character varying])::text[]))) |
+| `follow_ups_assigned_to_team_member_id_fkey` | FOREIGN KEY | FOREIGN KEY (assigned_to_team_member_id) REFERENCES team_members(id) ON DELETE SET NULL |
 | `follow_ups_call_id_fkey` | FOREIGN KEY | FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE SET NULL |
 | `follow_ups_completed_by_fkey` | FOREIGN KEY | FOREIGN KEY (completed_by) REFERENCES users(id) ON DELETE SET NULL |
 | `follow_ups_created_by_fkey` | FOREIGN KEY | FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL |
@@ -1186,6 +1266,8 @@ CREATE TRIGGER trigger_update_contact_email_stats_update AFTER UPDATE ON public.
 | Index Name | Definition |
 |------------|------------|
 | `follow_ups_pkey` | CREATE UNIQUE INDEX follow_ups_pkey ON public.follow_ups USING btree (id) |
+| `idx_follow_ups_assigned_to_team_member` | CREATE INDEX idx_follow_ups_assigned_to_team_member ON public.follow_ups USING btree (assigned_to_team_member_id) WHERE (assigned_to_team_member_id IS NOT NULL) |
+| `idx_follow_ups_team_member_status` | CREATE INDEX idx_follow_ups_team_member_status ON public.follow_ups USING btree (assigned_to_team_member_id, follow_up_status) WHERE (assigned_to_team_member_id IS NOT NULL) |
 | `idx_follow_ups_call_id` | CREATE INDEX idx_follow_ups_call_id ON public.follow_ups USING btree (call_id) |
 | `idx_follow_ups_follow_up_date` | CREATE INDEX idx_follow_ups_follow_up_date ON public.follow_ups USING btree (follow_up_date) |
 | `idx_follow_ups_is_completed` | CREATE INDEX idx_follow_ups_is_completed ON public.follow_ups USING btree (is_completed) |
@@ -1199,6 +1281,7 @@ CREATE TRIGGER trigger_update_contact_email_stats_update AFTER UPDATE ON public.
 
 | Column | References | On Update | On Delete |
 |--------|------------|-----------|------------|
+| `assigned_to_team_member_id` | `public.team_members(id)` | NO ACTION | SET NULL |
 | `call_id` | `public.calls(id)` | NO ACTION | SET NULL |
 | `completed_by` | `public.users(id)` | NO ACTION | SET NULL |
 | `created_by` | `public.users(id)` | NO ACTION | SET NULL |
@@ -1269,6 +1352,7 @@ CREATE TRIGGER trigger_follow_ups_updated_at BEFORE UPDATE ON public.follow_ups 
 | `lead_stage_updated_at` | timestamp with time zone | YES | CURRENT_TIMESTAMP |  |  | Timestamp when the lead stage was last updated |
 | `email_id` | uuid | YES | - |  |  | Links to email campaigns sent to this lead for interaction timeline tracking |
 | `interaction_platform` | character varying(50) | YES | - |  |  | Platform for manual interaction (Call, WhatsApp, Email). Used for human_edit analysis type to show the mode of interaction in timeline |
+| `custom_fields` | jsonb | YES | '{}'::jsonb |  |  | Business-specific fields extracted from call transcript. Structure defined by admin in users.field_configuration. Example: {"student_age": 15, "course_program": "Python Bootcamp", "industry": "Education"} |
 
 ### Constraints
 
@@ -1298,6 +1382,9 @@ CREATE TRIGGER trigger_follow_ups_updated_at BEFORE UPDATE ON public.follow_ups 
 | `idx_lead_analytics_call_successful` | CREATE INDEX idx_lead_analytics_call_successful ON public.lead_analytics USING btree (call_successful) |
 | `idx_lead_analytics_call_user` | CREATE INDEX idx_lead_analytics_call_user ON public.lead_analytics USING btree (call_id, user_id) |
 | `idx_lead_analytics_company_name` | CREATE INDEX idx_lead_analytics_company_name ON public.lead_analytics USING btree (company_name) WHERE (company_name IS NOT NULL) |
+| `idx_lead_analytics_custom_fields` | CREATE INDEX idx_lead_analytics_custom_fields ON public.lead_analytics USING gin (custom_fields) |
+| `idx_lead_analytics_email_id` | CREATE INDEX idx_lead_analytics_email_id ON public.lead_analytics USING btree (email_id) WHERE (email_id IS NOT NULL) |
+| `idx_lead_analytics_interaction_platform` | CREATE INDEX idx_lead_analytics_interaction_platform ON public.lead_analytics USING btree (interaction_platform) WHERE (interaction_platform IS NOT NULL) |
 | `idx_lead_analytics_complete_unique` | CREATE UNIQUE INDEX idx_lead_analytics_complete_unique ON public.lead_analytics USING btree (user_id, phone_number, analysis_type) WHERE ((analysis_type)::text = 'complete'::text) |
 | `idx_lead_analytics_cta_demo` | CREATE INDEX idx_lead_analytics_cta_demo ON public.lead_analytics USING btree (cta_demo_clicked) WHERE (cta_demo_clicked = true) |
 | `idx_lead_analytics_cta_escalated` | CREATE INDEX idx_lead_analytics_cta_escalated ON public.lead_analytics USING btree (cta_escalated_to_human) WHERE (cta_escalated_to_human = true) |
@@ -1656,6 +1743,103 @@ CREATE TRIGGER trigger_phone_numbers_updated_at BEFORE UPDATE ON public.phone_nu
 
 ---
 
+## public.plivo_calls
+
+**Description**: Tracks outbound dialer calls made through Plivo Browser SDK v2 (Phase-1 CRM dialer) - decoupled from Bolna AI calls
+
+### Columns
+
+| Column Name | Data Type | Nullable | Default | Primary Key | Unique | Description |
+|-------------|-----------|----------|---------|-------------|--------|-------------|
+| `id` | uuid | NO | gen_random_uuid() | ✓ | ✓ |  |
+| `user_id` | uuid | NO | - |  |  | Tenant isolation |
+| `team_member_id` | uuid | YES | - |  |  | Optional attribution when a team member places the call |
+| `from_phone_number_id` | uuid | YES | - |  |  | Caller ID selection (FK to phone_numbers) |
+| `from_phone_number` | character varying(50) | NO | - |  |  | Caller ID snapshot (denormalized for stability) |
+| `to_phone_number` | character varying(50) | NO | - |  |  | Destination phone number |
+| `contact_id` | uuid | YES | - |  |  | Link to contact record |
+| `plivo_call_uuid` | character varying(128) | YES | - |  | ✓ | Plivo's unique call identifier |
+| `status` | character varying(50) | NO | 'initiated'::character varying |  |  | Call status: initiated, ringing, calling, answered, completed, failed, busy, no_answer, cancelled |
+| `status_updated_at` | timestamp with time zone | NO | CURRENT_TIMESTAMP |  |  | When status was last updated |
+| `initiated_at` | timestamp with time zone | NO | CURRENT_TIMESTAMP |  |  | When call log was created |
+| `started_at` | timestamp with time zone | YES | - |  |  | When call actually started ringing/progressing (not defaulted) |
+| `answered_at` | timestamp with time zone | YES | - |  |  | When call was answered |
+| `ended_at` | timestamp with time zone | YES | - |  |  | When call ended |
+| `duration_seconds` | integer | YES | - |  |  | Total call duration in seconds |
+| `hangup_by` | character varying(50) | YES | - |  |  | Who hung up: caller, callee, system |
+| `hangup_reason` | text | YES | - |  |  | Reason for hangup |
+| `raw_hangup_payload` | jsonb | YES | - |  |  | Raw Plivo webhook payload for hangup |
+| `recording_id` | character varying(128) | YES | - |  |  | Plivo recording ID |
+| `recording_url` | text | YES | - |  |  | URL to download recording |
+| `recording_format` | character varying(16) | YES | - |  |  | Recording file format (mp3, wav, etc.) |
+| `recording_duration_seconds` | integer | YES | - |  |  | Recording duration |
+| `recording_status` | character varying(32) | NO | 'none'::character varying |  |  | Recording status: none, processing, available, failed |
+| `raw_recording_payload` | jsonb | YES | - |  |  | Raw Plivo recording callback payload |
+| `transcript_text` | text | YES | - |  |  | Whisper-generated transcript |
+| `transcript_status` | character varying(32) | NO | 'none'::character varying |  |  | Transcript status: none, processing, completed, failed |
+| `transcript_error` | text | YES | - |  |  | Transcript generation error message |
+| `transcript_created_at` | timestamp with time zone | YES | - |  |  | When transcript was created |
+| `transcript_updated_at` | timestamp with time zone | YES | - |  |  | When transcript was last updated |
+| `lead_extraction_status` | character varying(50) | YES | - |  |  | Lead intelligence extraction status: pending, processing, completed, failed |
+| `lead_extraction_started_at` | timestamp with time zone | YES | - |  |  | When lead extraction started |
+| `lead_extraction_completed_at` | timestamp with time zone | YES | - |  |  | When lead extraction completed |
+| `lead_extraction_updated_at` | timestamp with time zone | YES | - |  |  | When lead extraction was last updated |
+| `lead_extraction_error` | text | YES | - |  |  | Lead extraction error message |
+| `lead_individual_analysis` | jsonb | YES | - |  |  | Individual lead analysis JSON |
+| `lead_complete_analysis` | jsonb | YES | - |  |  | Complete lead analysis JSON |
+| `created_at` | timestamp with time zone | NO | CURRENT_TIMESTAMP |  |  |  |
+| `updated_at` | timestamp with time zone | NO | CURRENT_TIMESTAMP |  |  |  |
+
+### Constraints
+
+| Constraint Name | Type | Definition |
+|-----------------|------|------------|
+| `plivo_calls_user_id_fkey` | FOREIGN KEY | FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE |
+| `plivo_calls_team_member_id_fkey` | FOREIGN KEY | FOREIGN KEY (team_member_id) REFERENCES team_members(id) ON DELETE SET NULL |
+| `plivo_calls_from_phone_number_id_fkey` | FOREIGN KEY | FOREIGN KEY (from_phone_number_id) REFERENCES phone_numbers(id) ON DELETE SET NULL |
+| `plivo_calls_contact_id_fkey` | FOREIGN KEY | FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL |
+| `plivo_calls_pkey` | PRIMARY KEY | PRIMARY KEY (id) |
+
+### Indexes
+
+| Index Name | Definition |
+|------------|------------|
+| `plivo_calls_pkey` | CREATE UNIQUE INDEX plivo_calls_pkey ON public.plivo_calls USING btree (id) |
+| `idx_plivo_calls_plivo_call_uuid_unique` | CREATE UNIQUE INDEX idx_plivo_calls_plivo_call_uuid_unique ON public.plivo_calls USING btree (plivo_call_uuid) WHERE (plivo_call_uuid IS NOT NULL) |
+| `idx_plivo_calls_user_id` | CREATE INDEX idx_plivo_calls_user_id ON public.plivo_calls USING btree (user_id) |
+| `idx_plivo_calls_user_initiated_at` | CREATE INDEX idx_plivo_calls_user_initiated_at ON public.plivo_calls USING btree (user_id, initiated_at DESC) |
+| `idx_plivo_calls_user_created_at` | CREATE INDEX idx_plivo_calls_user_created_at ON public.plivo_calls USING btree (user_id, created_at DESC) |
+| `idx_plivo_calls_status` | CREATE INDEX idx_plivo_calls_status ON public.plivo_calls USING btree (status) |
+| `idx_plivo_calls_to_phone_number` | CREATE INDEX idx_plivo_calls_to_phone_number ON public.plivo_calls USING btree (to_phone_number) |
+| `idx_plivo_calls_contact_id` | CREATE INDEX idx_plivo_calls_contact_id ON public.plivo_calls USING btree (contact_id) |
+| `idx_plivo_calls_recording_status` | CREATE INDEX idx_plivo_calls_recording_status ON public.plivo_calls USING btree (user_id, recording_status) |
+| `idx_plivo_calls_transcript_status` | CREATE INDEX idx_plivo_calls_transcript_status ON public.plivo_calls USING btree (user_id, transcript_status) |
+| `idx_plivo_calls_lead_extraction_status` | CREATE INDEX idx_plivo_calls_lead_extraction_status ON public.plivo_calls USING btree (user_id, lead_extraction_status) |
+
+### Foreign Keys
+
+| Column | References | On Update | On Delete |
+|--------|------------|-----------|------------|
+| `user_id` | `public.users(id)` | NO ACTION | CASCADE |
+| `team_member_id` | `public.team_members(id)` | NO ACTION | SET NULL |
+| `from_phone_number_id` | `public.phone_numbers(id)` | NO ACTION | SET NULL |
+| `contact_id` | `public.contacts(id)` | NO ACTION | SET NULL |
+
+### Triggers
+
+#### update_plivo_calls_updated_at
+
+- **Timing**: BEFORE
+- **Event**: UPDATE
+- **Definition**:
+```sql
+CREATE TRIGGER update_plivo_calls_updated_at BEFORE UPDATE ON public.plivo_calls FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+```
+
+**Current Row Count**: 0
+
+---
+
 ## public.pending_user_syncs
 
 **Description**: Tracks pending user sync attempts to Chat Agent Server (WhatsApp microservice) with retry logic
@@ -1846,6 +2030,72 @@ CREATE TRIGGER update_system_config_updated_at BEFORE UPDATE ON public.system_co
 | Column | References | On Update | On Delete |
 |--------|------------|-----------|------------|
 | `tenant_user_id` | `public.users(id)` | NO ACTION | CASCADE |
+
+**Current Row Count**: 0
+
+---
+
+## public.team_member_analytics
+
+**Description**: Daily analytics for team member (salesperson) performance tracking including leads, follow-ups, and activity metrics
+
+### Columns
+
+| Column Name | Data Type | Nullable | Default | Primary Key | Unique | Description |
+|-------------|-----------|----------|---------|-------------|--------|-------------|
+| `id` | uuid | NO | uuid_generate_v4() | ✓ | ✓ |  |
+| `team_member_id` | uuid | NO | - |  | ✓ | Reference to team member |
+| `tenant_user_id` | uuid | NO | - |  |  | Reference to tenant/owner for quick filtering |
+| `date` | date | NO | - |  | ✓ | Date for these analytics (daily aggregation) |
+| `leads_assigned_count` | integer | NO | 0 |  |  | Total leads assigned to this team member on this date |
+| `leads_active_count` | integer | NO | 0 |  |  | Active leads (not closed) assigned to team member |
+| `qualified_leads_count` | integer | NO | 0 |  |  | Qualified leads with total_score >= 70 |
+| `follow_ups_assigned_count` | integer | NO | 0 |  |  | Follow-ups assigned to this team member |
+| `follow_ups_completed_count` | integer | NO | 0 |  |  | Follow-ups completed by team member |
+| `follow_ups_pending_count` | integer | NO | 0 |  |  | Pending follow-ups for team member |
+| `lead_edits_count` | integer | NO | 0 |  |  | Manual edits from lead_intelligence_events |
+| `notes_added_count` | integer | NO | 0 |  |  | Notes from lead_intelligence_events |
+| `status_changes_count` | integer | NO | 0 |  |  | Status changes made by team member |
+| `manual_calls_logged_count` | integer | NO | 0 |  |  | Manual calls logged when team member adds lead intelligence |
+| `demos_scheduled_count` | integer | NO | 0 |  |  | Leads with demo_book_datetime set |
+| `created_at` | timestamp with time zone | NO | CURRENT_TIMESTAMP |  |  |  |
+| `updated_at` | timestamp with time zone | NO | CURRENT_TIMESTAMP |  |  |  |
+
+### Constraints
+
+| Constraint Name | Type | Definition |
+|-----------------|------|------------|
+| `team_member_analytics_unique_member_date` | UNIQUE | UNIQUE (team_member_id, date) |
+| `team_member_analytics_team_member_id_fkey` | FOREIGN KEY | FOREIGN KEY (team_member_id) REFERENCES team_members(id) ON DELETE CASCADE |
+| `team_member_analytics_tenant_user_id_fkey` | FOREIGN KEY | FOREIGN KEY (tenant_user_id) REFERENCES users(id) ON DELETE CASCADE |
+| `team_member_analytics_pkey` | PRIMARY KEY | PRIMARY KEY (id) |
+
+### Indexes
+
+| Index Name | Definition |
+|------------|------------|
+| `team_member_analytics_pkey` | CREATE UNIQUE INDEX team_member_analytics_pkey ON public.team_member_analytics USING btree (id) |
+| `team_member_analytics_unique_member_date` | CREATE UNIQUE INDEX team_member_analytics_unique_member_date ON public.team_member_analytics USING btree (team_member_id, date) |
+| `idx_team_member_analytics_member_date` | CREATE INDEX idx_team_member_analytics_member_date ON public.team_member_analytics USING btree (team_member_id, date DESC) |
+| `idx_team_member_analytics_tenant_date` | CREATE INDEX idx_team_member_analytics_tenant_date ON public.team_member_analytics USING btree (tenant_user_id, date DESC) |
+
+### Foreign Keys
+
+| Column | References | On Update | On Delete |
+|--------|------------|-----------|------------|
+| `team_member_id` | `public.team_members(id)` | NO ACTION | CASCADE |
+| `tenant_user_id` | `public.users(id)` | NO ACTION | CASCADE |
+
+### Triggers
+
+#### trg_team_member_analytics_updated_at
+
+- **Timing**: BEFORE
+- **Event**: UPDATE
+- **Definition**:
+```sql
+CREATE TRIGGER trg_team_member_analytics_updated_at BEFORE UPDATE ON public.team_member_analytics FOR EACH ROW EXECUTE FUNCTION update_team_member_analytics_updated_at()
+```
 
 **Current Row Count**: 0
 
@@ -2190,6 +2440,7 @@ CREATE TRIGGER update_user_sessions_last_used BEFORE UPDATE ON public.user_sessi
 | `timezone_manually_set` | boolean | YES | false |  |  | True if user manually selected timezone in settings |
 | `timezone_updated_at` | timestamp with time zone | YES | - |  |  | Timestamp when timezone was last updated |
 | `openai_followup_email_prompt_id` | character varying(255) | YES | - |  |  | OpenAI Response API prompt ID for follow-up email personalization. Admin can set per-user. |
+| `field_configuration` | jsonb | YES | '{"enabled_fields": [], "field_definitions": []}'::jsonb |  |  | Admin-managed custom field configuration for this user. Structure: {"enabled_fields": ["student_age", "course_program"], "field_definitions": [{"key": "student_age", "label": "Student Age", "type": "number", "category": "WHO", "extraction_hint": "Extract the age or grade of the student from conversation"}]}. Used by admin to generate OpenAI extraction prompt JSON. |
 
 ### Constraints
 
@@ -2212,6 +2463,7 @@ CREATE TRIGGER update_user_sessions_last_used BEFORE UPDATE ON public.user_sessi
 | Index Name | Definition |
 |------------|------------|
 | `idx_users_created_at` | CREATE INDEX idx_users_created_at ON public.users USING btree (created_at) |
+| `idx_users_field_configuration` | CREATE INDEX idx_users_field_configuration ON public.users USING gin (field_configuration) |
 | `idx_users_last_login` | CREATE INDEX idx_users_last_login ON public.users USING btree (last_login) |
 | `idx_users_timezone` | CREATE INDEX idx_users_timezone ON public.users USING btree (timezone) |
 | `users_email_key` | CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email) |

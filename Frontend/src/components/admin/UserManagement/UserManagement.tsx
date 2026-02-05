@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Settings } from 'lucide-react';
+import { Users, Settings, Database } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import UserList from './UserList';
 import UserDetails from './UserDetails';
@@ -7,6 +7,7 @@ import UserEditModal from './UserEditModal';
 import CreditAdjustModal from './CreditAdjustModal';
 import UserStatusToggle from './UserStatusToggle';
 import UserConcurrency from './UserConcurrency';
+import CustomFieldsConfiguration from './CustomFieldsConfiguration';
 import type { AdminUserListItem } from '../../../types/admin';
 
 export function UserManagement() {
@@ -16,11 +17,18 @@ export function UserManagement() {
   const [showUserDetails, setShowUserDetails] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
+  const [selectedUserIdForFields, setSelectedUserIdForFields] = useState<string | null>(null);
 
   // Handle user selection for details view
   const handleUserSelect = (user: AdminUserListItem) => {
     setSelectedUser(user);
+    setSelectedUserIdForFields(user.id); // Also set for custom fields
     setShowUserDetails(true);
+  };
+
+  // Handle user selection from custom fields dropdown
+  const handleCustomFieldsUserSelect = (userId: string) => {
+    setSelectedUserIdForFields(userId);
   };
 
   // Handle user edit
@@ -122,6 +130,10 @@ export function UserManagement() {
             <Settings className="w-4 h-4 mr-2" />
             Concurrency Settings
           </TabsTrigger>
+          <TabsTrigger value="custom-fields">
+            <Database className="w-4 h-4 mr-2" />
+            Custom Fields
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="space-y-4">
@@ -136,6 +148,13 @@ export function UserManagement() {
 
         <TabsContent value="concurrency">
           <UserConcurrency />
+        </TabsContent>
+
+        <TabsContent value="custom-fields">
+          <CustomFieldsConfiguration 
+            selectedUserId={selectedUserIdForFields}
+            onUserSelect={handleCustomFieldsUserSelect}
+          />
         </TabsContent>
       </Tabs>
 

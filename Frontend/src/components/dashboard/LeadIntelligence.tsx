@@ -93,6 +93,8 @@ interface LeadGroup {
   requirements?: string;
   // Custom CTA - call-to-action strings extracted from analysis
   customCta?: string;
+  // Custom business-specific fields from extraction
+  customFields?: Record<string, any>;
   // Notes from contacts table
   contactNotes?: string;
   // Lead stage for pipeline tracking
@@ -149,6 +151,8 @@ interface LeadTimelineEntry {
   requirements?: string;
   // Custom CTA - call-to-action strings extracted from analysis
   customCta?: string;
+  // Custom business-specific fields from extraction
+  customFields?: Record<string, any>;
   // Email-specific fields
   interactionType?: 'call' | 'email' | 'human_edit' | 'chat'; // Type of interaction
   emailSubject?: string; // Email subject
@@ -307,6 +311,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
   const [selectedContact, setSelectedContact] = useState<LeadGroup | null>(null);
   const [contacts, setContacts] = useState<LeadGroup[]>([]);
+  const [enabledCustomFields, setEnabledCustomFields] = useState<{ key: string; label: string; type: string }[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [timeline, setTimeline] = useState<LeadTimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -420,11 +425,19 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
       };
       
       const response = await apiService.getLeadIntelligence(filters);
-      const contactsData = response.data || response as any;
-      setContacts(contactsData);
+      const responseData = response.data || response as any;
+      
+      // Handle both old format (array) and new format (object with leadGroups and enabledFields)
+      if (Array.isArray(responseData)) {
+        setContacts(responseData);
+        setEnabledCustomFields([]);
+      } else {
+        setContacts(responseData.leadGroups || []);
+        setEnabledCustomFields(responseData.enabledFields || []);
+      }
       
       // Fetch chat summaries for all contacts in background
-      fetchChatSummaries(contactsData);
+      fetchChatSummaries(Array.isArray(responseData) ? responseData : responseData.leadGroups || []);
     } catch (error) {
       console.error('Error fetching lead intelligence:', error);
       setError('Failed to load lead intelligence data');
@@ -1449,6 +1462,12 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">CTAs</th>
                     <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Requirements</th>
                     <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">CTA</th>
+                    {/* Custom Fields - render columns for enabled fields only */}
+                    {enabledCustomFields.map((field) => (
+                      <th key={field.key} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
+                        {field.label}
+                      </th>
+                    ))}
                     <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Email</th>
                     <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up</th>
                   </tr>
@@ -1456,7 +1475,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 <tbody className="[&_tr:last-child]:border-0">
                   {timelineLoading ? (
                     <tr className="border-b transition-colors hover:bg-muted/50">
-                      <td colSpan={15} className="p-4 align-middle text-center py-8">
+                      <td colSpan={15 + enabledCustomFields.length} className="p-4 align-middle text-center py-8">
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           <span>Loading timeline...</span>
@@ -1465,7 +1484,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     </tr>
                   ) : timeline.length === 0 ? (
                     <tr className="border-b transition-colors hover:bg-muted/50">
-                      <td colSpan={15} className="p-4 align-middle text-center py-8 text-muted-foreground">
+                      <td colSpan={15 + enabledCustomFields.length} className="p-4 align-middle text-center py-8 text-muted-foreground">
                         No interaction history found
                       </td>
                     </tr>
@@ -1689,6 +1708,32 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                             "—"
                           )}
                         </td>
+                        
+                        {/* Custom Fields - render cells for enabled fields */}
+                        {enabledCustomFields.map((field) => {
+                          const value = interaction.customFields?.[field.key];
+                          return (
+                            <td key={field.key} className="p-4 align-middle text-xs text-foreground max-w-[150px]">
+                              {value ? (
+                                typeof value === 'boolean' ? (
+                                  <Badge variant={value ? "default" : "outline"} className="text-[10px]">
+                                    {value ? 'Yes' : 'No'}
+                                  </Badge>
+                                ) : typeof value === 'object' ? (
+                                  <span className="text-muted-foreground">{JSON.stringify(value)}</span>
+                                ) : (
+                                  <span className="truncate" title={String(value)}>
+                                    {String(value).length > 30 
+                                      ? String(value).substring(0, 30) + '...'
+                                      : String(value)}
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
                         
                         {/* Email - Show extracted email to see what AI captured */}
                         <td className="p-4 align-middle text-xs text-foreground">
@@ -2077,6 +2122,12 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 />
               </th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Notes</th>
+              {/* Custom Fields - render columns for enabled fields only */}
+              {enabledCustomFields.map((field) => (
+                <th key={field.key} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
+                  {field.label}
+                </th>
+              ))}
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Escalated</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">No. of Interactions</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Interacted Agents</th>
@@ -2325,6 +2376,31 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     <span className="text-muted-foreground">-</span>
                   )}
                 </td>
+                {/* Custom Fields - render cells for enabled fields */}
+                {enabledCustomFields.map((field) => {
+                  const value = contact.customFields?.[field.key];
+                  return (
+                    <td key={field.key} className="p-4 align-middle text-xs text-foreground max-w-[200px]">
+                      {value ? (
+                        typeof value === 'boolean' ? (
+                          <Badge variant={value ? "default" : "outline"}>
+                            {value ? 'Yes' : 'No'}
+                          </Badge>
+                        ) : typeof value === 'object' ? (
+                          JSON.stringify(value)
+                        ) : (
+                          <span className="truncate" title={String(value)}>
+                            {String(value).length > 40 
+                              ? String(value).substring(0, 40) + '...'
+                              : String(value)}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                  );
+                })}
                 <td className="p-4 align-middle">
                   <Badge
                     variant={contact.escalatedToHuman ? "destructive" : "secondary"}

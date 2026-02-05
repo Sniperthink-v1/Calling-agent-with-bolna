@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AdminController } from '../controllers/adminController';
+import { FieldConfigurationController } from '../controllers/fieldConfigurationController';
 import { authenticateToken } from '../middleware/auth';
 import { requireAdmin, requireSuperAdmin, logAdminAction } from '../middleware/adminAuth';
 import phoneNumberRoutes from './phoneNumbers';
@@ -444,5 +445,57 @@ router.use('/failure-logs', failureLogsRoutes);
 
 // Manual triggers routes (webhook simulation, analysis trigger)
 router.use('/manual-triggers', manualTriggersRoutes);
+
+// =============================================
+// Field Configuration Routes (Custom Fields)
+// =============================================
+
+// Get complete field library (all 23 available fields + custom)
+router.get(
+  '/field-library',
+  requireAdmin,
+  logAdminAction('VIEW_FIELD_LIBRARY', 'field_config'),
+  FieldConfigurationController.getFieldLibrary
+);
+
+// Add custom field definition beyond the 23 default fields
+router.post(
+  '/field-library/custom',
+  requireAdmin,
+  logAdminAction('ADD_CUSTOM_FIELD_DEFINITION', 'field_config'),
+  FieldConfigurationController.addCustomFieldDefinition
+);
+
+// Get field configuration for a specific user
+router.get(
+  '/users/:userId/field-configuration',
+  requireAdmin,
+  logAdminAction('VIEW_USER_FIELD_CONFIG', 'field_config'),
+  FieldConfigurationController.getUserFieldConfiguration
+);
+
+// Update field configuration for a specific user
+router.put(
+  '/users/:userId/field-configuration',
+  requireAdmin,
+  logAdminAction('UPDATE_USER_FIELD_CONFIG', 'field_config'),
+  FieldConfigurationController.updateUserFieldConfiguration
+);
+
+// Generate OpenAI extraction JSON for admin to copy
+router.post(
+  '/users/:userId/generate-extraction-json',
+  requireAdmin,
+  logAdminAction('GENERATE_EXTRACTION_JSON', 'field_config'),
+  FieldConfigurationController.generateExtractionJSONForUser
+);
+
+// Get leads with custom fields (for testing)
+router.get(
+  '/users/:userId/leads-with-custom-fields',
+  requireAdmin,
+  logAdminAction('VIEW_LEADS_WITH_CUSTOM_FIELDS', 'field_config'),
+  FieldConfigurationController.getLeadsWithCustomFields
+);
 
 export default router;

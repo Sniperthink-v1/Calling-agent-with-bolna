@@ -621,6 +621,76 @@ export interface UpdatePhoneNumberRequest {
 }
 
 // ============================================================================
+// CUSTOM FIELDS CONFIGURATION INTERFACES
+// ============================================================================
+
+export type FieldType = 'text' | 'number' | 'date' | 'boolean' | 'dropdown' | 'email' | 'phone';
+export type FieldCategory = 'WHO' | 'WHAT' | 'HOW MUCH' | 'WHERE' | 'WHEN' | 'HOW' | 'SO WHAT';
+
+export interface FieldDefinition {
+  key: string;
+  label: string;
+  type: FieldType;
+  category: FieldCategory;
+  extraction_hint: string;
+  options?: string[];
+  core?: boolean;
+  db_column?: string;
+}
+
+export interface UserFieldConfiguration {
+  enabled_fields: string[];
+  field_definitions: FieldDefinition[];
+}
+
+export interface FieldLibraryResponse {
+  total: number;
+  categories: FieldCategory[];
+  fieldsByCategory: Record<FieldCategory, FieldDefinition[]>;
+  allFields: FieldDefinition[];
+}
+
+export interface GenerateExtractionJSONResponse {
+  userId: string;
+  userEmail: string;
+  enabledFields: string[];
+  extractionJSON: {
+    extraction: {
+      name: string;
+      email_address: string;
+      company_name: string;
+      smartnotification: string;
+      requirements: string;
+      custom_cta: string;
+      in_detail_summary: string;
+      custom_fields: Record<string, string>;
+    };
+  };
+  instructions: {
+    step1: string;
+    step2: string;
+    step3: string;
+    step4: string;
+    step5: string;
+    note?: string;
+  };
+}
+
+export interface LeadWithCustomFields {
+  id: string;
+  phone_number: string;
+  company_name?: string;
+  extracted_name?: string;
+  extracted_email?: string;
+  requirements?: string;
+  custom_fields: Record<string, any>;
+  total_score: number;
+  lead_status_tag: string;
+  analysis_type: string;
+  created_at: string;
+}
+
+// ============================================================================
 // EXPORT ALL TYPES
 // ============================================================================
 
@@ -632,4 +702,6 @@ export type {
   SystemStatistics as SystemStatsInterface,
   PhoneNumber as PhoneNumberInterface,
   PhoneNumberStats as PhoneNumberStatsInterface,
+  FieldDefinition as FieldDefinitionInterface,
+  UserFieldConfiguration as UserFieldConfigurationInterface,
 };

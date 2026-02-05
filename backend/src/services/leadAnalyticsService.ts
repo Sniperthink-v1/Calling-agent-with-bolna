@@ -102,6 +102,9 @@ class LeadAnalyticsService {
       custom_cta: analysis.extraction?.custom_cta ?? undefined,
       in_detail_summary: analysis.extraction?.in_detail_summary ?? undefined,
       transcript_summary: analysis.transcript_summary ?? undefined, // Bolna's summary
+      
+      // Custom fields (business-specific fields configured by admin)
+      custom_fields: analysis.extraction?.custom_fields ?? undefined,
     };
   }
 
@@ -159,6 +162,9 @@ class LeadAnalyticsService {
       requirements: analysis.extraction?.requirements ?? undefined,
       custom_cta: analysis.extraction?.custom_cta ?? undefined,
       in_detail_summary: analysis.extraction?.in_detail_summary ?? undefined,
+      
+      // Custom fields (business-specific fields configured by admin)
+      custom_fields: analysis.extraction?.custom_fields ?? undefined,
     };
   }
 

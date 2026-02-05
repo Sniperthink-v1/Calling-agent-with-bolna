@@ -722,6 +722,7 @@ export interface LeadAnalytics {
     value: string;
     timestamp: string;
   }>;
+  customFields?: Record<string, any>; // Business-specific custom fields configured by admin
   createdAt: string;
   updatedAt: string;
 }

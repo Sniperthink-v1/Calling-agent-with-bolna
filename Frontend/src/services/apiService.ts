@@ -132,6 +132,7 @@ interface RequestConfig extends RequestInit {
   retryDelay?: number;
   skipAuth?: boolean;
   suppressErrorToast?: boolean; // Don't show error toast for this request
+  skipTimezone?: boolean;
 }
 
 // All interfaces are now imported from ../types
@@ -202,6 +203,10 @@ class ApiService {
 
   // Timezone header interceptor
   private async timezoneHeaderInterceptor(config: RequestConfig): Promise<RequestConfig> {
+    if (config.skipTimezone) {
+      return config;
+    }
+
     // Add X-Timezone header with browser-detected timezone
     const timezone = detectBrowserTimezone();
     
@@ -1863,7 +1868,7 @@ class ApiService {
   // Admin User Management
   async getAdminUsers(options: any = {}): Promise<ApiResponse<any>> {
     const queryString = new URLSearchParams(options).toString();
-    const url = queryString ? `/admin/users?${queryString}` : '/admin/users';
+    const url = queryString ? `${API_ENDPOINTS.ADMIN.USERS}?${queryString}` : API_ENDPOINTS.ADMIN.USERS;
     return this.request<any>(url);
   }
 
@@ -1940,6 +1945,44 @@ class ApiService {
 
   async getAgentHealthCheck(): Promise<ApiResponse<any>> {
     return this.request<any>(API_ENDPOINTS.ADMIN.AGENTS_HEALTH);
+  }
+
+  // Admin Custom Fields Configuration
+  async getFieldLibrary(): Promise<ApiResponse<any>> {
+    // Add cache buster to force fresh data (no custom headers to avoid CORS issues)
+    const cacheBuster = Date.now();
+    const url = `${API_ENDPOINTS.ADMIN.FIELD_LIBRARY}?_=${cacheBuster}`;
+    return this.request<any>(url, {
+      includeAgentId: false,
+      skipTimezone: true
+    });
+  }
+
+  async getUserFieldConfiguration(userId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(API_ENDPOINTS.ADMIN.USER_FIELD_CONFIG(userId));
+  }
+
+  async updateUserFieldConfiguration(userId: string, enabledFields: string[]): Promise<ApiResponse<any>> {
+    return this.request<any>(API_ENDPOINTS.ADMIN.USER_FIELD_CONFIG(userId), {
+      method: 'PUT',
+      body: JSON.stringify({ enabled_fields: enabledFields }), // Backend expects snake_case
+    });
+  }
+
+  async generateExtractionJSON(userId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(API_ENDPOINTS.ADMIN.GENERATE_EXTRACTION_JSON(userId), {
+      method: 'POST',
+    });
+  }
+
+  async getLeadsWithCustomFields(userId: string, params?: any): Promise<ApiResponse<any>> {
+    const queryString = params ? new URLSearchParams(params).toString() : '';
+    const url = queryString ? `${API_ENDPOINTS.ADMIN.LEADS_WITH_CUSTOM_FIELDS(userId)}?${queryString}` : API_ENDPOINTS.ADMIN.LEADS_WITH_CUSTOM_FIELDS(userId);
+    return this.request<any>(url);
+  }
+
+  async getCustomFieldsStatistics(): Promise<ApiResponse<any>> {
+    return this.request<any>(API_ENDPOINTS.ADMIN.CUSTOM_FIELDS_STATS);
   }
 
   // Admin Audit Logs

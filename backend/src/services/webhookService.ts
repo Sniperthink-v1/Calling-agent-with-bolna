@@ -968,7 +968,8 @@ class WebhookService {
                 extractedName: individualData?.extraction?.name || null,
                 extractedEmail: individualData?.extraction?.email_address || null,
                 smartNotification: individualData?.extraction?.smartnotification || null,
-                demoBookDatetime: individualData?.demo_book_datetime || null
+                demoBookDatetime: individualData?.demo_book_datetime || null,
+                customFields: individualData?.extraction?.custom_fields || {}
               };
 
               const contactResult = await ContactAutoCreationService.createOrUpdateContact(

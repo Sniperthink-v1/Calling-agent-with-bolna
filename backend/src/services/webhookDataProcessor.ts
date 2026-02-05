@@ -17,6 +17,7 @@ export interface EnhancedLeadData {
   extractedEmail: string | null;
   smartNotification: string | null;
   demoBookDatetime: string | null;
+  customFields: Record<string, any>; // Business-specific custom fields from admin configuration
 }
 
 /**
@@ -363,12 +364,16 @@ export class WebhookDataProcessor {
       const smartNotification = extraction.smartnotification || null;
       const demoBookDatetime = parsedData.demo_book_datetime || null;
 
+      // Extract custom fields (business-specific fields configured by admin)
+      const customFields = extraction.custom_fields || {};
+
       const enhancedLeadData: EnhancedLeadData = {
         companyName,
         extractedName,
         extractedEmail,
         smartNotification,
-        demoBookDatetime
+        demoBookDatetime,
+        customFields
       };
 
       logger.debug('Successfully extracted enhanced lead data', {
@@ -376,7 +381,8 @@ export class WebhookDataProcessor {
         extractedName,
         extractedEmail,
         smartNotification,
-        demoBookDatetime
+        demoBookDatetime,
+        customFieldsCount: Object.keys(customFields).length
       });
 
       return enhancedLeadData;

@@ -322,6 +322,12 @@ export const API_ENDPOINTS = {
     MANUAL_TRIGGERS_ANALYSIS: `${API_URL}/admin/manual-triggers/analysis`,
     MANUAL_TRIGGERS_WEBHOOK: `${API_URL}/admin/manual-triggers/webhook`,
     MANUAL_TRIGGERS_CALL: (executionId: string) => `${API_URL}/admin/manual-triggers/call/${executionId}`,
+    // Custom Fields Configuration
+    FIELD_LIBRARY: `${API_URL}/admin/field-library`,
+    USER_FIELD_CONFIG: (userId: string) => `${API_URL}/admin/users/${userId}/field-configuration`,
+    GENERATE_EXTRACTION_JSON: (userId: string) => `${API_URL}/admin/users/${userId}/generate-extraction-json`,
+    LEADS_WITH_CUSTOM_FIELDS: (userId: string) => `${API_URL}/admin/users/${userId}/leads-with-custom-fields`,
+    CUSTOM_FIELDS_STATS: `${API_URL}/admin/custom-fields/statistics`,
   },
 
   // Webhooks (for reference, not typically called from frontend)

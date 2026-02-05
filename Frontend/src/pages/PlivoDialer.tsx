@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+import { Search, X, User, Building2, Phone } from "lucide-react";
 
 type PhoneNumber = {
   id: string;
@@ -34,6 +35,14 @@ type PlivoDialerTokenResponse = {
   token: string;
   plivoNumber: string;
   exp: number;
+};
+
+type Contact = {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  company?: string | null;
+  email?: string | null;
 };
 
 function stripSpaces(value: string): string {
@@ -91,6 +100,11 @@ export default function PlivoDialer() {
 
   const [selectedFromId, setSelectedFromId] = useState<string>("");
   const [toPhoneNumber, setToPhoneNumber] = useState<string>("");
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [contactSearchQuery, setContactSearchQuery] = useState<string>("");
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
+  const [contactSearchResults, setContactSearchResults] = useState<Contact[]>([]);
 
   const [sdkReady, setSdkReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -118,6 +132,70 @@ export default function PlivoDialer() {
   const selectedFrom = useMemo(() => {
     return activePhoneNumbers.find((p) => p.id === selectedFromId) || null;
   }, [activePhoneNumbers, selectedFromId]);
+
+  // Debounce contact search
+  useEffect(() => {
+    const searchContacts = async () => {
+      // Don't search if a contact is already selected
+      if (selectedContact) {
+        return;
+      }
+
+      if (!contactSearchQuery.trim() || contactSearchQuery.length < 2) {
+        setContactSearchResults([]);
+        setShowContactDropdown(false);
+        return;
+      }
+
+      setIsSearchingContacts(true);
+      try {
+        const resp = await authenticatedFetch(
+          `${API_ENDPOINTS.CONTACTS.LIST}?search=${encodeURIComponent(contactSearchQuery)}&limit=10`
+        );
+        if (resp.ok) {
+          const json = await resp.json();
+          console.log("Contact search response:", json);
+          const rawContacts = json?.data?.contacts || [];
+          // Normalize contact data - handle both camelCase and snake_case
+          const contacts = rawContacts.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            phoneNumber: c.phoneNumber || c.phone_number || "",
+            company: c.company || null,
+            email: c.email || null,
+          })) as Contact[];
+          console.log("Normalized contacts:", contacts);
+          setContactSearchResults(contacts);
+          setShowContactDropdown(contacts.length > 0);
+        }
+      } catch (error) {
+        console.error("Contact search error:", error);
+      } finally {
+        setIsSearchingContacts(false);
+      }
+    };
+
+    const timer = setTimeout(searchContacts, 300);
+    return () => clearTimeout(timer);
+  }, [contactSearchQuery, selectedContact]);
+
+  // Handle contact selection
+  const handleSelectContact = (contact: Contact) => {
+    console.log("Selecting contact:", contact);
+    setSelectedContact(contact);
+    setToPhoneNumber(contact.phoneNumber || "");
+    setContactSearchQuery(contact.name);
+    setShowContactDropdown(false);
+    console.log("Phone number set to:", contact.phoneNumber);
+  };
+
+  // Clear contact selection
+  const handleClearContact = () => {
+    setSelectedContact(null);
+    setContactSearchQuery("");
+    setToPhoneNumber("");
+    setContactSearchResults([]);
+  };
 
   useEffect(() => {
     // Plivo SDK is loaded globally via index.html script tag.
@@ -440,6 +518,7 @@ export default function PlivoDialer() {
       body: JSON.stringify({
         fromPhoneNumberId: selectedFrom.id,
         toPhoneNumber: cleanedTo,
+        contactId: selectedContact?.id || null,
       }),
     });
 
@@ -612,14 +691,121 @@ export default function PlivoDialer() {
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm font-medium">To</div>
-              <Input
-                value={toPhoneNumber}
-                onChange={(e) => setToPhoneNumber(e.target.value)}
-                placeholder="e.g. +919876543210 or 919876543210"
-              />
-              <div className="text-xs text-muted-foreground">
-                Tip: remove spaces; include country code.
+              <div className="text-sm font-medium">To (Phone Number or Contact Name)</div>
+              
+              {/* Contact Search Input */}
+              <div className="relative">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={contactSearchQuery}
+                    onChange={(e) => {
+                      setContactSearchQuery(e.target.value);
+                      if (!e.target.value) {
+                        handleClearContact();
+                      }
+                    }}
+                    onFocus={() => {
+                      if (contactSearchResults.length > 0) {
+                        setShowContactDropdown(true);
+                      }
+                    }}
+                    placeholder="Search by contact name..."
+                    className="pl-9 pr-9"
+                    disabled={isCalling}
+                  />
+                  {contactSearchQuery && (
+                    <button
+                      onClick={handleClearContact}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      type="button"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Contact Search Dropdown */}
+                {showContactDropdown && contactSearchResults.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {contactSearchResults.map((contact) => (
+                      <button
+                        key={contact.id}
+                        onClick={() => handleSelectContact(contact)}
+                        className="w-full px-4 py-3 text-left hover:bg-accent transition-colors flex items-start gap-3 border-b last:border-b-0"
+                        type="button"
+                      >
+                        <User className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm">{contact.name}</div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                            <Phone className="h-3 w-3" />
+                            <span>{contact.phoneNumber || "(No phone number)"}</span>
+                          </div>
+                          {contact.company && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                              <Building2 className="h-3 w-3" />
+                              <span>{contact.company}</span>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {isSearchingContacts && (
+                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg p-4 text-center text-sm text-muted-foreground">
+                    Searching contacts...
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Contact Display */}
+              {selectedContact && (
+                <div className="p-3 bg-accent rounded-md border">
+                  <div className="flex items-start gap-3">
+                    <User className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm">{selectedContact.name}</div>
+                      {selectedContact.phoneNumber && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Phone: {selectedContact.phoneNumber}
+                        </div>
+                      )}
+                      {selectedContact.company && (
+                        <div className="text-xs text-muted-foreground">
+                          Company: {selectedContact.company}
+                        </div>
+                      )}
+                      {selectedContact.email && (
+                        <div className="text-xs text-muted-foreground">
+                          Email: {selectedContact.email}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual Phone Number Input */}
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Or enter phone number manually:</div>
+                <Input
+                  value={toPhoneNumber}
+                  onChange={(e) => {
+                    setToPhoneNumber(e.target.value);
+                    // Clear selected contact if user manually edits phone
+                    if (selectedContact && e.target.value !== selectedContact.phoneNumber) {
+                      setSelectedContact(null);
+                    }
+                  }}
+                  placeholder="e.g. +919876543210 or 919876543210"
+                  disabled={isCalling}
+                />
+                <div className="text-xs text-muted-foreground">
+                  Tip: remove spaces; include country code.
+                </div>
               </div>
             </div>
 

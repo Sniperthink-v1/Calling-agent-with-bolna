@@ -71,6 +71,7 @@ export interface IndividualAnalysis {
     requirements: string | null;
     custom_cta: string | null;
     in_detail_summary: string | null;
+    custom_fields?: Record<string, any>; // Business-specific fields configured by admin
   };
 }
 
