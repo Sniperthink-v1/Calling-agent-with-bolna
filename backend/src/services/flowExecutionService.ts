@@ -215,7 +215,11 @@ export class FlowExecutionService {
     // Check condition based on previous action result
     if (action.condition_type === 'call_outcome') {
       if (!previousActionResult || !previousActionResult.call_outcome) {
-        return { execute: true }; // No previous call, execute anyway
+        // No previous call outcome available - skip this conditional action
+        return { 
+          execute: false, 
+          reason: 'No previous call outcome available for call_outcome condition' 
+        };
       }
 
       const expectedOutcome = action.condition_value;

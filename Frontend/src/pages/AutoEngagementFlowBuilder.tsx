@@ -75,8 +75,8 @@ const AutoEngagementFlowBuilder: React.FC = () => {
       priority: 0,
       is_enabled: true,
       use_custom_business_hours: false,
-      business_hours_start: '09:00:00',
-      business_hours_end: '17:00:00',
+      business_hours_start: '09:00',
+      business_hours_end: '17:00',
       business_hours_timezone: 'America/New_York',
     },
   });
@@ -91,8 +91,8 @@ const AutoEngagementFlowBuilder: React.FC = () => {
       setValue('priority', flow.priority);
       setValue('is_enabled', flow.is_enabled);
       setValue('use_custom_business_hours', flow.use_custom_business_hours);
-      setValue('business_hours_start', flow.business_hours_start || '09:00:00');
-      setValue('business_hours_end', flow.business_hours_end || '17:00:00');
+      setValue('business_hours_start', flow.business_hours_start?.substring(0, 5) || '09:00');
+      setValue('business_hours_end', flow.business_hours_end?.substring(0, 5) || '17:00');
       setValue('business_hours_timezone', flow.business_hours_timezone || 'America/New_York');
       
       if (flow.trigger_conditions) {
@@ -117,23 +117,42 @@ const AutoEngagementFlowBuilder: React.FC = () => {
 
   const onSubmit = async (data: FormValues) => {
     try {
-      const flowData: CreateFlowRequest = {
-        name: data.name,
-        description: data.description || undefined,
-        priority: data.priority,
-        is_enabled: data.is_enabled,
-        use_custom_business_hours: data.use_custom_business_hours,
-        business_hours_start: data.use_custom_business_hours ? data.business_hours_start : undefined,
-        business_hours_end: data.use_custom_business_hours ? data.business_hours_end : undefined,
-        business_hours_timezone: data.use_custom_business_hours ? data.business_hours_timezone : undefined,
-        trigger_conditions: triggerConditions,
-        actions: actions,
-      };
-
       if (isEditMode && id) {
-        await updateFlow({ id, data: flowData });
+        // Edit mode: Split into separate API calls
+        // 1. Update base flow fields
+        const baseFlowData = {
+          name: data.name,
+          description: data.description || undefined,
+          priority: data.priority,
+          is_enabled: data.is_enabled,
+          use_custom_business_hours: data.use_custom_business_hours,
+          business_hours_start: data.use_custom_business_hours ? data.business_hours_start : undefined,
+          business_hours_end: data.use_custom_business_hours ? data.business_hours_end : undefined,
+          business_hours_timezone: data.use_custom_business_hours ? data.business_hours_timezone : undefined,
+        };
+        await updateFlow({ id, data: baseFlowData });
+
+        // 2. Update trigger conditions (uses separate endpoint)
+        await updateTriggerConditions(id, triggerConditions);
+
+        // 3. Update actions (uses separate endpoint)
+        await updateActions(id, actions);
+
         toast.success('Flow updated successfully');
       } else {
+        // Create mode: Use single endpoint with full data
+        const flowData: CreateFlowRequest = {
+          name: data.name,
+          description: data.description || undefined,
+          priority: data.priority,
+          is_enabled: data.is_enabled,
+          use_custom_business_hours: data.use_custom_business_hours,
+          business_hours_start: data.use_custom_business_hours ? data.business_hours_start : undefined,
+          business_hours_end: data.use_custom_business_hours ? data.business_hours_end : undefined,
+          business_hours_timezone: data.use_custom_business_hours ? data.business_hours_timezone : undefined,
+          trigger_conditions: triggerConditions,
+          actions: actions,
+        };
         await createFlow(flowData);
         toast.success('Flow created successfully');
       }

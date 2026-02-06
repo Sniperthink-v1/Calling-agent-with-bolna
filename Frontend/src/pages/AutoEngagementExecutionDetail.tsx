@@ -205,12 +205,18 @@ const AutoEngagementExecutionDetail: React.FC = () => {
                                 <CardTitle className="text-base">
                                   Step {log.action_order}: {log.action_type.replace('_', ' ').toUpperCase()}
                                 </CardTitle>
-                                <Badge variant={
-                                  log.status === 'success' ? 'success' :
-                                  log.status === 'failed' ? 'destructive' :
-                                  log.status === 'running' ? 'default' :
-                                  'secondary'
-                                }>
+                                <Badge 
+                                  variant={
+                                    log.status === 'failed' ? 'destructive' :
+                                    log.status === 'running' ? 'default' :
+                                    'secondary'
+                                  }
+                                  className={
+                                    log.status === 'success' 
+                                      ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300' 
+                                      : undefined
+                                  }
+                                >
                                   {log.status}
                                 </Badge>
                               </div>

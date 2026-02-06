@@ -46,18 +46,18 @@ const AutoEngagementExecutions: React.FC = () => {
 
   const getStatusBadge = (status: ExecutionStatus) => {
     const statusConfig = {
-      running: { variant: 'default' as const, icon: Clock, label: 'Running' },
-      completed: { variant: 'success' as const, icon: CheckCircle, label: 'Completed' },
-      failed: { variant: 'destructive' as const, icon: XCircle, label: 'Failed' },
-      cancelled: { variant: 'secondary' as const, icon: PauseCircle, label: 'Cancelled' },
-      skipped: { variant: 'outline' as const, icon: PauseCircle, label: 'Skipped' },
+      running: { variant: 'default' as const, className: '', icon: Clock, label: 'Running' },
+      completed: { variant: 'secondary' as const, className: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300', icon: CheckCircle, label: 'Completed' },
+      failed: { variant: 'destructive' as const, className: '', icon: XCircle, label: 'Failed' },
+      cancelled: { variant: 'secondary' as const, className: '', icon: PauseCircle, label: 'Cancelled' },
+      skipped: { variant: 'outline' as const, className: '', icon: PauseCircle, label: 'Skipped' },
     };
 
     const config = statusConfig[status] || statusConfig.completed;
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant}>
+      <Badge variant={config.variant} className={config.className}>
         <Icon className="mr-1 h-3 w-3" />
         {config.label}
       </Badge>

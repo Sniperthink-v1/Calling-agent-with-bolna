@@ -70,9 +70,16 @@ export const autoEngagementService = {
       condition_value: string | null;
     }>
   ): Promise<{ success: boolean; data: any[] }> {
+    // Backend expects camelCase, normalize from snake_case
+    const normalizedConditions = conditions.map(c => ({
+      conditionType: c.condition_type,
+      conditionOperator: c.condition_operator,
+      conditionValue: c.condition_value ?? null
+    }));
+
     return apiService.put<{ success: boolean; data: any[] }>(
       API_ENDPOINTS.AUTO_ENGAGEMENT.FLOW_CONDITIONS(id),
-      { conditions }
+      { conditions: normalizedConditions }
     );
   },
 

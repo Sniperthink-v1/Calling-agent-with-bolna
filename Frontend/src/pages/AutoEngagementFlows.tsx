@@ -140,7 +140,7 @@ const AutoEngagementFlows: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {flows
+                  {[...flows]
                     .sort((a, b) => a.priority - b.priority)
                     .map((flow) => (
                       <TableRow key={flow.id}>
