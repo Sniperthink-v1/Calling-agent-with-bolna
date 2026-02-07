@@ -2,9 +2,7 @@ import apiService from './apiService';
 import {
   EmailTemplate,
   CreateEmailTemplateRequest,
-  UpdateEmailTemplateRequest,
-  EmailTemplateListResponse,
-  EmailTemplateResponse
+  UpdateEmailTemplateRequest
 } from '../types/emailTemplate';
 
 /**

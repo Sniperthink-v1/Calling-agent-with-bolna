@@ -18,12 +18,14 @@ February 7, 2026
 - Endpoint: `POST ${CHAT_AGENT_SERVER_URL}/api/v1/send`
 - Variable mapping support for contact field replacement
 - Error handling with detailed logging
+- Single-attempt send (no automatic retries - errors are logged and thrown)
 
 **Key Features:**
 - Contact phone number validation
 - Environment variable check for `CHAT_AGENT_SERVER_URL`
 - Dynamic variable replacement from contact data
 - Returns message ID for tracking
+- Timeout: 30 seconds
 
 **Example Usage:**
 ```typescript
@@ -91,9 +93,9 @@ February 7, 2026
 
 **Key Features:**
 - Duration in minutes configuration
-- Business hours support flag (for future enhancement)
+- Business hours support flag (logged but not yet implemented)
 - Actual wait time tracking
-- Non-blocking for other flows
+- Blocks the current flow execution worker for the wait duration (other Node.js requests can still run)
 
 **Example Response:**
 ```typescript
@@ -101,7 +103,6 @@ February 7, 2026
   waited: true,
   status: 'completed',
   duration_minutes: 30,
-  wait_until_business_hours: false,
   message: 'Waited for 30 minutes'
 }
 ```

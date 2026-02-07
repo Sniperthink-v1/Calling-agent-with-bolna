@@ -484,9 +484,10 @@ export class FlowExecutionService {
 
       for (const [key, value] of Object.entries(replacements)) {
         const regex = new RegExp(`{{${key}}}`, 'g');
-        subject = subject.replace(regex, value);
-        bodyHtml = bodyHtml.replace(regex, value);
-        bodyText = bodyText.replace(regex, value);
+        // Use replacer function to prevent $ special char issues in replacement strings
+        subject = subject.replace(regex, () => value);
+        bodyHtml = bodyHtml.replace(regex, () => value);
+        bodyText = bodyText.replace(regex, () => value);
       }
 
       // Import gmail service
@@ -591,6 +592,20 @@ export class FlowExecutionService {
       // The action will always wait for the specified duration regardless of business hours
       if (config.wait_until_business_hours) {
         logger.warn('[FlowExecutionService] wait_until_business_hours flag is set but not implemented');
+      }
+
+      // Validate duration_minutes to prevent extremely long waits
+      // Node.js setTimeout has a max of ~24.8 days (2^31-1 ms)
+      const MAX_DURATION_MINUTES = 1440; // 24 hours
+      if (!Number.isFinite(config.duration_minutes) || config.duration_minutes <= 0) {
+        throw new Error(`Invalid duration_minutes: ${config.duration_minutes}. Must be a positive finite number.`);
+      }
+      if (config.duration_minutes > MAX_DURATION_MINUTES) {
+        logger.warn('[FlowExecutionService] duration_minutes exceeds maximum', {
+          requested: config.duration_minutes,
+          max: MAX_DURATION_MINUTES
+        });
+        throw new Error(`duration_minutes (${config.duration_minutes}) exceeds maximum of ${MAX_DURATION_MINUTES} minutes (24 hours)`);
       }
 
       // Simple in-memory delay - suitable for short waits only
