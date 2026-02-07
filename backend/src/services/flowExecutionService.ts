@@ -1,4 +1,7 @@
 import { logger } from '../utils/logger';
+import { pool } from '../config/database';
+import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 import { FlowExecutionModel, FlowActionLogModel } from '../models/FlowExecution';
 import {
   FlowWithDetails,
@@ -450,9 +453,8 @@ export class FlowExecutionService {
         throw new Error('Contact has no email address');
       }
 
-      // Import pool and uuid for email record creation
-      const { pool } = require('../config/database');
-      const { v4: uuidv4 } = require('uuid');
+      // Import pool for email record creation
+      // uuid imported at top of file
 
       // Get email template
       const templateResult = await pool.query(
@@ -571,7 +573,7 @@ export class FlowExecutionService {
    * This uses in-memory setTimeout which has limitations:
    * - Ties up the execution worker/slot for the full duration
    * - Lost on process restart or crash
-   * - Not suitable for long delays (> 1 hour)
+   * - Not suitable for very long delays beyond the configured maximum (currently 24 hours)
    * 
    * For production at scale, consider:
    * - Persisting scheduled state to database

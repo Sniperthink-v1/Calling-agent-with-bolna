@@ -90,7 +90,7 @@ const EmailTemplates: React.FC = () => {
 
   // Update template mutation
   const updateMutation = useMutation({
-    mutationFn: ({ templateId, data }: { templateId: string; data: any }) =>
+    mutationFn: ({ templateId, data }: { templateId: string; data: UpdateEmailTemplateRequest }) =>
       emailTemplateService.updateTemplate(templateId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-templates'] });

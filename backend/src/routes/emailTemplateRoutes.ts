@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
 import {
   createEmailTemplate,
   getEmailTemplate,
@@ -10,12 +9,12 @@ import {
 
 const router = Router();
 
-// All routes require authentication
-router.use(authenticateToken);
-
 /**
  * Email Template Routes
  * Base path: /api/email-templates
+ * 
+ * Note: Authentication is enforced at mount time via authenticatedRateLimit
+ * in routes/index.ts. Individual routes do not need to call authenticateToken.
  */
 
 // Create new email template
