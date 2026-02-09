@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import {
   Dialog,
@@ -43,6 +44,7 @@ import {
 import { toast } from 'sonner';
 import apiService from '@/services/apiService';
 import { API_ENDPOINTS } from '@/config/api';
+import emailTemplateService from '@/services/emailTemplateService';
 import type { CreateFlowRequest, ActionType, ConditionType, ConditionOperator } from '@/types/autoEngagement';
 
 interface FormValues {
@@ -67,6 +69,7 @@ const AutoEngagementFlowBuilderModal: React.FC<AutoEngagementFlowBuilderModalPro
   onClose,
   flowId,
 }) => {
+  const navigate = useNavigate();
   const { theme } = useTheme();
   const isEditMode = !!flowId;
 
@@ -110,6 +113,49 @@ const AutoEngagementFlowBuilderModal: React.FC<AutoEngagementFlowBuilderModalPro
   });
 
   const phoneNumbers = Array.isArray(phoneNumbersData) ? phoneNumbersData : [];
+
+  // Fetch WhatsApp templates
+  const { data: whatsappTemplatesData } = useQuery({
+    queryKey: ['whatsapp-templates'],
+    queryFn: async () => {
+      try {
+        // Get user's WhatsApp phone numbers
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!user.id) return [];
+        
+        const whatsappPhoneNumbers = phoneNumbers.filter((pn: any) => pn.platform === 'whatsapp');
+        if (whatsappPhoneNumbers.length === 0) return [];
+        
+        // Fetch templates for the first WhatsApp phone number
+        const phoneNumberId = whatsappPhoneNumbers[0].phone_number_id;
+        const response = await fetch(`${import.meta.env.VITE_WHATSAPP_SERVICE_URL || 'http://localhost:4000'}/api/v1/templates?phone_number_id=${phoneNumberId}`);
+        const data = await response.json();
+        return data.data || [];
+      } catch (error) {
+        console.error('Failed to fetch WhatsApp templates:', error);
+        return [];
+      }
+    },
+    enabled: phoneNumbers.length > 0,
+  });
+
+  const whatsappTemplates = Array.isArray(whatsappTemplatesData) ? whatsappTemplatesData : [];
+
+  // Fetch Email templates
+  const { data: emailTemplatesData } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn: async () => {
+      try {
+        const result = await emailTemplateService.listTemplates({ is_active: true });
+        return result.templates || [];
+      } catch (error) {
+        console.error('Failed to fetch email templates:', error);
+        return [];
+      }
+    },
+  });
+
+  const emailTemplates = Array.isArray(emailTemplatesData) ? emailTemplatesData : [];
 
   const [triggerConditions, setTriggerConditions] = useState<Array<{
     condition_type: ConditionType;
@@ -807,12 +853,161 @@ const AutoEngagementFlowBuilderModal: React.FC<AutoEngagementFlowBuilderModalPro
                         </div>
                       )}
 
-                      {/* Placeholder for WhatsApp and Email */}
-                      {(action.action_type === 'whatsapp_message' || action.action_type === 'email') && (
-                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                          <p className="text-sm text-blue-700 dark:text-blue-300">
-                            Configuration for {action.action_type.replace('_', ' ')} coming soon
-                          </p>
+                      {/* WhatsApp Message Config */}
+                      {action.action_type === 'whatsapp_message' && (
+                        <div className="space-y-4">
+                          <div>
+                            <Label>WhatsApp Phone Number</Label>
+                            <Select
+                              value={action.action_config.whatsapp_phone_number_id || ''}
+                              onValueChange={(value) => {
+                                const updated = [...actions];
+                                updated[index].action_config.whatsapp_phone_number_id = value;
+                                setActions(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select phone number" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {phoneNumbers
+                                  .filter((pn: any) => pn.platform === 'whatsapp')
+                                  .map((pn: any) => (
+                                    <SelectItem key={pn.phone_number_id} value={pn.phone_number_id}>
+                                      {pn.display_phone_number || pn.phone_number}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>WhatsApp Template</Label>
+                            <Select
+                              value={action.action_config.template_id || ''}
+                              onValueChange={(value) => {
+                                const updated = [...actions];
+                                updated[index].action_config.template_id = value;
+                                setActions(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select template" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {whatsappTemplates.length === 0 ? (
+                                  <SelectItem value="none" disabled>
+                                    No templates available
+                                  </SelectItem>
+                                ) : (
+                                  whatsappTemplates.map((template: any) => (
+                                    <SelectItem key={template.template_id} value={template.template_id}>
+                                      {template.name} ({template.status})
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            {whatsappTemplates.length === 0 && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 w-full"
+                                onClick={() => {
+                                  onClose();
+                                  navigate('/dashboard/templates');
+                                }}
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Create WhatsApp Template
+                              </Button>
+                            )}
+                          </div>
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                            <p className="text-xs text-blue-700 dark:text-blue-300">
+                              <Info className="inline h-3 w-3 mr-1" />
+                              Variables from the template will be auto-mapped to contact fields (name, email, phone, etc.)
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Email Config */}
+                      {action.action_type === 'email' && (
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Email Template</Label>
+                            <Select
+                              value={action.action_config.email_template_id || ''}
+                              onValueChange={(value) => {
+                                const updated = [...actions];
+                                updated[index].action_config.email_template_id = value;
+                                setActions(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select email template" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {emailTemplates.length === 0 ? (
+                                  <SelectItem value="none" disabled>
+                                    No templates available. Create one in Email Templates.
+                                  </SelectItem>
+                                ) : (
+                                  emailTemplates.map((template: any) => (
+                                    <SelectItem key={template.id} value={template.id}>
+                                      {template.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            {emailTemplates.length === 0 && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 w-full"
+                                onClick={() => {
+                                  onClose();
+                                  navigate('/dashboard/email-templates');
+                                }}
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Create Email Template
+                              </Button>
+                            )}
+                          </div>
+                          <div>
+                            <Label>From Name (optional)</Label>
+                            <Input
+                              placeholder="e.g., Sales Team"
+                              value={action.action_config.from_name || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[index].action_config.from_name = e.target.value;
+                                setActions(updated);
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label>Subject Override (optional)</Label>
+                            <Input
+                              placeholder="Leave empty to use template subject"
+                              value={action.action_config.subject_override || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[index].action_config.subject_override = e.target.value;
+                                setActions(updated);
+                              }}
+                            />
+                          </div>
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                            <p className="text-xs text-blue-700 dark:text-blue-300">
+                              <Info className="inline h-3 w-3 mr-1" />
+                              Template variables like {'{{'} name {'}}'} and {'{{'} email {'}}'} will be replaced with contact data.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>

@@ -347,6 +347,15 @@ export const API_ENDPOINTS = {
     ANALYTICS: `${API_URL}/auto-engagement/analytics`,
   },
 
+  // Email Templates (for auto-engagement flows)
+  EMAIL_TEMPLATES: {
+    LIST: `${API_URL}/email-templates`,
+    CREATE: `${API_URL}/email-templates`,
+    GET: (id: string) => `${API_URL}/email-templates/${id}`,
+    UPDATE: (id: string) => `${API_URL}/email-templates/${id}`,
+    DELETE: (id: string) => `${API_URL}/email-templates/${id}`,
+  },
+
   // Webhooks (for reference, not typically called from frontend)
   WEBHOOKS: {
     ELEVENLABS_POST_CALL: `${API_URL}/webhooks/elevenlabs/post-call`,
