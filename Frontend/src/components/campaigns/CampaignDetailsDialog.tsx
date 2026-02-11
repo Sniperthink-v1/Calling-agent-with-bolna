@@ -102,6 +102,8 @@ interface GroupedCampaignCallLog {
   retryCount: number;
 }
 
+type CallOutcomeFilter = 'all' | 'successful' | 'failed';
+
 const toNumber = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -134,6 +136,25 @@ const getStatusBadgeClass = (status: string): string => {
     return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700';
   }
   return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600';
+};
+
+const isSuccessfulCallStatus = (status: string): boolean => {
+  const normalizedStatus = status.trim().toLowerCase();
+  return ['completed', 'contacted', 'successful', 'answered', 'connected'].includes(normalizedStatus);
+};
+
+const isFailedCallStatus = (status: string): boolean => {
+  const normalizedStatus = status.trim().toLowerCase();
+  return [
+    'busy',
+    'no-answer',
+    'failed',
+    'call-disconnected',
+    'cancelled',
+    'voicemail',
+    'unreachable',
+    'invalid-number',
+  ].includes(normalizedStatus);
 };
 
 const normalizeCampaignCall = (call: RawCampaignCall): CampaignCallLog => {
@@ -175,6 +196,8 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
   const navigate = useNavigate();
   const [analyticsView, setAnalyticsView] = React.useState<'summary' | 'detailed'>('summary');
   const [expandedLeadRows, setExpandedLeadRows] = React.useState<Record<string, boolean>>({});
+  const [callOutcomeFilter, setCallOutcomeFilter] = React.useState<CallOutcomeFilter>('all');
+  const logsSectionRef = React.useRef<HTMLDivElement | null>(null);
 
   // Fetch detailed analytics
   const { data: analyticsResponse, isLoading: isAnalyticsLoading } = useQuery<CampaignAnalyticsResponse>({
@@ -246,6 +269,7 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
   React.useEffect(() => {
     setExpandedLeadRows({});
     setAnalyticsView('summary');
+    setCallOutcomeFilter('all');
   }, [campaign.id]);
 
   // Navigate to call logs with campaign filter
@@ -374,6 +398,39 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
       );
   }, [campaignCalls]);
 
+  const filteredGroupedCallLogs = React.useMemo<GroupedCampaignCallLog[]>(() => {
+    if (callOutcomeFilter === 'all') return groupedCallLogs;
+
+    return groupedCallLogs.filter((group) => {
+      const status = group.latestAttempt.status;
+      if (callOutcomeFilter === 'successful') {
+        return isSuccessfulCallStatus(status);
+      }
+      return isFailedCallStatus(status);
+    });
+  }, [groupedCallLogs, callOutcomeFilter]);
+
+  const successfulContactCount = React.useMemo(
+    () => groupedCallLogs.filter((group) => isSuccessfulCallStatus(group.latestAttempt.status)).length,
+    [groupedCallLogs]
+  );
+
+  const failedContactCount = React.useMemo(
+    () => groupedCallLogs.filter((group) => isFailedCallStatus(group.latestAttempt.status)).length,
+    [groupedCallLogs]
+  );
+
+  const handleOutcomeCardClick = (filter: Exclude<CallOutcomeFilter, 'all'>) => {
+    setExpandedLeadRows({});
+    setCallOutcomeFilter((previousFilter) =>
+      previousFilter === filter ? 'all' : filter
+    );
+
+    window.requestAnimationFrame(() => {
+      logsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   const toggleLeadRow = (leadKey: string) => {
     setExpandedLeadRows((prevState) => ({
       ...prevState,
@@ -427,21 +484,35 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
               <p className="text-2xl font-bold">{analytics?.handled_calls ?? analytics?.completed_calls ?? campaign.completed_calls}</p>
             </div>
 
-            <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-green-50'}`}>
+            <button
+              type="button"
+              onClick={() => handleOutcomeCardClick('successful')}
+              className={`p-4 rounded-lg text-left transition-colors cursor-pointer ${
+                theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-green-50 hover:bg-green-100'
+              } ${callOutcomeFilter === 'successful' ? 'ring-2 ring-green-500' : ''}`}
+            >
               <div className="flex items-center space-x-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <span className="text-sm text-gray-500">Successful</span>
               </div>
               <p className="text-2xl font-bold text-green-600">{analytics?.successful_calls ?? campaign.successful_calls}</p>
-            </div>
+              <p className="text-xs text-gray-500 mt-1">Click to view successful contacts</p>
+            </button>
 
-            <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-red-50'}`}>
+            <button
+              type="button"
+              onClick={() => handleOutcomeCardClick('failed')}
+              className={`p-4 rounded-lg text-left transition-colors cursor-pointer ${
+                theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-red-50 hover:bg-red-100'
+              } ${callOutcomeFilter === 'failed' ? 'ring-2 ring-red-500' : ''}`}
+            >
               <div className="flex items-center space-x-2 mb-2">
                 <XCircle className="w-4 h-4 text-red-500" />
                 <span className="text-sm text-gray-500">Failed</span>
               </div>
               <p className="text-2xl font-bold text-red-600">{analytics?.failed_calls ?? campaign.failed_calls}</p>
-            </div>
+              <p className="text-xs text-gray-500 mt-1">Click to view failed contacts</p>
+            </button>
 
             <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-blue-50'}`}>
               <div className="flex items-center space-x-2 mb-2">
@@ -647,8 +718,38 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
           ) : null}
 
           {/* Lead-Centric Logs */}
-          <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
-            <h3 className="font-semibold mb-3">Detailed Call Logs (Grouped by Lead)</h3>
+          <div
+            ref={logsSectionRef}
+            className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h3 className="font-semibold">Detailed Call Logs (Grouped by Lead)</h3>
+              <div className="flex items-center gap-2">
+                {callOutcomeFilter !== 'all' && (
+                  <Badge variant="outline" className="capitalize">
+                    Filter: {callOutcomeFilter}
+                  </Badge>
+                )}
+                <Badge variant="secondary">
+                  {callOutcomeFilter === 'successful'
+                    ? `${successfulContactCount} successful contacts`
+                    : callOutcomeFilter === 'failed'
+                      ? `${failedContactCount} failed contacts`
+                      : `${groupedCallLogs.length} total contacts`}
+                </Badge>
+                {callOutcomeFilter !== 'all' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2"
+                    onClick={() => setCallOutcomeFilter('all')}
+                  >
+                    Clear filter
+                  </Button>
+                )}
+              </div>
+            </div>
             {isCallsLoading ? (
               <div className="text-center py-6">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 dark:border-white mx-auto"></div>
@@ -658,8 +759,12 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
               <p className="text-sm text-red-600">
                 {callsError instanceof Error ? callsError.message : 'Failed to fetch campaign call logs'}
               </p>
-            ) : groupedCallLogs.length === 0 ? (
-              <p className="text-sm text-gray-500">No call logs found for this campaign.</p>
+            ) : filteredGroupedCallLogs.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                {callOutcomeFilter === 'all'
+                  ? 'No call logs found for this campaign.'
+                  : `No ${callOutcomeFilter} contacts found for this campaign.`}
+              </p>
             ) : (
               <div className="space-y-3">
                 <div className="hidden md:grid md:grid-cols-12 text-xs font-medium text-gray-500 px-2">
@@ -669,7 +774,7 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
                   <div className="md:col-span-4">Last Attempt</div>
                 </div>
 
-                {groupedCallLogs.map((group) => {
+                {filteredGroupedCallLogs.map((group) => {
                   const isExpanded = Boolean(expandedLeadRows[group.key]);
                   return (
                     <div
