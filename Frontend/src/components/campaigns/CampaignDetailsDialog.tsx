@@ -255,8 +255,8 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
     // Open call logs in grouped-by-lead mode for campaign review
     sessionStorage.setItem('callLogsGroupByLead', 'true');
     onClose();
-    // Navigate to dashboard with agents tab and calling-agent-logs subtab
-    navigate('/dashboard?tab=agents&subtab=calling-agent-logs');
+    // Navigate to dashboard with unified logs tab on call channel
+    navigate('/dashboard?tab=logs&subtab=call');
   };
 
   const calculateProgress = () => {

@@ -92,8 +92,8 @@ function App() {
                         element={
                           <ProtectedRoute>
                             <Dashboard
-                              initialTab="chat"
-                              initialSubTab="data"
+                              initialTab="logs"
+                              initialSubTab="chat"
                               customContent={<LeadProfileTab />}
                             />
                           </ProtectedRoute>

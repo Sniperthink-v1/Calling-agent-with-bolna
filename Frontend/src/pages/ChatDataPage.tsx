@@ -6,8 +6,8 @@ import Dashboard from "./Dashboard";
  * Keeps all design, flow, and structure exactly as elsewhere in the dashboard.
  */
 const ChatDataPage = () => {
-  // Pass correct tab state so Dashboard shows the Data Tab for Chat Agent
-  return <Dashboard initialTab="chat" initialSubTab="data" />;
+  // Keep legacy route but open the unified Logs tab on Chat view
+  return <Dashboard initialTab="logs" initialSubTab="chat" />;
 };
 
 export default ChatDataPage;

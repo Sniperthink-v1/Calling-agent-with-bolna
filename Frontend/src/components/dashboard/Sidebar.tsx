@@ -1,5 +1,4 @@
 import {
-  MessageSquare,
   Phone,
   Settings as SettingsIcon,
   BarChart3,
@@ -85,10 +84,6 @@ const Sidebar = ({
   // No-op logout handler to prevent error
   const handleLogout = () => { };
 
-  // Get all agents by type, filtering out agents with null/undefined IDs
-  const chatAgents = agents.filter((a) => a.type === "ChatAgent" && a.id != null);
-  const callAgents = agents.filter((a) => a.type === "CallAgent" && a.id != null);
-
   const menuItems: MenuItem[] = [
     {
       id: "overview",
@@ -101,67 +96,31 @@ const Sidebar = ({
       icon: Users2,
       subTabs: [
         {
-          id: "agent-manager",
-          label: "Agent Manager",
-          icon: Users2,
+          id: "ai-agents",
+          label: "AI Agents",
+          icon: Brain,
         },
         {
-          id: "calling-agent",
-          label: "Calling Agent",
-          icon: Phone,
-          subTabs: [
-            {
-              id: "calling-agent-logs",
-              label: "Call Logs",
-              icon: Phone,
-            },
-            {
-              id: "calling-agent-analytics",
-              label: "Analytics",
-              icon: BarChart3,
-            },
-          ],
-        },
-        {
-          id: "chat-agent",
-          label: "Chat Agent",
-          icon: MessageSquare,
-          subTabs: [
-            {
-              id: "chat-agent-logs",
-              label: "Chat Logs",
-              icon: MessageSquare,
-            },
-            {
-              id: "chat-agent-analytics",
-              label: "Analytics",
-              icon: BarChart3,
-            },
-          ],
-        },
-        {
-          id: "salesperson",
-          label: "Salesperson",
+          id: "human-agents",
+          label: "Human Agents",
           icon: UserCheck,
-          subTabs: [
-            {
-              id: "salesperson-analytics",
-              label: "Analytics",
-              icon: BarChart3,
-            },
-            {
-              id: "salesperson-activity-logs",
-              label: "Activity Logs",
-              icon: FileText,
-            },
-          ],
         },
       ],
     },
     {
+      id: "logs",
+      label: "Logs",
+      icon: FileText,
+    },
+    {
+      id: "analytics",
+      label: "Analytics",
+      icon: BarChart3,
+    },
+    {
       id: "imported-data",
       label: "Contacts",
-      icon: FileText,
+      icon: Database,
     },
     {
       id: "dialer",
@@ -266,7 +225,11 @@ const Sidebar = ({
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
     if (tabId === "agents") {
-      setActiveSubTab("agent-manager");
+      setActiveSubTab("ai-agents");
+    } else if (tabId === "logs") {
+      setActiveSubTab("call");
+    } else if (tabId === "analytics") {
+      setActiveSubTab("call");
     } else if (tabId === "campaigns") {
       setActiveSubTab("campaigns-list");
     } else if (tabId === "dialer") {
@@ -275,22 +238,6 @@ const Sidebar = ({
       setActiveSubTab("auto-engagement-flows");
     } else if (tabId === "templates") {
       setActiveSubTab("whatsapp-templates");
-    }
-  };
-
-  // Updated handleAgentSubTabClick to default to logs tab for agent selection
-  const handleAgentSubTabClick = (subTabId: string) => {
-    // For calling agent, default to logs sub-tab
-    if (subTabId === "calling-agent") {
-      setActiveSubTab("calling-agent-logs");
-    } else if (subTabId === "chat-agent") {
-      // For chat agent, default to logs sub-tab
-      setActiveSubTab("chat-agent-logs");
-    } else if (subTabId === "salesperson") {
-      // For salesperson, default to analytics sub-tab
-      setActiveSubTab("salesperson-analytics");
-    } else {
-      setActiveSubTab(subTabId);
     }
   };
 
@@ -407,77 +354,11 @@ const Sidebar = ({
                     <div className="ml-6 mt-2 space-y-1">
                       {item.subTabs?.map((subTab) => {
                         const SubIconComponent = subTab.icon;
-                        const isSubActive =
-                          activeSubTab === subTab.id ||
-                          (subTab.subTabs &&
-                            subTab.subTabs.some(
-                              (st) => activeSubTab === st.id
-                            ));
-                        
-
-                        // Nested sub-tabs (chat/call agent)
-                        if (subTab.subTabs) {
-                          return (
-                            <div key={subTab.id}>
-                              <button
-                                onClick={() =>
-                                  handleAgentSubTabClick(subTab.id)
-                                }
-                                className={`w-full flex items-center px-4 py-2 rounded-lg text-left text-sm transition-colors ${isSubActive
-                                  ? theme === "dark"
-                                    ? "bg-slate-600 text-white"
-                                    : "bg-gray-200 text-gray-900"
-                                  : theme === "dark"
-                                    ? "text-slate-400 hover:bg-slate-700 hover:text-white"
-                                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                                  }`}
-                              >
-                                <SubIconComponent className="w-4 h-4 mr-3" />
-                                {subTab.label}
-                              </button>
-                              {isSubActive && (
-                                <div className="ml-4 mt-1 space-y-0.5">
-                                  {subTab.subTabs.map((subSubTab) => {
-                                    const SSIcon = subSubTab.icon;
-                                    const isSubSubActive =
-                                      activeSubTab === subSubTab.id;
-                                    return (
-                                      <button
-                                        key={subSubTab.id}
-                                        onClick={() =>
-                                          setActiveSubTab(subSubTab.id)
-                                        }
-                                        className={`w-full flex items-center px-4 py-1.5 rounded-lg text-left text-xs transition-colors ${isSubSubActive
-                                          ? theme === "dark"
-                                            ? "bg-slate-500 text-white"
-                                            : "bg-gray-300 text-gray-900 font-bold"
-                                          : theme === "dark"
-                                            ? "text-slate-400 hover:bg-slate-700 hover:text-white"
-                                            : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                                          }`}
-                                      >
-                                        <SSIcon className="w-3 h-3 mr-2" />
-                                        {subSubTab.label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        }
+                        const isSubActive = activeSubTab === subTab.id;
                         return (
                           <button
                             key={subTab.id}
-                            onClick={() => {
-                              // For campaign sub-tabs, just set the sub-tab directly
-                              if (activeTab === "campaigns" || activeTab === "dialer") {
-                                setActiveSubTab(subTab.id);
-                              } else {
-                                // For agent sub-tabs, use the special handler
-                                handleAgentSubTabClick(subTab.id);
-                              }
-                            }}
+                            onClick={() => setActiveSubTab(subTab.id)}
                             className={`w-full flex items-center px-4 py-2 rounded-lg text-left text-sm transition-colors ${isSubActive
                               ? theme === "dark"
                                 ? "bg-slate-600 text-white"

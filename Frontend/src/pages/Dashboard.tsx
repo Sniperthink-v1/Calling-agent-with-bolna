@@ -1,14 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
-import ChatAgent from "@/components/dashboard/ChatAgent";
 import Integrations from "@/components/dashboard/Integrations";
 import Profile from "@/components/dashboard/Profile";
 import TopNavigation from "@/components/dashboard/TopNavigation";
 import LeadIntelligence from "@/components/dashboard/LeadIntelligence";
 import ImportedData from "@/components/dashboard/ImportedData";
 import Customers from "@/components/dashboard/Customers";
-import CallingAgent from "@/components/dashboard/CallingAgent";
 import SalespersonAgent from "@/components/dashboard/SalespersonAgent";
+import UnifiedAgentWorkspace from "@/components/dashboard/UnifiedAgentWorkspace";
 import Campaigns from "@/pages/Campaigns";
 import CampaignSettings from "@/pages/CampaignSettings";
 import Templates from "@/pages/Templates";
@@ -19,7 +18,6 @@ import AutoEngagementAnalytics from "@/pages/AutoEngagementAnalytics";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAgents } from "@/contexts/AgentContext";
 import { NavigationProvider, useNavigation } from "@/contexts/NavigationContext";
-import AgentSelector from "@/components/ui/AgentSelector";
 import { Toaster } from "sonner";
 import LeadProfileTab from "@/components/chat/LeadProfileTab";
 import Overview from "@/pages/Overview";
@@ -137,43 +135,72 @@ const DashboardContent = ({
       setProfileAgentSubTab(null);
     }
     if (tab === "agents") {
-      setActiveSubTab("agent-manager");
+      setActiveSubTab("ai-agents");
+    } else if (tab === "logs" || tab === "analytics") {
+      setActiveSubTab("call");
     }
   };
 
-  // Helper function to get calling agent sub-tab
-  const getCallingAgentSubTab = () => {
-    if (!activeSubTab?.startsWith("calling-agent")) return null;
-    
-    const match = activeSubTab.match(/^calling-agent-(.+)$/);
-    return match ? match[1] : null;
+  const normalizeChannel = (subTab: string): "call" | "chat" | "human" => {
+    if (subTab === "chat") return "chat";
+    if (subTab === "human") return "human";
+    return "call";
   };
 
-  // Helper function to get chat agent sub-tab
-  const getChatAgentSubTab = () => {
-    if (!activeSubTab?.startsWith("chat-agent")) return null;
-    
-    const match = activeSubTab.match(/^chat-agent-(.+)$/);
-    return match ? match[1] : null;
-  };
+  useEffect(() => {
+    const legacySubTabMap: Record<string, { tab: string; subTab: string }> = {
+      "agent-manager": { tab: "agents", subTab: "ai-agents" },
+      "calling-agent": { tab: "logs", subTab: "call" },
+      "calling-agent-logs": { tab: "logs", subTab: "call" },
+      "calling-agent-analytics": { tab: "analytics", subTab: "call" },
+      "chat-agent": { tab: "logs", subTab: "chat" },
+      "chat-agent-logs": { tab: "logs", subTab: "chat" },
+      "chat-agent-analytics": { tab: "analytics", subTab: "chat" },
+      salesperson: { tab: "analytics", subTab: "human" },
+      "salesperson-analytics": { tab: "analytics", subTab: "human" },
+      "salesperson-activity-logs": { tab: "logs", subTab: "human" },
+    };
 
-  // Helper function to get salesperson sub-tab
-  const getSalespersonSubTab = () => {
-    if (!activeSubTab?.startsWith("salesperson")) return null;
-    
-    const match = activeSubTab.match(/^salesperson-(.+)$/);
-    return match ? match[1] : null;
-  };
+    const mappedFromLegacySubTab = legacySubTabMap[activeSubTab];
+    if (mappedFromLegacySubTab) {
+      if (
+        activeTab !== mappedFromLegacySubTab.tab ||
+        activeSubTab !== mappedFromLegacySubTab.subTab
+      ) {
+        setActiveTab(mappedFromLegacySubTab.tab);
+        setActiveSubTab(mappedFromLegacySubTab.subTab);
+      }
+      return;
+    }
+
+    if (activeTab === "chat") {
+      setActiveTab("logs");
+      setActiveSubTab("chat");
+      return;
+    }
+
+    if (activeTab === "agents") {
+      if (!activeSubTab) {
+        setActiveSubTab("ai-agents");
+        return;
+      }
+
+      if (activeSubTab !== "ai-agents" && activeSubTab !== "human-agents") {
+        setActiveSubTab("ai-agents");
+      }
+      return;
+    }
+
+    if (activeTab === "logs" || activeTab === "analytics") {
+      const isValidChannel =
+        activeSubTab === "call" || activeSubTab === "chat" || activeSubTab === "human";
+      if (!isValidChannel) {
+        setActiveSubTab("call");
+      }
+    }
+  }, [activeTab, activeSubTab, setActiveTab, setActiveSubTab]);
 
   const isAgentsTab = activeTab === "agents";
-  const isAgentManager = isAgentsTab && activeSubTab === "agent-manager";
-  const isCallingAgent = isAgentsTab && activeSubTab?.startsWith("calling-agent");
-  const isChatAgent = isAgentsTab && activeSubTab?.startsWith("chat-agent");
-  const isSalesperson = isAgentsTab && activeSubTab?.startsWith("salesperson");
-
-  const callingAgentSubTab = getCallingAgentSubTab();
-  const chatAgentSubTab = getChatAgentSubTab();
-  const salespersonSubTab = getSalespersonSubTab();
 
   const renderContent = () => {
     if (selectedLead) {
@@ -235,51 +262,30 @@ const DashboardContent = ({
       );
     }
     if (isAgentsTab) {
-      if (isAgentManager && !isCallingAgent && !isChatAgent && !isSalesperson) {
-        return <Agents />;
-      }
-      // Calling Agent with unified logs and analytics
-      if (isCallingAgent && callingAgentSubTab) {
-        return (
-          <CallingAgent
-            activeSubTab={callingAgentSubTab}
-            activeTab={activeTab}
-            setActiveSubTab={(subtab) =>
-              setActiveSubTab(`calling-agent-${subtab}`)
-            }
-            onOpenProfile={(lead: Lead) =>
-              handleOpenProfile(lead, "call", "data")
-            }
-          />
-        );
-      }
-      // Chat Agent with unified logs and analytics
-      if (isChatAgent && chatAgentSubTab) {
-        return (
-          <ChatAgent
-            activeSubTab={chatAgentSubTab}
-            activeTab={activeTab}
-            setActiveSubTab={(subtab) =>
-              setActiveSubTab(`chat-agent-${subtab}`)
-            }
-            onOpenProfile={(lead: Lead) =>
-              handleOpenProfile(lead, "chat", "data")
-            }
-          />
-        );
-      }
-      // Salesperson Agent with analytics and activity logs
-      if (isSalesperson && salespersonSubTab) {
+      if (activeSubTab === "human-agents") {
         return (
           <SalespersonAgent
-            activeSubTab={salespersonSubTab}
+            activeSubTab="analytics"
             activeTab={activeTab}
-            setActiveSubTab={(subtab) =>
-              setActiveSubTab(`salesperson-${subtab}`)
-            }
+            setActiveSubTab={() => {}}
           />
         );
       }
+
+      // Default agents view is AI agents manager
+      return <Agents />;
+    }
+    if (activeTab === "logs" || activeTab === "analytics") {
+      return (
+        <UnifiedAgentWorkspace
+          mode={activeTab}
+          channel={normalizeChannel(activeSubTab)}
+          onChannelChange={(channel) => setActiveSubTab(channel)}
+          onOpenProfile={(lead: Lead) =>
+            handleOpenProfile(lead, normalizeChannel(activeSubTab), "logs")
+          }
+        />
+      );
     }
     if (activeTab === "integrations") {
       return <Integrations />;
