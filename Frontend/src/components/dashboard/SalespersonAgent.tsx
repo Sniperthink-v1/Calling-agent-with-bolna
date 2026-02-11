@@ -3,6 +3,10 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,9 +25,15 @@ import {
   Edit,
   FileText,
   Award,
-  TrendingUp
+  TrendingUp,
+  UserPlus,
+  Mail,
+  Loader2,
 } from "lucide-react";
 import apiService, { TeamMemberKPIs, TeamMemberActivityLog } from "@/services/apiService";
+import type { TeamMemberRole } from "@/types/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { format } from "date-fns";
 
 interface SalespersonAgentProps {
@@ -32,47 +42,66 @@ interface SalespersonAgentProps {
   setActiveSubTab: (subTab: string) => void;
 }
 
+const ROLE_DESCRIPTIONS: Record<TeamMemberRole, { label: string; description: string }> = {
+  manager: {
+    label: 'Manager',
+    description: 'Full access to all leads and campaigns. Can manage team members.',
+  },
+  agent: {
+    label: 'Agent',
+    description: 'Can only view and edit leads assigned to them.',
+  },
+  viewer: {
+    label: 'Viewer',
+    description: 'Read-only access. Cannot edit any data.',
+  },
+};
+
 const SalespersonAgent = ({
   activeTab,
   activeSubTab,
   setActiveSubTab,
 }: SalespersonAgentProps) => {
   const { theme } = useTheme();
+  const { canManageTeam } = useAuth();
   const [analyticsData, setAnalyticsData] = useState<TeamMemberKPIs[]>([]);
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>("");
   const [activityLog, setActivityLog] = useState<TeamMemberActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState<TeamMemberRole>("agent");
+
+  const extractAnalytics = (response: any): TeamMemberKPIs[] => {
+    if (Array.isArray(response)) return response;
+    if (response?.data?.analytics && Array.isArray(response.data.analytics)) {
+      return response.data.analytics;
+    }
+    if (response?.analytics && Array.isArray(response.analytics)) {
+      return response.analytics;
+    }
+    return [];
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getTeamMemberAnalytics();
+      const analytics = extractAnalytics(response);
+      setAnalyticsData(analytics);
+    } catch (error) {
+      console.error("Error fetching salesperson analytics:", error);
+      setAnalyticsData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch all salesperson analytics
   useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        setLoading(true);
-        const response = await apiService.getTeamMemberAnalytics();
-        console.log("Analytics response:", response);
-        
-        // Handle both direct response and wrapped response
-        if (response && typeof response === 'object') {
-          if ('analytics' in response) {
-            setAnalyticsData(response.analytics || []);
-          } else if (Array.isArray(response)) {
-            setAnalyticsData(response);
-          } else {
-            console.error("Unexpected response format:", response);
-            setAnalyticsData([]);
-          }
-        } else {
-          setAnalyticsData([]);
-        }
-      } catch (error) {
-        console.error("Error fetching salesperson analytics:", error);
-        setAnalyticsData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchAnalytics();
   }, []);
 
@@ -87,7 +116,7 @@ const SalespersonAgent = ({
           limit: 50,
           offset: 0,
         });
-        setActivityLog(response.activities || []);
+        setActivityLog(response?.data?.activities || response?.activities || []);
       } catch (error) {
         console.error("Error fetching activity log:", error);
       } finally {
@@ -100,6 +129,41 @@ const SalespersonAgent = ({
 
   const getSelectedSalesperson = () => {
     return analyticsData.find((sp) => sp.teamMemberId === selectedSalesperson);
+  };
+
+  const handleInviteHumanSalesperson = async () => {
+    if (!newMemberName.trim() || !newMemberEmail.trim()) {
+      toast.error("Please enter both name and email");
+      return;
+    }
+
+    setInviting(true);
+    try {
+      const response = await apiService.inviteTeamMember({
+        name: newMemberName.trim(),
+        email: newMemberEmail.trim().toLowerCase(),
+        role: newMemberRole,
+      });
+
+      const teamMember = response?.data?.team_member || (response as any)?.team_member;
+      const isSuccess = response?.success ?? Boolean(teamMember);
+
+      if (!isSuccess || !teamMember) {
+        toast.error(response?.error?.message || "Failed to send invitation");
+        return;
+      }
+
+      toast.success(`${teamMember.name} invited as ${ROLE_DESCRIPTIONS[newMemberRole].label}`);
+      setInviteDialogOpen(false);
+      setNewMemberName("");
+      setNewMemberEmail("");
+      setNewMemberRole("agent");
+      await fetchAnalytics();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to send invitation");
+    } finally {
+      setInviting(false);
+    }
   };
 
   const renderAnalytics = () => {
@@ -481,6 +545,91 @@ const SalespersonAgent = ({
             </Badge>
           </div>
         )}
+
+        <div className="ml-auto">
+          {canManageTeam() ? (
+            <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="gap-2">
+                  <UserPlus className="h-4 w-4" />
+                  Add Human Salesperson
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Human Salesperson</DialogTitle>
+                  <DialogDescription>
+                    Invite a team member using the same flow as Settings.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="salesperson-name">Name</Label>
+                    <Input
+                      id="salesperson-name"
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="salesperson-email">Email</Label>
+                    <Input
+                      id="salesperson-email"
+                      type="email"
+                      value={newMemberEmail}
+                      onChange={(e) => setNewMemberEmail(e.target.value)}
+                      placeholder="john@company.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="salesperson-role">Role</Label>
+                    <Select
+                      value={newMemberRole}
+                      onValueChange={(value: TeamMemberRole) => setNewMemberRole(value)}
+                    >
+                      <SelectTrigger id="salesperson-role">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(ROLE_DESCRIPTIONS) as TeamMemberRole[]).map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {ROLE_DESCRIPTIONS[role].label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {ROLE_DESCRIPTIONS[newMemberRole].description}
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleInviteHumanSalesperson} disabled={inviting}>
+                    {inviting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Send Invitation
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Only account owners can add salespersons.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Content */}

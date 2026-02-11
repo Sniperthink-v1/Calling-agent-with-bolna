@@ -90,12 +90,6 @@ const PLATFORM_CONFIG: Record<string, {
 
 // No mock data - use real agents from API
 
-const agentStatusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "draft", label: "Draft" },
-  { value: "active", label: "Active" },
-];
-
 const agentTypeOptions = [
   { value: "all", label: "All Types" },
   { value: "CallAgent", label: "Call Agents" },
@@ -132,7 +126,6 @@ export default function AgentManager() {
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [deleteAgentState, setDeleteAgentState] = useState<Agent | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
   const [agentType, setAgentType] = useState("all");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -176,7 +169,6 @@ export default function AgentManager() {
 
   const handleClearFilters = () => {
     setSearch("");
-    setStatus("all");
     setAgentType("all");
   };
 
@@ -269,9 +261,8 @@ export default function AgentManager() {
     const matchesSearch =
       agent.name?.toLowerCase().includes(searchText) ||
       agent.description?.toLowerCase().includes(searchText);
-    const matchesStatus = status === "all" || agent.status === status;
     const matchesType = agentType === "all" || getAgentType(agent) === agentType;
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesType;
   });
 
   // Count agents by type
@@ -336,26 +327,6 @@ export default function AgentManager() {
               className="w-full mt-1 px-4 py-2 border border-border rounded bg-background text-sm"
             >
               {agentTypeOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full md:w-1/4 mt-2 md:mt-0">
-            <label
-              className="text-xs font-semibold text-muted-foreground"
-              htmlFor="agent-status"
-            >
-              Status
-            </label>
-            <select
-              id="agent-status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full mt-1 px-4 py-2 border border-border rounded bg-background text-sm"
-            >
-              {agentStatusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
