@@ -17,6 +17,15 @@ const UnifiedCallLogs = ({ activeTab, activeSubTab, onOpenProfile, initialCampai
   const { agents } = useAgents();
   // Filter to get only call agents
   const callAgents = agents.filter(agent => agent.type === "CallAgent");
+  const [groupByLead] = useState<boolean>(() => {
+    const stored = sessionStorage.getItem('callLogsGroupByLead');
+    if (stored === 'true') {
+      sessionStorage.removeItem('callLogsGroupByLead');
+      return true;
+    }
+    // Default grouped mode for direct Calling Agent Logs access
+    return true;
+  });
   
   // Multi-select for call logs (keeping existing functionality)
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
@@ -122,6 +131,7 @@ const UnifiedCallLogs = ({ activeTab, activeSubTab, onOpenProfile, initialCampai
             return mapped;
           })()}
           selectedCampaign={selectedCampaign}
+          groupByLead={groupByLead}
           onOpenProfile={onOpenProfile}
           useLazyLoading={true}
           initialPageSize={30}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Play,
   FileText,
@@ -13,6 +13,8 @@ import {
   Loader2,
   Check,
   PhoneCall,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { CallSourceIndicator, getCallSourceFromData } from "@/components/call/CallSourceIndicator";
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,15 @@ interface ColumnFilters {
   campaigns: string[];
   status: string[];
   leadType: string[];
+}
+
+interface GroupedCallLog {
+  key: string;
+  leadName: string;
+  phoneNumber: string;
+  latestCall: Call;
+  calls: Call[];
+  retryCount: number;
 }
 
 // Excel-like Column Filter Component for Call Logs
@@ -142,6 +153,7 @@ interface CallLogsProps {
   initialPageSize?: number;
   selectedAgents?: string[];
   selectedCampaign?: string | null;
+  groupByLead?: boolean;
   onOpenProfile?: (lead: any) => void;
   // Filter control props
   agents?: Array<{ id: string; name: string }>;
@@ -157,6 +169,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
   initialPageSize = 10,
   selectedAgents,
   selectedCampaign = null,
+  groupByLead = false,
   onOpenProfile,
   agents = [],
   campaigns = [],
@@ -192,6 +205,7 @@ const CallLogs: React.FC<CallLogsProps> = ({
   const [sortBy, setSortBy] = useState<'createdAt' | 'durationSeconds' | 'contactName'>('createdAt');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [selectedCallSource, setSelectedCallSource] = useState<string>("");
+  const [expandedLeadGroups, setExpandedLeadGroups] = useState<Record<string, boolean>>({});
   
   // Column filters state (Excel-like multi-select)
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
@@ -299,6 +313,10 @@ const CallLogs: React.FC<CallLogsProps> = ({
     // Don't immediately clear allLoadedCalls - let the data effect handle it
   }, [selectedCallSource, columnFilters, startDate, endDate, sortBy, sortOrder, selectedAgents]);
 
+  useEffect(() => {
+    setExpandedLeadGroups({});
+  }, [groupByLead, debouncedSearchTerm, columnFilters, startDate, endDate, selectedCampaign]);
+
   // Sync columnFilters with parent props
   useEffect(() => {
     if (selectedAgents && selectedAgents.length > 0 && columnFilters.agents.length === 0) {
@@ -353,6 +371,64 @@ const CallLogs: React.FC<CallLogsProps> = ({
   // All filtering is now done server-side
   const filteredCalls = displayCalls;
 
+  const groupedCalls = useMemo<GroupedCallLog[]>(() => {
+    if (!groupByLead || filteredCalls.length === 0) {
+      return [];
+    }
+
+    const groups = new Map<string, GroupedCallLog>();
+    const toTimestamp = (value?: string) => {
+      if (!value) return 0;
+      const parsed = new Date(value).getTime();
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    filteredCalls.forEach((call) => {
+      const normalizedPhone = (call.phoneNumber || '').replace(/\D/g, '');
+      const normalizedName = (call.contactName || '').trim().toLowerCase();
+      const groupKey = call.contactId || (normalizedPhone ? `phone:${normalizedPhone}` : `name:${normalizedName || call.id}`);
+      const current = groups.get(groupKey);
+
+      if (current) {
+        current.calls.push(call);
+        if ((!current.leadName || current.leadName === 'Unknown Contact') && call.contactName) {
+          current.leadName = call.contactName;
+        }
+        if ((!current.phoneNumber || current.phoneNumber === 'Unknown Number') && call.phoneNumber) {
+          current.phoneNumber = call.phoneNumber;
+        }
+      } else {
+        groups.set(groupKey, {
+          key: groupKey,
+          leadName: call.contactName || 'Unknown Contact',
+          phoneNumber: call.phoneNumber || 'Unknown Number',
+          latestCall: call,
+          calls: [call],
+          retryCount: 0,
+        });
+      }
+    });
+
+    return Array.from(groups.values())
+      .map((group) => {
+        const orderedCalls = [...group.calls].sort(
+          (first, second) => toTimestamp(first.createdAt) - toTimestamp(second.createdAt)
+        );
+        const latestCall = orderedCalls[orderedCalls.length - 1] || group.latestCall;
+
+        return {
+          ...group,
+          latestCall,
+          calls: orderedCalls,
+          retryCount: Math.max(0, orderedCalls.length - 1),
+        };
+      })
+      .sort(
+        (first, second) =>
+          toTimestamp(second.latestCall.createdAt) - toTimestamp(first.latestCall.createdAt)
+      );
+  }, [filteredCalls, groupByLead]);
+
   // Get unique phone numbers from selected calls
   const getSelectedPhoneNumbers = (): string[] => {
     const selectedCalls = filteredCalls.filter(call => selectedCallIds.has(call.id));
@@ -382,7 +458,47 @@ const CallLogs: React.FC<CallLogsProps> = ({
       });
     }
   };
-  
+
+  const toggleLeadGroupExpansion = (groupKey: string) => {
+    setExpandedLeadGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
+
+  const isLeadGroupSelected = (group: GroupedCallLog) => {
+    if (group.calls.length === 0) return false;
+    return group.calls.every(call => selectedCallIds.has(call.id));
+  };
+
+  const handleLeadGroupSelect = (group: GroupedCallLog) => {
+    const shouldSelect = !isLeadGroupSelected(group);
+    setSelectedCallIds(prev => {
+      const newSet = new Set(prev);
+      group.calls.forEach((call) => {
+        if (shouldSelect) {
+          newSet.add(call.id);
+        } else {
+          newSet.delete(call.id);
+        }
+      });
+      return newSet;
+    });
+  };
+
+  const formatCallDuration = (durationSeconds?: number) => {
+    if (!durationSeconds || isNaN(durationSeconds)) return '0:00';
+    const mins = Math.floor(durationSeconds / 60);
+    const secs = durationSeconds % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const formatCallDateTime = (createdAt?: string) => {
+    if (!createdAt) return '—';
+    const parsed = new Date(createdAt);
+    if (!Number.isFinite(parsed.getTime())) return '—';
+    return `${parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} • ${parsed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+  };
 
   // Update accumulated calls for infinite scroll
   useEffect(() => {
@@ -738,6 +854,17 @@ const CallLogs: React.FC<CallLogsProps> = ({
     }
   };
 
+  const getStatusBadgeClass = (call: Call) => {
+    const lifecycleStatus = (call.callLifecycleStatus || call.status || '').toLowerCase();
+    if (['completed', 'in-progress', 'ringing'].includes(lifecycleStatus)) {
+      return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700';
+    }
+    if (['failed', 'call-disconnected', 'busy', 'no-answer', 'cancelled'].includes(lifecycleStatus)) {
+      return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700';
+    }
+    return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600';
+  };
+
   const isCallFailed = (call: Call) => {
     const lifecycleStatus = call.callLifecycleStatus || call.status;
     const failedStatuses = ['failed', 'busy', 'no-answer', 'cancelled'];
@@ -814,9 +941,11 @@ const CallLogs: React.FC<CallLogsProps> = ({
               </span>
             )}
             {loading ? 'Loading...' : (
-              useLazyLoading 
-                ? `${filteredCalls.length}${totalCalls > 0 ? ` / ${totalCalls}` : ''} calls`
-                : `${filteredCalls.length} / ${totalCalls} calls`
+              groupByLead
+                ? `${groupedCalls.length} lead${groupedCalls.length !== 1 ? 's' : ''} / ${filteredCalls.length} calls`
+                : useLazyLoading
+                  ? `${filteredCalls.length}${totalCalls > 0 ? ` / ${totalCalls}` : ''} calls`
+                  : `${filteredCalls.length} / ${totalCalls} calls`
             )}
           </div>
         </div>
@@ -1009,6 +1138,171 @@ const CallLogs: React.FC<CallLogsProps> = ({
                 </p>
               </div>
             </Card>
+          ) : groupByLead ? (
+            groupedCalls.map((group) => {
+              const latestCall = group.latestCall;
+              const isExpanded = Boolean(expandedLeadGroups[group.key]);
+              const isGroupSelected = isLeadGroupSelected(group);
+
+              return (
+                <Card
+                  key={group.key}
+                  className={`overflow-hidden transition-all duration-200 hover:shadow-md ${
+                    theme === "dark"
+                      ? "bg-slate-900/70 border-slate-800 hover:border-slate-600"
+                      : "bg-white border-gray-200 hover:border-gray-300"
+                  } ${isGroupSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+                >
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className="pt-1">
+                          <Checkbox
+                            checked={isGroupSelected}
+                            onCheckedChange={() => handleLeadGroupSelect(group)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                            aria-label={`Select all calls for ${group.leadName}`}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleLeadGroupExpansion(group.key)}
+                          className="flex items-start gap-2 min-w-0 flex-1 text-left hover:opacity-90 transition-opacity"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4 mt-1 text-gray-500 flex-shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 mt-1 text-gray-500 flex-shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className={`font-semibold truncate ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                                {group.leadName}
+                              </h3>
+                              <Badge variant="outline" className="text-xs">
+                                {group.retryCount} {group.retryCount === 1 ? 'Retry' : 'Retries'}
+                              </Badge>
+                            </div>
+                            <p className={`text-sm font-medium ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                              {group.phoneNumber}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                              <span>{formatCallDateTime(latestCall.createdAt)}</span>
+                              {latestCall.agentName && <span>• {latestCall.agentName}</span>}
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge className={getStatusBadgeClass(latestCall)}>
+                          {getDisplayStatus(latestCall)}
+                        </Badge>
+                        {!isCallFailed(latestCall) ? (
+                          <>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleShowTranscript(latestCall)}
+                                  className="h-9 w-9"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>View Transcript</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="default"
+                                  size="icon"
+                                  onClick={() => handlePlayAudio(latestCall.id)}
+                                  className="h-9 w-9 text-white"
+                                  style={{ backgroundColor: '#1A6262' }}
+                                >
+                                  {playingAudio === latestCall.id && !audioRef.current?.paused ? (
+                                    <Pause className="w-4 h-4" />
+                                  ) : (
+                                    <Play className="w-4 h-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>{playingAudio === latestCall.id ? 'Pause Recording' : 'Play Recording'}</TooltipContent>
+                            </Tooltip>
+                          </>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-gray-500 border-gray-300 dark:border-gray-600">
+                            No Recording
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className={`px-4 pb-4 border-t ${theme === 'dark' ? 'border-slate-800' : 'border-gray-100'}`}>
+                      <div className="pt-3 space-y-2">
+                        {group.calls.map((attempt, index) => (
+                          <div
+                            key={attempt.id}
+                            className={`grid grid-cols-1 md:grid-cols-12 gap-2 rounded-md p-2 ${
+                              theme === "dark" ? "bg-slate-950/50" : "bg-gray-50"
+                            }`}
+                          >
+                            <div className="md:col-span-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                              Attempt {index + 1}
+                            </div>
+                            <div className="md:col-span-3 text-sm text-gray-600 dark:text-gray-300">
+                              {formatCallDateTime(attempt.createdAt)}
+                            </div>
+                            <div className="md:col-span-2 text-sm font-mono text-gray-600 dark:text-gray-300">
+                              {formatCallDuration(attempt.durationSeconds)}
+                            </div>
+                            <div className="md:col-span-2 text-sm text-gray-600 dark:text-gray-300">
+                              {attempt.agentName || 'Unknown Agent'}
+                            </div>
+                            <div className="md:col-span-2">
+                              <Badge className={getStatusBadgeClass(attempt)}>
+                                {getDisplayStatus(attempt)}
+                              </Badge>
+                            </div>
+                            <div className="md:col-span-1 flex md:justify-end gap-1">
+                              {!isCallFailed(attempt) && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleShowTranscript(attempt)}
+                                    className="h-7 w-7"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="default"
+                                    size="icon"
+                                    onClick={() => handlePlayAudio(attempt.id)}
+                                    className="h-7 w-7 text-white"
+                                    style={{ backgroundColor: '#1A6262' }}
+                                  >
+                                    {playingAudio === attempt.id && !audioRef.current?.paused ? (
+                                      <Pause className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Play className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })
           ) : (
             filteredCalls.map((call) => (
               <Card
