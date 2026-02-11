@@ -758,19 +758,6 @@ export const ContactList: React.FC<ContactListProps> = ({
               />
             </div>
 
-            {/* Clear All Column Filters Button */}
-            {hasActiveColumnFilters && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAllColumnFilters}
-                className="h-9"
-              >
-                <X className="w-4 h-4 mr-1" />
-                Clear
-              </Button>
-            )}
-
             {/* Spacer */}
             <div className="flex-1" />
 
@@ -803,60 +790,6 @@ export const ContactList: React.FC<ContactListProps> = ({
             </Button>
           </div>
 
-          {/* Active Column Filters Summary - only shown when filters are active */}
-          {hasActiveColumnFilters && (
-            <div className="flex flex-wrap gap-2 items-center mt-2 pt-2 border-t">
-              <span className="text-sm text-muted-foreground">Active filters:</span>
-              {columnFilters.tags.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  Tags: {columnFilters.tags.join(', ')}
-                  <button onClick={() => updateColumnFilter('tags', [])} className="ml-1 hover:text-destructive">
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              {columnFilters.lastStatus.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  Status: {columnFilters.lastStatus.join(', ')}
-                  <button onClick={() => updateColumnFilter('lastStatus', [])} className="ml-1 hover:text-destructive">
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              {columnFilters.callType.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  Call Type: {columnFilters.callType.join(', ')}
-                  <button onClick={() => updateColumnFilter('callType', [])} className="ml-1 hover:text-destructive">
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              {columnFilters.source.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  Source: {columnFilters.source.join(', ')}
-                  <button onClick={() => updateColumnFilter('source', [])} className="ml-1 hover:text-destructive">
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              {columnFilters.city.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  City: {columnFilters.city.join(', ')}
-                  <button onClick={() => updateColumnFilter('city', [])} className="ml-1 hover:text-destructive">
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              {columnFilters.country.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  Country: {columnFilters.country.join(', ')}
-                  <button onClick={() => updateColumnFilter('country', [])} className="ml-1 hover:text-destructive">
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-            </div>
-          )}
         </CardHeader>
 
         {/* Scrollable Content Area */}
@@ -905,143 +838,20 @@ export const ContactList: React.FC<ContactListProps> = ({
                       onClick={() => handleSortChange('name')}
                       className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
                     >
-                      Lead
+                      Name
                       <ArrowUpDown className="w-4 h-4" />
                     </button>
                   </th>
                   <th
-                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[180px] sticky left-[268px] z-30"
+                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[180px]"
                   >
-                    Contact Details
+                    Number
                   </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    <ExcelColumnFilter
-                      title="Call Type"
-                      options={allUniqueCallTypes}
-                      selectedValues={columnFilters.callType}
-                      onSelectionChange={(values) => updateColumnFilter('callType', values)}
-                      showAllLabel="All Call Types"
-                    />
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[220px]">
+                    Email
                   </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    <ExcelColumnFilter
-                      title="Last Status"
-                      options={allUniqueStatuses}
-                      selectedValues={columnFilters.lastStatus}
-                      onSelectionChange={(values) => updateColumnFilter('lastStatus', values)}
-                      showAllLabel="All Status"
-                    />
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    Notes
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    <ExcelColumnFilter
-                      title="Source"
-                      options={allUniqueSources}
-                      selectedValues={columnFilters.source}
-                      onSelectionChange={(values) => updateColumnFilter('source', values)}
-                      showAllLabel="All Sources"
-                    />
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    <ExcelColumnFilter
-                      title="Tags"
-                      options={allUniqueTags}
-                      selectedValues={columnFilters.tags}
-                      onSelectionChange={(values) => updateColumnFilter('tags', values)}
-                      showAllLabel="All Tags"
-                    />
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="flex items-center gap-1 hover:text-primary transition-colors font-medium text-muted-foreground">
-                          <span>Location</span>
-                          <Filter className={`w-3 h-3 ${(columnFilters.city.length > 0 || columnFilters.country.length > 0) ? 'text-primary fill-primary/20' : 'text-muted-foreground'}`} />
-                          {(columnFilters.city.length > 0 || columnFilters.country.length > 0) && (
-                            <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
-                              {columnFilters.city.length + columnFilters.country.length}
-                            </span>
-                          )}
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-56">
-                        {allUniqueCities.length > 0 && (
-                          <>
-                            <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">Cities</div>
-                            {allUniqueCities.map((city) => {
-                              const isSelected = columnFilters.city.includes(city);
-                              return (
-                                <DropdownMenuItem 
-                                  key={`city-${city}`} 
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      updateColumnFilter('city', columnFilters.city.filter(v => v !== city));
-                                    } else {
-                                      updateColumnFilter('city', [...columnFilters.city, city]);
-                                    }
-                                  }}
-                                  className="flex items-center gap-2"
-                                >
-                                  <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
-                                    {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                                  </div>
-                                  <span>{city}</span>
-                                </DropdownMenuItem>
-                              );
-                            })}
-                            <DropdownMenuSeparator />
-                          </>
-                        )}
-                        {allUniqueCountries.length > 0 && (
-                          <>
-                            <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">Countries</div>
-                            {allUniqueCountries.map((country) => {
-                              const isSelected = columnFilters.country.includes(country);
-                              return (
-                                <DropdownMenuItem 
-                                  key={`country-${country}`} 
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      updateColumnFilter('country', columnFilters.country.filter(v => v !== country));
-                                    } else {
-                                      updateColumnFilter('country', [...columnFilters.country, country]);
-                                    }
-                                  }}
-                                  className="flex items-center gap-2"
-                                >
-                                  <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-input'}`}>
-                                    {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                                  </div>
-                                  <span>{country}</span>
-                                </DropdownMenuItem>
-                              );
-                            })}
-                          </>
-                        )}
-                        {(columnFilters.city.length > 0 || columnFilters.country.length > 0) && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => {
-                                updateColumnFilter('city', []);
-                                updateColumnFilter('country', []);
-                              }} 
-                              className="text-muted-foreground"
-                            >
-                              Clear location filter
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[150px] bg-background">Business Context</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Last Contact</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Call Attempted</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    Created
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background min-w-[180px]">
+                    Total Conversations
                   </th>
                   <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground bg-background">Actions</th>
                 </tr>
@@ -1053,6 +863,10 @@ export const ContactList: React.FC<ContactListProps> = ({
                   
                   // Place trigger element near the end
                   const isTriggerPosition = index === triggerPosition;
+                  const totalConversations = contact.totalConversations
+                    ?? (contact.callAttemptedBusy || 0)
+                    + (contact.callAttemptedNoAnswer || 0)
+                    + (contact.callAttemptedFailed || 0);
                   
                   return (
                     <React.Fragment key={contact.id}>
@@ -1068,346 +882,39 @@ export const ContactList: React.FC<ContactListProps> = ({
                         <td
                           className="p-4 align-middle bg-background min-w-[220px] sticky left-[48px] z-10"
                         >
-                          <div>
-                            <button
-                              type="button"
-                              className="font-medium text-foreground cursor-pointer hover:text-blue-600 hover:underline transition-colors text-left"
-                              onClick={() => {
-                                if (onContactTimelineOpen) {
-                                  onContactTimelineOpen(contact);
-                                  return;
-                                }
-                                onContactSelect?.(contact);
-                              }}
-                              title="Click to view interaction timeline"
-                            >
-                              {contact.name}
-                            </button>
-                            {contact.company && (
-                              <div className="text-xs text-muted-foreground mt-0.5">{contact.company}</div>
-                            )}
-                          </div>
-                        </td>
-                        <td
-                          className="p-4 align-middle bg-background min-w-[180px] sticky left-[268px] z-10"
-                        >
-                          <div>
-                            <div className="text-sm">{contact.phoneNumber}</div>
-                            {contact.email && (
-                              <div className="text-xs text-muted-foreground mt-0.5">{contact.email}</div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-4 align-middle">
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {contact.callType}
-                          </Badge>
-                        </td>
-                        <td className="p-4 align-middle">
-                          {contact.lastCallStatus ? (
-                            <Badge 
-                              variant="outline" 
-                              className={
-                                contact.lastCallStatus.toLowerCase() === 'completed' ? 'bg-green-50 text-green-700 border-green-500' :
-                                contact.lastCallStatus.toLowerCase() === 'callback received' ? 'bg-purple-50 text-purple-700 border-purple-500' :
-                                contact.lastCallStatus.toLowerCase().includes('not') || contact.lastCallStatus.toLowerCase().includes('answer') ? 'bg-yellow-50 text-yellow-700 border-yellow-500' :
-                                contact.lastCallStatus.toLowerCase() === 'busy' ? 'bg-red-50 text-red-700 border-red-500' :
-                                'bg-gray-50 text-gray-700 border-gray-200'
+                          <button
+                            type="button"
+                            className="font-medium text-foreground cursor-pointer hover:text-blue-600 hover:underline transition-colors text-left"
+                            onClick={() => {
+                              if (onContactTimelineOpen) {
+                                onContactTimelineOpen(contact);
+                                return;
                               }
-                            >
-                              {contact.lastCallStatus}
+                              onContactSelect?.(contact);
+                            }}
+                            title="Click to view interaction timeline"
+                          >
+                            {contact.name}
+                          </button>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <span className="text-sm">{contact.phoneNumber}</span>
+                        </td>
+                        <td className="p-4 align-middle">
+                          {contact.email ? (
+                            <span className="text-sm">{contact.email}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="p-4 align-middle">
+                          {totalConversations > 0 ? (
+                            <Badge variant="outline" className="text-xs">
+                              {totalConversations}
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-slate-50 text-slate-400 border-slate-200">
-                              Not contacted
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle min-w-[200px]">
-                          {editingNotes?.contactId === contact.id ? (
-                            <div className="flex gap-1">
-                              <Input
-                                value={editingNotes.notes}
-                                onChange={(e) => setEditingNotes({ contactId: contact.id, notes: e.target.value })}
-                                className="text-sm h-8"
-                                placeholder="Add notes..."
-                                autoFocus
-                              />
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2"
-                                onClick={() => handleNotesSave(contact.id, editingNotes.notes)}
-                              >
-                                ✓
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2"
-                                onClick={handleNotesCancel}
-                              >
-                                ✕
-                              </Button>
-                            </div>
-                          ) : (
-                            contact.notes && contact.notes.length > 0 ? (
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <div
-                                    className="text-sm cursor-pointer hover:text-blue-600 transition-colors max-w-[180px] truncate"
-                                    title="Click to view/edit notes"
-                                  >
-                                    {(contact.notes?.length ?? 0) > 50 ? `${contact.notes?.substring(0, 50)}...` : contact.notes}
-                                  </div>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80 max-h-[400px] overflow-y-auto">
-                                  <div className="space-y-3">
-                                    <h4 className="font-semibold text-sm">Notes</h4>
-                                    {editingNotesPopover?.contactId === contact.id ? (
-                                      <>
-                                        <Textarea
-                                          value={editingNotesPopover.notes}
-                                          onChange={(e) => setEditingNotesPopover({ contactId: contact.id, notes: e.target.value })}
-                                          className="min-h-[120px] text-sm"
-                                          placeholder="Enter notes..."
-                                          autoFocus
-                                        />
-                                        <div className="flex justify-end gap-2">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setEditingNotesPopover(null)}
-                                          >
-                                            Cancel
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            onClick={() => handleNotesPopoverSave(contact.id, editingNotesPopover.notes)}
-                                          >
-                                            Save
-                                          </Button>
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <p className="text-sm whitespace-pre-wrap break-words bg-muted/50 p-3 rounded-md">{contact.notes}</p>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="w-full"
-                                          onClick={() => setEditingNotesPopover({ contactId: contact.id, notes: contact.notes || '' })}
-                                        >
-                                          Edit Notes
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                            ) : (
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <div
-                                    className="text-sm cursor-pointer hover:text-blue-600 transition-colors"
-                                    title="Click to add notes"
-                                  >
-                                    <span className="text-gray-400">Click to add notes...</span>
-                                  </div>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80">
-                                  <div className="space-y-3">
-                                    <h4 className="font-semibold text-sm">Add Notes</h4>
-                                    <Textarea
-                                      value={editingNotesPopover?.contactId === contact.id ? editingNotesPopover.notes : ''}
-                                      onChange={(e) => setEditingNotesPopover({ contactId: contact.id, notes: e.target.value })}
-                                      className="min-h-[120px] text-sm"
-                                      placeholder="Enter notes..."
-                                      autoFocus
-                                      onFocus={() => {
-                                        if (editingNotesPopover?.contactId !== contact.id) {
-                                          setEditingNotesPopover({ contactId: contact.id, notes: '' });
-                                        }
-                                      }}
-                                    />
-                                    <div className="flex justify-end gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setEditingNotesPopover(null)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        onClick={() => handleNotesPopoverSave(contact.id, editingNotesPopover?.notes || '')}
-                                        disabled={!editingNotesPopover?.notes?.trim()}
-                                      >
-                                        Save
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                            )
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          <Badge variant="outline" className="text-xs">
-                            {getSourceLabel(contact)}
-                          </Badge>
-                        </td>
-                        <td className="p-4 align-middle">
-                          {contact.tags && contact.tags.length > 0 ? (
-                            <div className="flex flex-wrap gap-1" title={contact.tags.map(t => `#${t}`).join(', ')}>
-                              {contact.tags.slice(0, 2).map((tag, idx) => (
-                                <Badge key={idx} variant="secondary" className="text-xs bg-blue-50 text-blue-700">
-                                  #{tag}
-                                </Badge>
-                              ))}
-                              {contact.tags.length > 2 && (
-                                <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600">
-                                  +{contact.tags.length - 2} more
-                                </Badge>
-                              )}
-                            </div>
-                          ) : (
                             <span className="text-gray-400">-</span>
                           )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          {contact.city || contact.country ? (
-                            <div>
-                              <span className="text-sm">{contact.city || '-'}</span>
-                              {contact.country && (
-                                <div className="text-xs text-muted-foreground">{contact.country}</div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          {contact.businessContext && contact.businessContext.length > 0 ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <div
-                                  className="text-sm cursor-pointer hover:text-blue-600 transition-colors max-w-[140px] truncate"
-                                  title="Click to view/edit business context"
-                                >
-                                  {(contact.businessContext?.length ?? 0) > 50 ? `${contact.businessContext?.substring(0, 50)}...` : contact.businessContext}
-                                </div>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-80 max-h-[400px] overflow-y-auto">
-                                <div className="space-y-3">
-                                  <h4 className="font-semibold text-sm">Business Context</h4>
-                                  {editingBusinessContext?.contactId === contact.id ? (
-                                    <>
-                                      <Textarea
-                                        value={editingBusinessContext.businessContext}
-                                        onChange={(e) => setEditingBusinessContext({ contactId: contact.id, businessContext: e.target.value })}
-                                        className="min-h-[120px] text-sm"
-                                        placeholder="Enter business context..."
-                                        autoFocus
-                                      />
-                                      <div className="flex justify-end gap-2">
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => setEditingBusinessContext(null)}
-                                        >
-                                          Cancel
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          onClick={() => handleBusinessContextSave(contact.id, editingBusinessContext.businessContext)}
-                                        >
-                                          Save
-                                        </Button>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <p className="text-sm whitespace-pre-wrap break-words bg-muted/50 p-3 rounded-md">{contact.businessContext}</p>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="w-full"
-                                        onClick={() => setEditingBusinessContext({ contactId: contact.id, businessContext: contact.businessContext || '' })}
-                                      >
-                                        Edit Business Context
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          ) : (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <div
-                                  className="text-sm cursor-pointer hover:text-blue-600 transition-colors"
-                                  title="Click to add business context"
-                                >
-                                  <span className="text-gray-400">-</span>
-                                </div>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-80">
-                                <div className="space-y-3">
-                                  <h4 className="font-semibold text-sm">Add Business Context</h4>
-                                  <Textarea
-                                    value={editingBusinessContext?.contactId === contact.id ? editingBusinessContext.businessContext : ''}
-                                    onChange={(e) => setEditingBusinessContext({ contactId: contact.id, businessContext: e.target.value })}
-                                    className="min-h-[120px] text-sm"
-                                    placeholder="Enter business context (industry, sector, etc.)..."
-                                    autoFocus
-                                    onFocus={() => {
-                                      if (editingBusinessContext?.contactId !== contact.id) {
-                                        setEditingBusinessContext({ contactId: contact.id, businessContext: '' });
-                                      }
-                                    }}
-                                  />
-                                  <div className="flex justify-end gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => setEditingBusinessContext(null)}
-                                    >
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleBusinessContextSave(contact.id, editingBusinessContext?.businessContext || '')}
-                                      disabled={!editingBusinessContext?.businessContext?.trim()}
-                                    >
-                                      Save
-                                    </Button>
-                                  </div>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          {contact.lastContactAt ? (
-                            <span className="text-sm">
-                              {new Date(contact.lastContactAt).toLocaleDateString()}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          {(contact.callAttemptedBusy || 0) > 0 || (contact.callAttemptedNoAnswer || 0) > 0 ? (
-                            <span className="text-sm">
-                              Busy: {contact.callAttemptedBusy || 0}, No Answer: {contact.callAttemptedNoAnswer || 0}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          {new Date(contact.createdAt).toLocaleDateString()}
                         </td>
                         <td className="p-4 align-middle text-right">
                           <div className="flex justify-end gap-2">
@@ -1483,7 +990,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                       {/* Trigger element for loading more */}
                       {isTriggerPosition && enableInfiniteScroll && (
                         <tr>
-                          <td colSpan={11}>
+                          <td colSpan={7}>
                             <div ref={triggerElementRef} className="h-1" />
                           </td>
                         </tr>

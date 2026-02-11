@@ -298,6 +298,7 @@ export interface Contact {
   callAttemptedBusy: number;
   callAttemptedNoAnswer: number;
   callAttemptedFailed: number;
+  totalConversations?: number;
   callType: 'inbound' | 'outbound';
   leadStage?: string;
   leadStageUpdatedAt?: string; // When lead stage was last changed (for days in stage calculation)

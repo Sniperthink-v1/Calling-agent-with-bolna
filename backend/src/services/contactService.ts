@@ -147,6 +147,15 @@ export class ContactService {
                 THEN 'Callback Received'
               ELSE COALESCE(last_call.call_lifecycle_status, 'Not contacted')
             END as last_call_status,
+            (
+              SELECT COUNT(*)
+              FROM calls all_calls
+              WHERE all_calls.user_id = c.user_id
+                AND (
+                  all_calls.contact_id = c.id
+                  OR all_calls.phone_number = c.phone_number
+                )
+            ) as total_conversations,
             COALESCE(
               (SELECT lead_type FROM calls WHERE contact_id = c.id ORDER BY created_at DESC LIMIT 1),
               'outbound'

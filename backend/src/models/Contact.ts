@@ -22,6 +22,7 @@ export interface ContactInterface extends BaseModelInterface {
   call_attempted_busy: number;
   call_attempted_no_answer: number;
   call_attempted_failed: number;
+  total_conversations?: number;
   created_at: Date;
   updated_at: Date;
 }
