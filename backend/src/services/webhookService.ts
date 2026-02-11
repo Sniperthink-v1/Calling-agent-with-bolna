@@ -124,6 +124,80 @@ class WebhookService {
   }
 
   /**
+   * Detect voicemail outcomes from payload signals that may still arrive with "completed" status.
+   * We map these to a retryable failed outcome to avoid treating voicemail as a successful conversation.
+   */
+  private detectVoicemail(payload: BolnaWebhookPayload): { isVoicemail: boolean; signals: string[] } {
+    const signals: string[] = [];
+    const voicemailKeywords = [
+      'voicemail',
+      'voice mail',
+      'answering machine',
+      'mailbox',
+      'after the beep',
+      'at the tone',
+      'leave your message',
+      'record your message',
+      'carrier greeting'
+    ];
+
+    const hangupReason = (payload.telephony_data?.hangup_reason || '').toLowerCase();
+    const errorMessage = (payload.error_message || '').toLowerCase();
+    const smartStatus = (payload.smart_status || '').toLowerCase();
+    const summary = (payload.summary || '').toLowerCase();
+    const transcript = (payload.transcript || '').toLowerCase();
+
+    if (payload.answered_by_voice_mail === true) {
+      signals.push('answered_by_voice_mail=true');
+    }
+
+    if (smartStatus && voicemailKeywords.some(keyword => smartStatus.includes(keyword))) {
+      signals.push(`smart_status=${payload.smart_status}`);
+    }
+
+    if (hangupReason && voicemailKeywords.some(keyword => hangupReason.includes(keyword))) {
+      signals.push(`hangup_reason=${payload.telephony_data?.hangup_reason}`);
+    }
+
+    if (errorMessage && voicemailKeywords.some(keyword => errorMessage.includes(keyword))) {
+      signals.push(`error_message=${payload.error_message}`);
+    }
+
+    if (summary && voicemailKeywords.some(keyword => summary.includes(keyword))) {
+      signals.push('summary_mentions_voicemail');
+    }
+
+    // Transcript-only detection uses stricter threshold to reduce false positives.
+    const transcriptMarkers = [
+      'please leave your message',
+      'after the beep',
+      'at the tone',
+      'record your message',
+      'is not available',
+      'cannot take your call',
+      'voice mailbox'
+    ];
+    const matchedTranscriptMarkers = transcriptMarkers.filter(marker => transcript.includes(marker));
+
+    if (signals.length === 0 && matchedTranscriptMarkers.length >= 2) {
+      signals.push(`transcript_markers=${matchedTranscriptMarkers.slice(0, 3).join('|')}`);
+    }
+
+    return {
+      isVoicemail: signals.length > 0,
+      signals
+    };
+  }
+
+  private buildVoicemailHangupReason(signals: string[]): string {
+    if (!signals.length) {
+      return 'voicemail_detected';
+    }
+
+    return `voicemail_detected: ${signals.slice(0, 3).join(', ')}`;
+  }
+
+  /**
    * UNIFIED WEBHOOK PROCESSOR
    * Handles all webhook stages based on status field
    */
@@ -154,9 +228,25 @@ class WebhookService {
           await this.handleCallDisconnected(payload);
           break;
         
-        case 'completed':
+        case 'completed': {
+          const voicemailDetection = this.detectVoicemail(payload);
+          if (voicemailDetection.isVoicemail) {
+            logger.warn('📮 Voicemail detected on completed webhook, mapping outcome to busy', {
+              execution_id: executionId,
+              detected_signals: voicemailDetection.signals
+            });
+
+            await this.handleFailed(payload, 'busy', {
+              detectedAsVoicemail: true,
+              voicemailSignals: voicemailDetection.signals,
+              hangupReasonOverride: this.buildVoicemailHangupReason(voicemailDetection.signals)
+            });
+            break;
+          }
+
           await this.handleCompleted(payload);
           break;
+        }
         
         case 'busy':
         case 'no-answer':
@@ -1365,15 +1455,36 @@ class WebhookService {
   }
 
   /**
-   * Handle failed call states (busy, no-answer, failed)
-   * 'failed' status is for calls where the number is invalid/unavailable
+   * Handle failed call states (busy, no-answer, failed).
+   * Voicemail detections are normalized to a retryable busy outcome.
    */
-  private async handleFailed(payload: BolnaWebhookPayload, status: string): Promise<void> {
+  private async handleFailed(
+    payload: BolnaWebhookPayload,
+    status: string,
+    options?: {
+      detectedAsVoicemail?: boolean;
+      voicemailSignals?: string[];
+      hangupReasonOverride?: string;
+    }
+  ): Promise<void> {
     const executionId = payload.id;
     
-    logger.info('❌ Handling failed call', { execution_id: executionId, status });
+    logger.info('❌ Handling failed call', {
+      execution_id: executionId,
+      status,
+      detected_as_voicemail: options?.detectedAsVoicemail || false
+    });
 
     const call = await Call.findByExecutionId(executionId);
+    const hangupReason = options?.hangupReasonOverride || status;
+    const metadataUpdate = options?.detectedAsVoicemail
+      ? {
+          ...(call?.metadata || {}),
+          voicemail_detected: true,
+          voicemail_signals: options.voicemailSignals || [],
+          voicemail_detected_at: new Date().toISOString()
+        }
+      : undefined;
     
     logger.info('🔍 [RETRY-DEBUG] handleFailed - Call record lookup', {
       execution_id: executionId,
@@ -1386,11 +1497,16 @@ class WebhookService {
       call_lifecycle_status: status,
       status: 'failed',
       hangup_by: 'system',
-      hangup_reason: status,
-      hangup_provider_code: payload.telephony_data?.hangup_provider_code?.toString()
+      hangup_reason: hangupReason,
+      hangup_provider_code: payload.telephony_data?.hangup_provider_code?.toString(),
+      ...(metadataUpdate ? { metadata: metadataUpdate } : {})
     });
 
-    logger.info('✅ Failed status updated', { execution_id: executionId, status });
+    logger.info('✅ Failed status updated', {
+      execution_id: executionId,
+      status,
+      hangup_reason: hangupReason
+    });
 
     // Update contact counters for busy/no-answer
     if (call && call.contact_id) {
@@ -1471,14 +1587,16 @@ class WebhookService {
       }
     }
 
-    // Process follow-up email for failed calls (busy/no-answer)
+    // Process follow-up email for failed calls (busy/no-answer/voicemail)
     if (call) {
       try {
+        const emailCallStatus = options?.detectedAsVoicemail ? 'voicemail' : status;
+
         logger.info('📧 Processing follow-up email for failed call', {
           execution_id: executionId,
           user_id: call.user_id,
           call_id: call.id,
-          call_status: status
+          call_status: emailCallStatus
         });
 
         const { followUpEmailService } = await import('./followUpEmailService');
@@ -1488,7 +1606,7 @@ class WebhookService {
           userId: call.user_id,
           contactId: call.contact_id || undefined,
           phoneNumber: call.phone_number,
-          callStatus: status, // 'busy' or 'no-answer'
+          callStatus: emailCallStatus,
           leadStatus: undefined, // No lead status for failed calls
           transcript: undefined, // No transcript for failed calls
           durationMinutes: 0,

@@ -353,7 +353,7 @@ class AuthService {
         SELECT id, email, name, credits, is_active, email_verified, role, auth_provider, 
                created_at, updated_at, password_hash
         FROM users 
-        WHERE email = $1
+        WHERE LOWER(email) = LOWER($1)
       `;
       
       const userResult = await databaseService.query(userQuery, [email]);
