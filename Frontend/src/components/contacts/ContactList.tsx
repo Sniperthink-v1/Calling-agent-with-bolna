@@ -159,6 +159,7 @@ type DisplayMode = 'table' | 'pipeline';
 interface ContactListProps {
   onContactSelect?: (contact: Contact) => void;
   onContactEdit?: (contact: Contact) => void;
+  onContactTimelineOpen?: (contact: Contact) => void;
   onContactCreate?: () => void;
   useLazyLoading?: boolean;
   initialPageSize?: number;
@@ -174,6 +175,7 @@ const LOAD_TRIGGER_OFFSET = 10; // Trigger next load when within 10 items of end
 export const ContactList: React.FC<ContactListProps> = ({
   onContactSelect,
   onContactEdit,
+  onContactTimelineOpen,
   onContactCreate,
   useLazyLoading = false,
   initialPageSize = 100,
@@ -1242,13 +1244,20 @@ export const ContactList: React.FC<ContactListProps> = ({
                           className="p-4 align-middle bg-background min-w-[220px] sticky left-[48px] z-10"
                         >
                           <div>
-                            <div 
-                              className="font-medium text-foreground cursor-pointer hover:text-blue-600 hover:underline transition-colors"
-                              onClick={() => onContactSelect?.(contact)}
-                              title="Click to view contact details"
+                            <button
+                              type="button"
+                              className="font-medium text-foreground cursor-pointer hover:text-blue-600 hover:underline transition-colors text-left"
+                              onClick={() => {
+                                if (onContactTimelineOpen) {
+                                  onContactTimelineOpen(contact);
+                                  return;
+                                }
+                                onContactSelect?.(contact);
+                              }}
+                              title="Click to view interaction timeline"
                             >
                               {contact.name}
-                            </div>
+                            </button>
                             {contact.company && (
                               <div className="text-xs text-muted-foreground mt-0.5">{contact.company}</div>
                             )}
@@ -1620,6 +1629,11 @@ export const ContactList: React.FC<ContactListProps> = ({
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                {onContactTimelineOpen && (
+                                  <DropdownMenuItem onClick={() => onContactTimelineOpen(contact)}>
+                                    View Timeline
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => onContactSelect?.(contact)}>
                                   View Details
                                 </DropdownMenuItem>

@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useContacts } from '@/hooks/useContacts';
-import { useNavigation } from '@/contexts/NavigationContext';
 import DeleteContactDialog from './DeleteContactDialog';
 import { CallAgentModal } from './CallAgentModal';
 import { SendWhatsAppModal } from './SendWhatsAppModal';
@@ -30,6 +29,7 @@ interface ContactDetailsProps {
   onBack: () => void;
   onEdit: (contact: Contact) => void;
   onDelete: (contact: Contact) => void;
+  onOpenTimeline?: (contact: Contact) => void;
 }
 
 export const ContactDetails: React.FC<ContactDetailsProps> = ({
@@ -37,10 +37,10 @@ export const ContactDetails: React.FC<ContactDetailsProps> = ({
   onBack,
   onEdit,
   onDelete,
+  onOpenTimeline,
 }) => {
   const { toast } = useToast();
   const { deleting } = useContacts();
-  const { navigateToLeadIntelligence } = useNavigation();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
@@ -90,10 +90,7 @@ export const ContactDetails: React.FC<ContactDetailsProps> = ({
   };
 
   const handleViewInteractionTimeline = () => {
-    // Navigate to Lead Intelligence and auto-open this contact's timeline
-    // The NavigationContext will handle setting targetLeadIdentifier
-    // which triggers the useEffect in LeadIntelligence to auto-expand the timeline
-    navigateToLeadIntelligence({ phone: contact.phoneNumber });
+    onOpenTimeline?.(contact);
   };
 
   return (
@@ -259,7 +256,7 @@ export const ContactDetails: React.FC<ContactDetailsProps> = ({
             </CardContent>
           </Card>
 
-          {/* Interaction Timeline - Redirect to Lead Intelligence */}
+          {/* Interaction Timeline */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -278,7 +275,7 @@ export const ContactDetails: React.FC<ContactDetailsProps> = ({
                   variant="default"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  View Full Timeline
+                  Open Timeline Sidebar
                 </Button>
               </div>
             </CardContent>

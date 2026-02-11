@@ -3,6 +3,7 @@ import ContactList from './ContactList';
 import ContactDetails from './ContactDetails';
 import ContactForm from './ContactForm';
 import PipelineView from './PipelineView';
+import ContactInteractionTimelinePanel from './ContactInteractionTimelinePanel';
 import { useContacts } from '@/hooks/useContacts';
 import { useToast } from '@/components/ui/use-toast';
 import { useSuccessFeedback } from '@/contexts/SuccessFeedbackContext';
@@ -25,6 +26,8 @@ export const ContactManager: React.FC = () => {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [timelineContact, setTimelineContact] = useState<Contact | null>(null);
+  const [isTimelineOpen, setIsTimelineOpen] = useState(false);
 
   const handleContactSelect = (contact: Contact) => {
     setSelectedContact(contact);
@@ -34,6 +37,11 @@ export const ContactManager: React.FC = () => {
   const handleContactEdit = (contact: Contact) => {
     setEditingContact(contact);
     setIsFormOpen(true);
+  };
+
+  const handleOpenTimeline = (contact: Contact) => {
+    setTimelineContact(contact);
+    setIsTimelineOpen(true);
   };
 
   const handleContactCreate = () => {
@@ -99,6 +107,7 @@ export const ContactManager: React.FC = () => {
             onBack={handleBackToList}
             onEdit={handleContactEdit}
             onDelete={handleContactDelete}
+            onOpenTimeline={handleOpenTimeline}
           />
         );
       
@@ -156,6 +165,7 @@ export const ContactManager: React.FC = () => {
               <ContactList
                 onContactSelect={handleContactSelect}
                 onContactEdit={handleContactEdit}
+                onContactTimelineOpen={handleOpenTimeline}
                 onContactCreate={handleContactCreate}
                 enableInfiniteScroll={true}
                 initialPageSize={20}
@@ -177,6 +187,17 @@ export const ContactManager: React.FC = () => {
         onClose={handleFormClose}
         contact={editingContact}
         onSuccess={handleFormSuccess}
+      />
+
+      <ContactInteractionTimelinePanel
+        open={isTimelineOpen}
+        onOpenChange={(open) => {
+          setIsTimelineOpen(open);
+          if (!open) {
+            setTimelineContact(null);
+          }
+        }}
+        contact={timelineContact}
       />
     </div>
   );
