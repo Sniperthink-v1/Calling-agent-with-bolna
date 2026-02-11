@@ -7,7 +7,7 @@ import { ValidatedSelect } from '@/components/ui/ValidatedSelect';
 import { toast } from 'sonner';
 import { useAgents } from '@/hooks/useAgents';
 import { useSuccessFeedback } from '@/contexts/SuccessFeedbackContext';
-import { validateForm, validateField, validationSchemas } from '@/utils/formValidation';
+import { validateForm, validateField, validateAgentName, validationSchemas } from '@/utils/formValidation';
 import {
   createFormValidationHandler,
   mergeValidationErrors,
@@ -112,6 +112,23 @@ export function CreateAgentModal({
 
   // Validation function using the validation schema
   const validateFormData = (): boolean => {
+    // Edit flow only updates agent name, so validate name only
+    if (editAgent) {
+      const trimmedName = formData.name.trim();
+      const nameError = validateAgentName(trimmedName);
+
+      setServerErrors({});
+      setTouchedFields({ name: true });
+
+      if (nameError) {
+        setClientErrors({ name: nameError });
+        return false;
+      }
+
+      setClientErrors({});
+      return true;
+    }
+
     const result = validateForm(formData, validationSchemas.agent);
     setClientErrors(result.errors);
 
@@ -174,16 +191,6 @@ export function CreateAgentModal({
         // Update existing agent
         const updateData: UpdateAgentRequest = {
           name: formData.name.trim(),
-          agentType: formData.agentType,
-          language: formData.language,
-          type: formData.type,
-          description: formData.description.trim(),
-          data_collection: {
-            default: {
-              type: 'string',
-              description: formData.dataCollectionDescription
-            }
-          }
         };
 
         const result = await updateAgent(editAgent.id, updateData);
@@ -199,6 +206,10 @@ export function CreateAgentModal({
             },
           });
           onClose();
+        } else {
+          toast.error('Update failed', {
+            description: 'Unable to update agent name. Please try again.',
+          });
         }
       } else {
         // Create new agent

@@ -412,88 +412,112 @@ class AgentService {
         throw new Error('Agent not linked to Bolna.ai - cannot update');
       }
 
-      // Build Bolna.ai update request with correct structure
-      const updateRequest = {
-        agent_config: {
-          agent_name: agentData.name || agent.name,
-          agent_welcome_message: agentData.first_message || "Hello! How can I help you today?",
-          webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/bolna`,
-          tasks: [{
-            task_type: 'conversation' as const,
-            tools_config: {
-              llm_agent: {
-                agent_type: 'simple_llm_agent' as const,
-                agent_flow_type: 'streaming' as const,
-                llm_config: {
+      if (typeof agentData.name === 'string' && agentData.name.trim().length === 0) {
+        throw new Error('Agent name cannot be empty');
+      }
+
+      const normalizedName = typeof agentData.name === 'string' ? agentData.name.trim() : undefined;
+      const hasNameUpdate = !!normalizedName && normalizedName !== agent.name;
+      const requiresFullBolnaUpdate = (
+        agentData.first_message !== undefined ||
+        agentData.system_prompt !== undefined ||
+        agentData.language !== undefined ||
+        agentData.llm !== undefined ||
+        agentData.tts !== undefined ||
+        agentData.response_engine !== undefined ||
+        agentData.data_collection !== undefined ||
+        agentData.type !== undefined ||
+        agentData.agent_type !== undefined
+      );
+
+      let bolnaAgent: BolnaAgent | undefined;
+
+      // Rename-only updates should use PATCH to avoid invalidating other Bolna config.
+      if (hasNameUpdate && !requiresFullBolnaUpdate) {
+        bolnaAgent = await bolnaService.patchAgentName(agent.bolna_agent_id, normalizedName);
+      } else if (hasNameUpdate || requiresFullBolnaUpdate) {
+        // Build Bolna.ai update request with full structure when non-name config updates are requested.
+        const updateRequest = {
+          agent_config: {
+            agent_name: normalizedName || agent.name,
+            agent_welcome_message: agentData.first_message || "Hello! How can I help you today?",
+            webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/bolna`,
+            tasks: [{
+              task_type: 'conversation' as const,
+              tools_config: {
+                llm_agent: {
+                  agent_type: 'simple_llm_agent' as const,
                   agent_flow_type: 'streaming' as const,
-                  provider: 'openai' as const,
-                  family: 'openai',
-                  model: agentData.llm?.model || 'gpt-3.5-turbo',
-                  max_tokens: agentData.llm?.max_tokens || 1000,
-                  temperature: agentData.llm?.temperature || 0.7,
-                  request_json: false
+                  llm_config: {
+                    agent_flow_type: 'streaming' as const,
+                    provider: 'openai' as const,
+                    family: 'openai',
+                    model: agentData.llm?.model || 'gpt-3.5-turbo',
+                    max_tokens: agentData.llm?.max_tokens || 1000,
+                    temperature: agentData.llm?.temperature || 0.7,
+                    request_json: false
+                  }
+                },
+                synthesizer: {
+                  provider: 'polly' as const,
+                  provider_config: {
+                    voice: agentData.tts?.voice_id ? this.mapVoiceIdToPollyVoice(agentData.tts.voice_id) : 'Joanna',
+                    engine: 'generative',
+                    sampling_rate: '8000',
+                    language: agentData.language || 'en-US'
+                  },
+                  stream: true,
+                  buffer_size: 150,
+                  audio_format: 'wav' as const
+                },
+                transcriber: {
+                  provider: 'deepgram' as const,
+                  model: 'nova-2',
+                  language: 'en',
+                  stream: true,
+                  sampling_rate: 8000,
+                  encoding: 'linear16',
+                  endpointing: 500
+                },
+                input: {
+                  provider: 'twilio' as const,
+                  format: 'wav' as const
+                },
+                output: {
+                  provider: 'twilio' as const,
+                  format: 'wav' as const
                 }
               },
-              synthesizer: {
-                provider: 'polly' as const,
-                provider_config: {
-                  voice: agentData.tts?.voice_id ? this.mapVoiceIdToPollyVoice(agentData.tts.voice_id) : 'Joanna',
-                  engine: 'generative',
-                  sampling_rate: '8000',
-                  language: agentData.language || 'en-US'
-                },
-                stream: true,
-                buffer_size: 150,
-                audio_format: 'wav' as const
+              toolchain: {
+                execution: 'parallel' as const,
+                pipelines: [['transcriber', 'llm', 'synthesizer']]
               },
-              transcriber: {
-                provider: 'deepgram' as const,
-                model: 'nova-2',
-                language: 'en',
-                stream: true,
-                sampling_rate: 8000,
-                encoding: 'linear16',
-                endpointing: 500
-              },
-              input: {
-                provider: 'twilio' as const,
-                format: 'wav' as const
-              },
-              output: {
-                provider: 'twilio' as const,
-                format: 'wav' as const
+              task_config: {
+                hangup_after: 300,
+                ambient_sound: 'none',
+                ambient_sound_volume: 0.1,
+                interruption_backoff_period: 1.0,
+                backchanneling: false,
+                optimize_latency: true,
+                incremental: false,
+                normalize_audio: true
               }
-            },
-            toolchain: {
-              execution: 'parallel' as const,
-              pipelines: [['transcriber', 'llm', 'synthesizer']]
-            },
-            task_config: {
-              hangup_after: 300,
-              ambient_sound: 'none',
-              ambient_sound_volume: 0.1,
-              interruption_backoff_period: 1.0,
-              backchanneling: false,
-              optimize_latency: true,
-              incremental: false,
-              normalize_audio: true
+            }]
+          },
+          agent_prompts: {
+            task_1: {
+              system_prompt: agentData.system_prompt || "You are a helpful AI assistant."
             }
-          }]
-        },
-        agent_prompts: {
-          task_1: {
-            system_prompt: agentData.system_prompt || "You are a helpful AI assistant."
           }
-        }
-      };
+        };
 
-      // Update agent in Bolna.ai
-      const bolnaAgent = await bolnaService.updateAgent(agent.bolna_agent_id, updateRequest);
+        bolnaAgent = await bolnaService.updateAgent(agent.bolna_agent_id, updateRequest);
+      }
 
       // Update local agent record if name, description, or status changed
       const localUpdates: any = {};
-      if (agentData.name && agentData.name !== agent.name) {
-        localUpdates.name = agentData.name;
+      if (hasNameUpdate) {
+        localUpdates.name = normalizedName;
       }
       if (agentData.description !== undefined && agentData.description !== agent.description) {
         localUpdates.description = agentData.description;
@@ -509,7 +533,10 @@ class AgentService {
         }
       }
 
-      logger.info(`Updated agent ${agentId} for user ${userId} in Bolna.ai`);
+      logger.info(`Updated agent ${agentId} for user ${userId}`, {
+        bolnaUpdated: !!bolnaAgent,
+        localFieldsUpdated: Object.keys(localUpdates)
+      });
 
       // Invalidate agent caches after update
       agentCacheService.invalidateAgentCache(userId, agentId);

@@ -507,6 +507,35 @@ class BolnaService {
   }
 
   /**
+   * Patch agent name (partial update)
+   * PATCH /v2/agent/:agent_id
+   * Used to rename an agent without replacing full config.
+   */
+  async patchAgentName(agentId: string, agentName: string): Promise<BolnaAgent> {
+    this.validateAgentId(agentId);
+    const normalizedName = agentName?.trim();
+
+    if (!normalizedName) {
+      throw new Error('Agent name is required');
+    }
+
+    logger.info(`[Bolna] Patching agent ${agentId} name`);
+
+    const patchData = {
+      agent_config: {
+        agent_name: normalizedName
+      }
+    };
+
+    const result = await this.executeWithRetry(
+      () => this.client.patch(`/v2/agent/${encodeURIComponent(agentId)}`, patchData),
+      `patchAgentName(${agentId})`
+    );
+
+    return result;
+  }
+
+  /**
    * Patch agent webhook URL (partial update)
    * PATCH /v2/agent/:agent_id
    * Used to update only the webhook URL without affecting other agent config
