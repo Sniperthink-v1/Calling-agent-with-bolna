@@ -157,7 +157,7 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
             <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-blue-50'}`}>
               <div className="flex items-center space-x-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-blue-500" />
-                <span className="text-sm text-gray-500">Success Rate</span>
+                <span className="text-sm text-gray-500">Connection Success Rate</span>
               </div>
               <p className="text-2xl font-bold text-blue-600">{successRate}%</p>
             </div>
