@@ -22,8 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/components/ui/use-toast';
-import { Upload, X, FileText, CheckCircle, AlertCircle, Download, HelpCircle, Loader2, Phone, MessageSquare, Mail, Plus, Trash2, Eye } from 'lucide-react';
+import { Upload, X, FileText, CheckCircle, AlertCircle, Download, HelpCircle, Loader2, Phone, MessageSquare, Mail, Plus, Trash2, Eye, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -994,29 +1000,61 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
     });
   };
 
-  const handleDownloadTemplate = async () => {
+  const handleDownloadTemplate = async (format: 'excel' | 'google-sheets' = 'excel') => {
     try {
-      // Use backend template endpoint (same as contacts)
-      const response = await authenticatedFetch('/api/campaigns/template');
-      
-      if (!response.ok) {
-        throw new Error('Failed to download template');
-      }
+      if (format === 'google-sheets') {
+        // Download as CSV for Google Sheets compatibility
+        const response = await authenticatedFetch('/api/campaigns/template');
+        
+        if (!response.ok) {
+          throw new Error('Failed to download template');
+        }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'campaign_contacts_template.xlsx';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast({
-        title: 'Template Downloaded',
-        description: 'Excel template downloaded successfully. Phone numbers are pre-formatted to prevent Excel errors.',
-      });
+        const blob = await response.blob();
+        
+        // Convert XLSX to CSV for Google Sheets
+        const arrayBuffer = await blob.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+        const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        
+        const url = window.URL.createObjectURL(csvBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'campaign_contacts_template.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        toast({
+          title: 'Template Downloaded',
+          description: 'CSV template downloaded. You can import it directly into Google Sheets by dragging the file into Google Drive or using File > Import in Google Sheets.',
+        });
+      } else {
+        // Download Excel format
+        const response = await authenticatedFetch('/api/campaigns/template');
+        
+        if (!response.ok) {
+          throw new Error('Failed to download template');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'campaign_contacts_template.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        toast({
+          title: 'Template Downloaded',
+          description: 'Excel template downloaded successfully. Phone numbers are pre-formatted to prevent Excel errors.',
+        });
+      }
     } catch (error) {
       console.error('Failed to download campaign template:', error);
       toast({
@@ -2678,15 +2716,27 @@ const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label>Upload Contacts (Excel/CSV)</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadTemplate}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Template
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Template
+                      <ChevronDown className="w-4 h-4 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
+                      <span>📊 Download as Excel (.xlsx)</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownloadTemplate('google-sheets')}>
+                      <span>📑 Download as CSV for Google Sheets</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               <div
                 className={`mt-2 border-2 border-dashed rounded-lg p-6 text-center ${
