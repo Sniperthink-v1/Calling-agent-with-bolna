@@ -59,6 +59,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLeadStages } from "@/hooks/useLeadStages";
 import { useAuth } from "@/contexts/AuthContext";
 import { EditLeadModal, LeadIntelligenceData } from "@/components/leads/EditLeadModal";
+import PlivoDialer from "@/pages/PlivoDialer";
 import type { Lead } from "@/pages/Dashboard";
 import type { LeadAnalyticsData } from "@/types/api";
 
@@ -357,6 +358,10 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   // Edit Lead Intelligence modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState<LeadGroup | null>(null);
+  
+  // Embedded dialer modal state
+  const [showDialerModal, setShowDialerModal] = useState(false);
+  const [currentDialerContact, setCurrentDialerContact] = useState<LeadGroup | null>(null);
 
   // Chat summaries state (from external Chat Agent Server)
   const [chatSummaries, setChatSummaries] = useState<Record<string, string>>({});
@@ -1223,6 +1228,25 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const handleConvertToCustomer = async (contact: LeadGroup) => {
     setCurrentConversionContact(contact);
     setShowConversionModal(true);
+  };
+
+  const handleOpenLeadDialer = (contact: LeadGroup) => {
+    if (!contact.phone) {
+      toast({
+        title: "Phone number required",
+        description: "This lead does not have a phone number to call.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCurrentDialerContact(contact);
+    setShowDialerModal(true);
+  };
+
+  const handleCloseLeadDialer = () => {
+    setShowDialerModal(false);
+    setCurrentDialerContact(null);
   };
 
   const handleConfirmConversion = async (customerData: {
@@ -2534,6 +2558,17 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                 </td>
                 <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-2">
+                    {contact.phone && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenLeadDialer(contact)}
+                        className="h-8 px-2"
+                        title="Call Lead"
+                      >
+                        <Phone className="w-4 h-4" />
+                      </Button>
+                    )}
                     {canEditLeads() && contact.phone && (
                       <Button
                         size="sm"
@@ -2569,6 +2604,44 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
           </div>
         )}
       </div>
+
+      {/* Lead Dialer Modal */}
+      <Dialog
+        open={showDialerModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseLeadDialer();
+            return;
+          }
+          setShowDialerModal(true);
+        }}
+      >
+        <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Call Lead{currentDialerContact?.name ? `: ${currentDialerContact.name}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {currentDialerContact?.phone ? (
+            <PlivoDialer
+              embedded
+              initialPhoneNumber={currentDialerContact.phone}
+              initialContact={{
+                id: currentDialerContact.contactId || "",
+                name: currentDialerContact.name,
+                phoneNumber: currentDialerContact.phone,
+                company: currentDialerContact.company || null,
+                email: currentDialerContact.email || null,
+              }}
+              onClose={handleCloseLeadDialer}
+            />
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              No phone number is available for this lead.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Customer Conversion Modal */}
       <CustomerConversionModal

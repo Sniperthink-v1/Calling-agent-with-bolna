@@ -45,6 +45,19 @@ type Contact = {
   email?: string | null;
 };
 
+interface PlivoDialerProps {
+  embedded?: boolean;
+  initialPhoneNumber?: string;
+  initialContact?: {
+    id?: string;
+    name?: string;
+    phoneNumber?: string;
+    company?: string | null;
+    email?: string | null;
+  } | null;
+  onClose?: () => void;
+}
+
 function stripSpaces(value: string): string {
   return value.replace(/\s+/g, "").trim();
 }
@@ -90,7 +103,12 @@ function getStatusLabel(status: string): string {
   return statusMap[s] || status;
 }
 
-export default function PlivoDialer() {
+export default function PlivoDialer({
+  embedded = false,
+  initialPhoneNumber,
+  initialContact,
+  onClose,
+}: PlivoDialerProps = {}) {
   const { theme } = useTheme();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -99,9 +117,24 @@ export default function PlivoDialer() {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const [selectedFromId, setSelectedFromId] = useState<string>("");
-  const [toPhoneNumber, setToPhoneNumber] = useState<string>("");
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [contactSearchQuery, setContactSearchQuery] = useState<string>("");
+  const [toPhoneNumber, setToPhoneNumber] = useState<string>(initialPhoneNumber || "");
+  const initialContactId = initialContact?.id || "";
+  const initialContactName = initialContact?.name || "";
+  const initialContactPhone = initialContact?.phoneNumber || initialPhoneNumber || "";
+  const initialContactCompany = initialContact?.company || null;
+  const initialContactEmail = initialContact?.email || null;
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(
+    initialContact
+      ? {
+          id: initialContactId,
+          name: initialContactName,
+          phoneNumber: initialContactPhone,
+          company: initialContactCompany,
+          email: initialContactEmail,
+        }
+      : null
+  );
+  const [contactSearchQuery, setContactSearchQuery] = useState<string>(initialContactName);
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [isSearchingContacts, setIsSearchingContacts] = useState(false);
   const [contactSearchResults, setContactSearchResults] = useState<Contact[]>([]);
@@ -112,6 +145,37 @@ export default function PlivoDialer() {
   const [isCalling, setIsCalling] = useState(false);
   const [callLogId, setCallLogId] = useState<string | null>(null);
   const [localStatus, setLocalStatus] = useState<string>("idle");
+
+  // Sync prefilled data when opening in embedded mode for a specific lead.
+  useEffect(() => {
+    if (!embedded) return;
+
+    if (initialPhoneNumber !== undefined) {
+      setToPhoneNumber(initialPhoneNumber || "");
+    }
+
+    if (initialContact) {
+      setSelectedContact({
+        id: initialContactId,
+        name: initialContactName,
+        phoneNumber: initialContactPhone,
+        company: initialContactCompany,
+        email: initialContactEmail,
+      });
+      setContactSearchQuery(initialContactName);
+    } else {
+      setSelectedContact(null);
+      setContactSearchQuery("");
+    }
+  }, [
+    embedded,
+    initialPhoneNumber,
+    initialContactId,
+    initialContactName,
+    initialContactPhone,
+    initialContactCompany,
+    initialContactEmail,
+  ]);
 
   const { data: phoneNumbersData, isLoading: isLoadingPhoneNumbers } = useQuery({
     queryKey: ["dialer", "phoneNumbers"],
@@ -647,17 +711,26 @@ export default function PlivoDialer() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={embedded ? "space-y-4" : "p-6 space-y-6"}>
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Make a Call</h2>
+          <h2 className="text-xl font-semibold">
+            {embedded ? "Lead Dialer" : "Make a Call"}
+          </h2>
           <p className="text-sm text-muted-foreground">
             Browser dialer (Plivo SDK v2) — two-way audio, outbound PSTN.
           </p>
         </div>
-        <Badge variant={sdkReady ? "secondary" : "outline"}>
-          {sdkReady ? "SDK Ready" : "Loading SDK"}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={sdkReady ? "secondary" : "outline"}>
+            {sdkReady ? "SDK Ready" : "Loading SDK"}
+          </Badge>
+          {embedded && onClose ? (
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Close
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <Card className={theme === "dark" ? "bg-black border-slate-700" : ""}>
