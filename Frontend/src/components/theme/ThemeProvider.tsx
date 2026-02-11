@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "dark" | "light";
+const THEME_STORAGE_KEY = "app_theme";
 
 type ThemeProviderContextType = {
   theme: Theme;
@@ -13,7 +14,22 @@ const ThemeProviderContext = createContext<
 >(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") {
+      return "dark";
+    }
+
+    try {
+      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme === "dark" || savedTheme === "light") {
+        return savedTheme;
+      }
+    } catch (error) {
+      console.warn("Unable to read saved theme from localStorage", error);
+    }
+
+    return "dark";
+  });
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -34,6 +50,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       body.style.backgroundColor = "#f8fafc";
       body.style.color = "#1e293b";
+    }
+
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (error) {
+      console.warn("Unable to persist theme to localStorage", error);
     }
   }, [theme]);
 
