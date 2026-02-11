@@ -14,6 +14,8 @@ import {
   User,
   Phone,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import API_ENDPOINTS from "@/config/api";
@@ -82,6 +84,16 @@ type PlivoCallLog = {
   lead_extraction_updated_at?: string | null;
   lead_individual_analysis?: unknown | null;
   lead_complete_analysis?: unknown | null;
+};
+
+type GroupedPlivoCallLog = {
+  key: string;
+  contactName: string;
+  toPhoneNumber: string;
+  fromPhoneNumber: string;
+  latestCall: PlivoCallLog;
+  calls: PlivoCallLog[];
+  retryCount: number;
 };
 
 // --- Helper Components ---
@@ -195,6 +207,7 @@ export default function PlivoDialerLogs() {
   });
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [sortBy, setSortBy] = useState<'created_at' | 'duration_seconds'>('created_at');
+  const [expandedCallGroups, setExpandedCallGroups] = useState<Record<string, boolean>>({});
 
   // -- Audio State --
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
@@ -272,6 +285,17 @@ export default function PlivoDialerLogs() {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function getCallTimestamp(call: PlivoCallLog) {
+    const value =
+      call.created_at ||
+      call.started_at ||
+      call.status_updated_at ||
+      call.updated_at;
+    if (!value) return 0;
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   // -- Audio Handlers --
@@ -459,6 +483,66 @@ export default function PlivoDialerLogs() {
     return result;
   }, [data, search, startDate, endDate, columnFilters, sortBy, sortOrder]);
 
+  const groupedCalls = useMemo<GroupedPlivoCallLog[]>(() => {
+    if (filtered.length === 0) return [];
+
+    const groups = new Map<string, GroupedPlivoCallLog>();
+
+    filtered.forEach((call) => {
+      const normalizedPhone = (call.to_phone_number || '').replace(/\D/g, '');
+      const normalizedName = (call.contact_name || '').trim().toLowerCase();
+      const groupKey =
+        call.contact_id ||
+        (normalizedPhone
+          ? `phone:${normalizedPhone}`
+          : `name:${normalizedName || call.id}`);
+
+      const existing = groups.get(groupKey);
+      if (existing) {
+        existing.calls.push(call);
+        if (
+          (!existing.contactName || existing.contactName === 'Unknown') &&
+          call.contact_name
+        ) {
+          existing.contactName = call.contact_name;
+        }
+      } else {
+        groups.set(groupKey, {
+          key: groupKey,
+          contactName: call.contact_name || 'Unknown',
+          toPhoneNumber: call.to_phone_number,
+          fromPhoneNumber: call.from_phone_number,
+          latestCall: call,
+          calls: [call],
+          retryCount: 0,
+        });
+      }
+    });
+
+    return Array.from(groups.values())
+      .map((group) => {
+        const orderedCalls = [...group.calls].sort(
+          (first, second) => getCallTimestamp(first) - getCallTimestamp(second)
+        );
+        const latestCall = orderedCalls[orderedCalls.length - 1] || group.latestCall;
+
+        return {
+          ...group,
+          latestCall,
+          calls: orderedCalls,
+          retryCount: Math.max(0, orderedCalls.length - 1),
+        };
+      })
+      .sort(
+        (first, second) =>
+          getCallTimestamp(second.latestCall) - getCallTimestamp(first.latestCall)
+      );
+  }, [filtered]);
+
+  useEffect(() => {
+    setExpandedCallGroups({});
+  }, [search, startDate, endDate, columnFilters, sortBy, sortOrder, data]);
+
 
   // Unique lists for filters
   const uniqueStatuses = useMemo(() => {
@@ -470,6 +554,82 @@ export default function PlivoDialerLogs() {
     const members = new Set((data || []).map(r => r.team_member_name).filter(Boolean) as string[]);
     return Array.from(members).map(m => ({ value: m, label: m }));
   }, [data]);
+
+  const toggleGroupExpansion = (groupKey: string) => {
+    setExpandedCallGroups((prevState) => ({
+      ...prevState,
+      [groupKey]: !prevState[groupKey],
+    }));
+  };
+
+  const renderCallActions = (call: PlivoCallLog, compact = false) => {
+    const buttonSizeClass = compact ? "h-8 w-8" : "h-9 w-9";
+    const iconSizeClass = compact ? "w-3.5 h-3.5" : "w-4 h-4";
+
+    return (
+      <div className={`flex items-center ${compact ? 'gap-1.5' : 'gap-2'} flex-shrink-0`}>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedTranscriptCallId(call.id)}
+                disabled={call.transcript_status !== "completed"}
+                className={buttonSizeClass}
+              >
+                <FileText className={`${iconSizeClass} ${call.transcript_status === "completed" ? "text-primary" : "text-muted-foreground"}`} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View Transcript</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedLeadCallId(call.id)}
+                disabled={call.lead_extraction_status !== "completed"}
+                className={buttonSizeClass}
+              >
+                <Search className={`${iconSizeClass} ${call.lead_extraction_status === "completed" ? "text-blue-500" : "text-muted-foreground"}`} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Lead Intelligence</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {call.recording_url && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant={playingAudio === call.id ? "default" : "outline"}
+                  className={`${buttonSizeClass} rounded-full ${
+                    playingAudio === call.id
+                      ? 'bg-[#1A6262] hover:bg-[#155050] text-white border-0'
+                      : 'bg-transparent'
+                  }`}
+                  onClick={() => handlePlayAudio(call.id, call.recording_url || null)}
+                >
+                  {playingAudio === call.id && !audioRef.current?.paused ? (
+                    <Pause className={iconSizeClass} />
+                  ) : (
+                    <Play className={iconSizeClass} />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Play Recording</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+    );
+  };
 
 
   return (
@@ -577,229 +737,219 @@ export default function PlivoDialerLogs() {
               <p className="text-muted-foreground">Try adjusting your filters.</p>
             </Card>
          ) : (
-             filtered.map(call => (
-                 <Card 
-                  key={call.id} 
-                  className={`overflow-hidden transition-all duration-200 hover:shadow-md ${
-                      playingAudio === call.id ? 'ring-2 ring-primary ring-offset-1' : ''
-                  }`}
-                 >
+             groupedCalls.map(group => {
+                const latestCall = group.latestCall;
+                const isExpanded = Boolean(expandedCallGroups[group.key]);
+                const activeAudioCall =
+                  group.calls.find(call => call.id === playingAudio || call.id === isAudioLoading) || null;
+
+                return (
+                  <Card
+                    key={group.key}
+                    className={`overflow-hidden transition-all duration-200 hover:shadow-md ${
+                      activeAudioCall ? 'ring-2 ring-primary ring-offset-1' : ''
+                    }`}
+                  >
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-4">
-                        
-                         {/* Checkbox placement - kept layout but disabled checkbox as simpler version */}
+                        <button
+                          type="button"
+                          onClick={() => toggleGroupExpansion(group.key)}
+                          className="flex items-center gap-3 min-w-0 flex-1 text-left hover:opacity-90 transition-opacity"
+                        >
+                          <div className="text-muted-foreground flex-shrink-0">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </div>
 
-                         {/* Left: Contact Info */}
-                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                             {/* Avatar */}
-                             <div className="relative flex-shrink-0">
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg bg-indigo-600`}>
-                                   {call.contact_name ? call.contact_name.charAt(0).toUpperCase() : (call.to_phone_number?.charAt(1) || 'U')}
-                                </div>
-                                <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${getStatusColor(call.status)}`}></span>
-                             </div>
+                          <div className="relative flex-shrink-0">
+                            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg bg-indigo-600">
+                              {group.contactName ? group.contactName.charAt(0).toUpperCase() : (group.toPhoneNumber?.charAt(1) || 'U')}
+                            </div>
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${getStatusColor(latestCall.status)}`}></span>
+                          </div>
 
-                             <div className="min-w-0 flex-1">
-                                <h3 className="font-semibold text-base truncate">
-                                   {call.contact_name || "Unknown"}
-                                </h3>
-                                <p className="text-sm font-medium text-muted-foreground">
-                                    {call.to_phone_number} <span className="text-xs ml-1 opacity-70">via {call.from_phone_number}</span>
-                                </p>
-                                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        {formatDateInUserTimezone(call.created_at)}
-                                    </span>
-                                    {call.team_member_name && (
-                                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <User className="w-3 h-3" />
-                                            {call.team_member_name}
-                                        </span>
-                                    )}
-                                </div>
-                             </div>
-                         </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-base truncate">
+                              {group.contactName || "Unknown"}
+                            </h3>
+                            <p className="text-sm font-medium text-muted-foreground">
+                              {group.toPhoneNumber} <span className="text-xs ml-1 opacity-70">via {group.fromPhoneNumber}</span>
+                            </p>
+                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {formatDateInUserTimezone(latestCall.created_at)}
+                              </span>
+                              {latestCall.team_member_name && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <User className="w-3 h-3" />
+                                  {latestCall.team_member_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
 
-                         {/* Center: Stats (Desktop) */}
-                         <div className="hidden md:flex items-center gap-8 flex-shrink-0">
-                             <div className="text-center min-w-[80px]">
-                                 <p className="text-[10px] uppercase tracking-wider mb-0.5 text-muted-foreground">Status</p>
-                                 <Badge variant={getBadgeVariant(call.status)} className="text-[10px]">
-                                   {getStatusLabel(call.status)}
-                                 </Badge>
-                             </div>
-                             <div className="text-center min-w-[60px]">
-                                 <p className="text-[10px] uppercase tracking-wider mb-0.5 text-muted-foreground">Duration</p>
-                                 <p className="text-sm font-mono font-medium">
-                                     {formatDuration(call.duration_seconds)}
-                                 </p>
-                             </div>
-                             {call.hangup_by && (
-                                 <div className="text-center min-w-[80px]">
-                                     <p className="text-[10px] uppercase tracking-wider mb-0.5 text-muted-foreground">Ended By</p>
-                                     <p className="text-sm font-medium text-muted-foreground capitalize">
-                                         {call.hangup_by}
-                                     </p>
-                                 </div>
-                             )}
-                         </div>
-
-                         {/* Right: Actions */}
-                         <div className="flex items-center gap-2 flex-shrink-0">
-                             {/* Transcript Button */}
-                             <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => setSelectedTranscriptCallId(call.id)}
-                                            disabled={call.transcript_status !== "completed"}
-                                            className="h-9 w-9"
-                                        >
-                                            <FileText className={`w-4 h-4 ${call.transcript_status === "completed" ? "text-primary" : "text-muted-foreground"}`} />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>View Transcript</TooltipContent>
-                                </Tooltip>
-                             </TooltipProvider>
-                             
-                              {/* Lead Intelligence Button */}
-                              {/* Using generic icon for Lead Intel currently or maybe integrate it differently later */}
-                              <TooltipProvider>
-                                  <Tooltip>
-                                      <TooltipTrigger asChild>
-                                          <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              onClick={() => setSelectedLeadCallId(call.id)}
-                                              disabled={call.lead_extraction_status !== "completed"}
-                                               className="h-9 w-9"
-                                          >
-                                              <Search className={`w-4 h-4 ${call.lead_extraction_status === "completed" ? "text-blue-500" : "text-muted-foreground"}`} />
-                                          </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Lead Intelligence</TooltipContent>
-                                  </Tooltip>
-                              </TooltipProvider>
-
-                             {/* Play Button */}
-                             {call.recording_url && (
-                                 <TooltipProvider>
-                                     <Tooltip>
-                                         <TooltipTrigger asChild>
-                                             <Button
-                                                 size="icon"
-                                                 variant={playingAudio === call.id ? "default" : "outline"}
-                                                 className={`h-9 w-9 rounded-full ${playingAudio === call.id ? 'bg-[#1A6262] hover:bg-[#155050] text-white border-0' : 'bg-transparent'}`}
-                                                 onClick={() => handlePlayAudio(call.id, call.recording_url || null)}
-                                             >
-                                                 {playingAudio === call.id && !audioRef.current?.paused ? (
-                                                     <Pause className="w-4 h-4" />
-                                                 ) : (
-                                                     <Play className="w-4 h-4" />
-                                                 )}
-                                             </Button>
-                                         </TooltipTrigger>
-                                         <TooltipContent>Play Recording</TooltipContent>
-                                     </Tooltip>
-                                 </TooltipProvider>
-                             )}
-                         </div>
-
-                      </div>
-
-                      {/* Info Row Mobile */}
-                      <div className="flex md:hidden items-center gap-4 mt-3 pt-3 border-t border-border">
-                            <Badge variant={getBadgeVariant(call.status)} className="text-[10px]">
-                              {getStatusLabel(call.status)}
+                        <div className="hidden md:flex items-center gap-8 flex-shrink-0">
+                          <div className="text-center min-w-[80px]">
+                            <p className="text-[10px] uppercase tracking-wider mb-0.5 text-muted-foreground">Last Status</p>
+                            <Badge variant={getBadgeVariant(latestCall.status)} className="text-[10px]">
+                              {getStatusLabel(latestCall.status)}
                             </Badge>
-                            <span className="text-xs font-mono text-muted-foreground">
-                                {formatDuration(call.duration_seconds)}
-                            </span>
+                          </div>
+                          <div className="text-center min-w-[60px]">
+                            <p className="text-[10px] uppercase tracking-wider mb-0.5 text-muted-foreground">Duration</p>
+                            <p className="text-sm font-mono font-medium">
+                              {formatDuration(latestCall.duration_seconds)}
+                            </p>
+                          </div>
+                          <div className="text-center min-w-[70px]">
+                            <p className="text-[10px] uppercase tracking-wider mb-0.5 text-muted-foreground">Retries</p>
+                            <p className="text-sm font-medium">{group.retryCount}</p>
+                          </div>
+                        </div>
+
+                        {renderCallActions(latestCall)}
                       </div>
+
+                      <div className="flex md:hidden items-center gap-4 mt-3 pt-3 border-t border-border">
+                        <Badge variant={getBadgeVariant(latestCall.status)} className="text-[10px]">
+                          {getStatusLabel(latestCall.status)}
+                        </Badge>
+                        <span className="text-xs font-mono text-muted-foreground">
+                          {formatDuration(latestCall.duration_seconds)}
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {group.retryCount} {group.retryCount === 1 ? 'Retry' : 'Retries'}
+                        </Badge>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="mt-3 pt-3 border-t border-border space-y-2">
+                          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                            Attempt History
+                          </p>
+                          {[...group.calls].reverse().map((attempt, attemptIndex) => (
+                            <div
+                              key={`${attempt.id}-${attemptIndex}`}
+                              className={`rounded-md border px-3 py-2.5 ${
+                                theme === 'dark'
+                                  ? 'border-slate-700 bg-slate-900/60'
+                                  : 'border-gray-200 bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-muted-foreground">
+                                    Attempt {group.calls.length - attemptIndex} • {formatDateInUserTimezone(attempt.created_at)}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    <Badge variant={getBadgeVariant(attempt.status)} className="text-[10px]">
+                                      {getStatusLabel(attempt.status)}
+                                    </Badge>
+                                    <span className="text-xs font-mono text-muted-foreground">
+                                      {formatDuration(attempt.duration_seconds)}
+                                    </span>
+                                    {attempt.team_member_name && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {attempt.team_member_name}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {attempt.hangup_reason && (
+                                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                                      Reason: {attempt.hangup_reason}
+                                    </p>
+                                  )}
+                                </div>
+                                {renderCallActions(attempt, true)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Audio Player Drawer */}
-                    {(playingAudio === call.id || isAudioLoading === call.id) && (
-                        <div className={`px-4 py-3 border-t ${theme === 'dark' ? 'bg-slate-950/50 border-slate-800' : 'bg-gray-50 border-gray-100'}`}>
-                             <div className="flex items-center gap-4">
-                                 {isAudioLoading === call.id ? (
-                                     <div className="flex items-center justify-center w-full h-10 gap-3 text-muted-foreground">
-                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                         <span className="text-sm">Loading Audio...</span>
-                                     </div>
-                                 ) : (
-                                     <>
-                                        <button
-                                            onClick={() => handlePlayAudio(call.id, call.recording_url || null)}
-                                            className="w-8 h-8 rounded-full flex items-center justify-center bg-[#1A6262] text-white hover:bg-[#155050] transition-colors shadow-sm flex-shrink-0"
-                                        >
-                                            {audioRef.current?.paused ? <Play className="w-4 h-4 pl-0.5" /> : <Pause className="w-4 h-4" />}
-                                        </button>
+                    {activeAudioCall && (
+                      <div className={`px-4 py-3 border-t ${theme === 'dark' ? 'bg-slate-950/50 border-slate-800' : 'bg-gray-50 border-gray-100'}`}>
+                        <div className="flex items-center gap-4">
+                          {isAudioLoading === activeAudioCall.id ? (
+                            <div className="flex items-center justify-center w-full h-10 gap-3 text-muted-foreground">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="text-sm">Loading Audio...</span>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handlePlayAudio(activeAudioCall.id, activeAudioCall.recording_url || null)}
+                                className="w-8 h-8 rounded-full flex items-center justify-center bg-[#1A6262] text-white hover:bg-[#155050] transition-colors shadow-sm flex-shrink-0"
+                              >
+                                {audioRef.current?.paused ? <Play className="w-4 h-4 pl-0.5" /> : <Pause className="w-4 h-4" />}
+                              </button>
 
-                                        {/* Progress Bar */}
-                                        <div className="flex items-center gap-3 flex-1">
-                                            <div 
-                                                className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 cursor-pointer relative"
-                                                onClick={(e) => handleSeek(e, call.id)}
-                                            >
-                                                <div 
-                                                    className="h-1.5 rounded-full bg-[#1A6262] absolute top-0 left-0 transition-all duration-100"
-                                                    style={{ 
-                                                        width: `${((audioProgressRef.current[call.id]?.current || 0) / (audioRef.current?.duration || 1)) * 100}%` 
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="text-xs font-mono text-muted-foreground min-w-[70px] text-right">
-                                                {formatDuration(audioProgressRef.current[call.id]?.current || 0)} / {formatDuration((audioRef.current?.duration || call.duration_seconds || 0))}
-                                            </div>
-                                        </div>
+                              <div className="flex items-center gap-3 flex-1">
+                                <div
+                                  className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 cursor-pointer relative"
+                                  onClick={(e) => handleSeek(e, activeAudioCall.id)}
+                                >
+                                  <div
+                                    className="h-1.5 rounded-full bg-[#1A6262] absolute top-0 left-0 transition-all duration-100"
+                                    style={{
+                                      width: `${((audioProgressRef.current[activeAudioCall.id]?.current || 0) / (audioRef.current?.duration || 1)) * 100}%`
+                                    }}
+                                  />
+                                </div>
+                                <div className="text-xs font-mono text-muted-foreground min-w-[70px] text-right">
+                                  {formatDuration(audioProgressRef.current[activeAudioCall.id]?.current || 0)} / {formatDuration((audioRef.current?.duration || activeAudioCall.duration_seconds || 0))}
+                                </div>
+                              </div>
 
-                                        {/* Volume Control */}
-                                         <div
-                                            className="flex items-center gap-2 flex-shrink-0 group relative"
-                                            onMouseEnter={() => setShowVolumeControl(true)}
-                                            onMouseLeave={() => setShowVolumeControl(false)}
-                                         >
-                                            <button 
-                                                onClick={toggleMute} 
-                                                className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                            >
-                                                {isMuted || volume === 0 ? (
-                                                    <VolumeX className="w-4 h-4 text-muted-foreground" />
-                                                ) : volume < 0.5 ? (
-                                                    <Volume1 className="w-4 h-4 text-muted-foreground" />
-                                                ) : (
-                                                    <Volume2 className="w-4 h-4 text-muted-foreground" />
-                                                )}
-                                            </button>
-                                            
-                                            {/* Volume Slider Popover */}
-                                            {showVolumeControl && (
-                                                <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-2 hidden group-hover:block z-10">
-                                                    <div className="bg-popover border shadow-md rounded-md p-2 w-24">
-                                                        <input
-                                                            type="range"
-                                                            min="0"
-                                                            max="1"
-                                                            step="0.05"
-                                                            value={isMuted ? 0 : volume}
-                                                            onChange={handleVolumeChange}
-                                                            className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#1A6262]"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-                                         </div>
-                                     </>
-                                 )}
-                             </div>
+                              <div
+                                className="flex items-center gap-2 flex-shrink-0 group relative"
+                                onMouseEnter={() => setShowVolumeControl(true)}
+                                onMouseLeave={() => setShowVolumeControl(false)}
+                              >
+                                <button
+                                  onClick={toggleMute}
+                                  className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                >
+                                  {isMuted || volume === 0 ? (
+                                    <VolumeX className="w-4 h-4 text-muted-foreground" />
+                                  ) : volume < 0.5 ? (
+                                    <Volume1 className="w-4 h-4 text-muted-foreground" />
+                                  ) : (
+                                    <Volume2 className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </button>
+
+                                {showVolumeControl && (
+                                  <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-2 hidden group-hover:block z-10">
+                                    <div className="bg-popover border shadow-md rounded-md p-2 w-24">
+                                      <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        value={isMuted ? 0 : volume}
+                                        onChange={handleVolumeChange}
+                                        className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#1A6262]"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </div>
+                      </div>
                     )}
-                 </Card>
-             ))
+                  </Card>
+                );
+              })
          )}
       </div>
 
