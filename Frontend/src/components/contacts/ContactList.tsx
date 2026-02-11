@@ -34,11 +34,8 @@ import {
   Loader2,
   PhoneIncoming,
   ArrowUpDown,
-  Settings2,
   Check,
   X,
-  LayoutGrid,
-  Kanban,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -54,14 +51,11 @@ import {
 } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { LeadStageDropdown } from '@/components/LeadStageDropdown';
 import { useContacts } from '@/hooks/useContacts';
-import { useLeadStages } from '@/hooks/useLeadStages';
 import { useContactFilterOptions } from '@/hooks/useContactFilterOptions';
 import { useToast } from '@/components/ui/use-toast';
 import DeleteContactDialog from './DeleteContactDialog';
 import BulkContactUpload from './BulkContactUpload';
-import { LeadStageCustomizer } from './LeadStageCustomizer';
 import { CallAgentModal } from './CallAgentModal';
 import { SendWhatsAppModal } from './SendWhatsAppModal';
 import { SendEmailModal } from './SendEmailModal';
@@ -77,7 +71,6 @@ interface ColumnFilters {
   source: string[];
   city: string[];
   country: string[];
-  leadStage: string[];
 }
 
 // Excel-like Column Filter Component
@@ -154,8 +147,6 @@ const ExcelColumnFilter = ({ title, options, selectedValues, onSelectionChange, 
   );
 };
 
-type DisplayMode = 'table' | 'pipeline';
-
 interface ContactListProps {
   onContactSelect?: (contact: Contact) => void;
   onContactEdit?: (contact: Contact) => void;
@@ -164,8 +155,6 @@ interface ContactListProps {
   useLazyLoading?: boolean;
   initialPageSize?: number;
   enableInfiniteScroll?: boolean;
-  displayMode?: DisplayMode;
-  onDisplayModeChange?: (mode: DisplayMode) => void;
 }
 
 // Constants
@@ -180,11 +169,8 @@ export const ContactList: React.FC<ContactListProps> = ({
   useLazyLoading = false,
   initialPageSize = 100,
   enableInfiniteScroll = true,
-  displayMode,
-  onDisplayModeChange,
 }) => {
   const { toast } = useToast();
-  const { stages, bulkUpdateLeadStage, bulkUpdating } = useLeadStages();
   const { filterOptions: backendFilterOptions, loading: loadingFilterOptions } = useContactFilterOptions();
   
   // State
@@ -196,14 +182,12 @@ export const ContactList: React.FC<ContactListProps> = ({
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
-  const [isLeadStageCustomizerOpen, setIsLeadStageCustomizerOpen] = useState(false);
   const [allLoadedContacts, setAllLoadedContacts] = useState<Contact[]>([]);
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isBulkLeadStageUpdating, setIsBulkLeadStageUpdating] = useState(false);
   
   // New column filters state (Excel-like multi-select)
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
@@ -213,7 +197,6 @@ export const ContactList: React.FC<ContactListProps> = ({
     source: [],
     city: [],
     country: [],
-    leadStage: [],
   });
   const [editingNotes, setEditingNotes] = useState<{ contactId: string; notes: string } | null>(null);
   const [editingNotesPopover, setEditingNotesPopover] = useState<{ contactId: string; notes: string } | null>(null);
@@ -261,7 +244,6 @@ export const ContactList: React.FC<ContactListProps> = ({
     columnFilters.source.join(','),
     columnFilters.city.join(','),
     columnFilters.country.join(','),
-    columnFilters.leadStage.join(',')
   ]);
 
   // Prepare options for useContacts hook with server-side filters
@@ -278,7 +260,6 @@ export const ContactList: React.FC<ContactListProps> = ({
     filterSource: columnFilters.source,
     filterCity: columnFilters.city,
     filterCountry: columnFilters.country,
-    filterLeadStage: columnFilters.leadStage,
   };
 
   // Fetch contacts
@@ -626,62 +607,6 @@ export const ContactList: React.FC<ContactListProps> = ({
     setIsCampaignModalOpen(true);
   };
 
-  const handleBulkLeadStageChange = async (newStage: string | null) => {
-    const selected = Array.from(selectedContactIds);
-    if (selected.length === 0) {
-      toast({
-        title: 'No contacts selected',
-        description: 'Please select at least one contact',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsBulkLeadStageUpdating(true);
-    try {
-      const result = await bulkUpdateLeadStage(selected, newStage);
-      
-      if (result !== null && result > 0) {
-        // Update local state immediately for infinite scroll
-        if (enableInfiniteScroll) {
-          setAllLoadedContacts(prev => 
-            prev.filter(c => c != null).map(contact => 
-              selected.includes(contact.id)
-                ? { ...contact, leadStage: newStage || undefined, updatedAt: new Date().toISOString() }
-                : contact
-            )
-          );
-        }
-        
-        toast({
-          title: 'Success',
-          description: `Updated lead stage for ${result} contact(s) to "${newStage || 'Unassigned'}"`,
-        });
-        
-        // Clear selection after successful update
-        setSelectedContactIds(new Set());
-        
-        // Refresh to get updated data
-        refreshContacts(contactsOptions);
-      } else {
-        toast({
-          title: 'Error',
-          description: 'Failed to update lead stage',
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Error bulk updating lead stage:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update lead stage',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsBulkLeadStageUpdating(false);
-    }
-  };
-
   const handleSortChange = (newSortBy: 'name' | 'phone_number' | 'created_at') => {
     if (sortBy === newSortBy) {
       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -790,24 +715,6 @@ export const ContactList: React.FC<ContactListProps> = ({
     return Array.from(sourceSet).sort();
   }, [backendFilterOptions.source, displayContacts]);
 
-  // Lead stages: Use backend filter options which include BOTH data from contacts AND configured stages
-  const allUniqueLeadStages = React.useMemo(() => {
-    if (backendFilterOptions.leadStage.length > 0) {
-      return backendFilterOptions.leadStage;
-    }
-    // Fallback: merge loaded contacts data with configured stages
-    const stageSet = new Set<string>();
-    // Add stages from loaded contacts
-    displayContacts.forEach(contact => {
-      if (contact.leadStage) stageSet.add(contact.leadStage);
-    });
-    // Also add all configured stages (from useLeadStages hook)
-    stages.forEach(stage => {
-      if (stage.name) stageSet.add(stage.name);
-    });
-    return Array.from(stageSet).sort();
-  }, [backendFilterOptions.leadStage, displayContacts, stages]);
-
   // Helper to update a specific column filter
   const updateColumnFilter = (column: keyof ColumnFilters, values: string[]) => {
     setColumnFilters(prev => ({ ...prev, [column]: values }));
@@ -825,7 +732,6 @@ export const ContactList: React.FC<ContactListProps> = ({
       source: [],
       city: [],
       country: [],
-      leadStage: [],
     });
   };
 
@@ -838,36 +744,6 @@ export const ContactList: React.FC<ContactListProps> = ({
         {/* Fixed Header - All on single line */}
         <CardHeader className="flex-shrink-0 border-b py-3">
           <div className="flex items-center gap-3">
-            {/* View Mode Toggle */}
-            {displayMode && onDisplayModeChange && (
-              <div className="flex items-center rounded-lg border bg-muted p-1">
-                <Button
-                  variant={displayMode === 'table' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className={cn(
-                    'h-7 px-2',
-                    displayMode === 'table' && 'shadow-sm'
-                  )}
-                  onClick={() => onDisplayModeChange('table')}
-                >
-                  <LayoutGrid className="h-4 w-4 mr-1" />
-                  Table
-                </Button>
-                <Button
-                  variant={displayMode === 'pipeline' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className={cn(
-                    'h-7 px-2',
-                    displayMode === 'pipeline' && 'shadow-sm'
-                  )}
-                  onClick={() => onDisplayModeChange('pipeline')}
-                >
-                  <Kanban className="h-4 w-4 mr-1" />
-                  Pipeline
-                </Button>
-              </div>
-            )}
-
             {/* Title */}
             <CardTitle className="text-base whitespace-nowrap">Contacts ({totalContacts})</CardTitle>
 
@@ -901,34 +777,6 @@ export const ContactList: React.FC<ContactListProps> = ({
             {/* Action Buttons */}
             {selectedContactIds.size > 0 && (
               <>
-                {/* Bulk Lead Stage Change */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">
-                    Change Stage:
-                  </span>
-                  <Select
-                    onValueChange={(value) => handleBulkLeadStageChange(value === 'unassigned' ? null : value)}
-                    disabled={isBulkLeadStageUpdating}
-                  >
-                    <SelectTrigger className="w-[160px] h-9">
-                      <SelectValue placeholder={isBulkLeadStageUpdating ? "Updating..." : "Select stage"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {stages.map((stage) => (
-                        <SelectItem key={stage.name} value={stage.name}>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: stage.color }}
-                            />
-                            {stage.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <Button
                   onClick={handleCreateCampaign}
                   variant="default"
@@ -938,14 +786,6 @@ export const ContactList: React.FC<ContactListProps> = ({
                 </Button>
               </>
             )}
-            <Button
-              onClick={() => setIsLeadStageCustomizerOpen(true)}
-              variant="outline"
-              size="sm"
-            >
-              <Settings2 className="w-4 h-4 mr-1" />
-              Lead Stages
-            </Button>
             <Button
               onClick={() => setIsBulkUploadOpen(true)}
               variant="outline"
@@ -1011,14 +851,6 @@ export const ContactList: React.FC<ContactListProps> = ({
                 <Badge variant="secondary" className="text-xs">
                   Country: {columnFilters.country.join(', ')}
                   <button onClick={() => updateColumnFilter('country', [])} className="ml-1 hover:text-destructive">
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              {columnFilters.leadStage.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  Lead Stage: {columnFilters.leadStage.join(', ')}
-                  <button onClick={() => updateColumnFilter('leadStage', [])} className="ml-1 hover:text-destructive">
                     <X className="w-3 h-3" />
                   </button>
                 </Badge>
@@ -1101,15 +933,8 @@ export const ContactList: React.FC<ContactListProps> = ({
                     />
                   </th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
-                    <ExcelColumnFilter
-                      title="Lead Stage"
-                      options={allUniqueLeadStages}
-                      selectedValues={columnFilters.leadStage}
-                      onSelectionChange={(values) => updateColumnFilter('leadStage', values)}
-                      showAllLabel="All Stages"
-                    />
+                    Notes
                   </th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[200px] bg-background">Notes</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">
                     <ExcelColumnFilter
                       title="Source"
@@ -1297,16 +1122,6 @@ export const ContactList: React.FC<ContactListProps> = ({
                               Not contacted
                             </Badge>
                           )}
-                        </td>
-                        <td className="p-4 align-middle">
-                          <LeadStageDropdown
-                            value={contact.leadStage}
-                            onChange={(newStage) => {
-                              updateContact(contact.id, { leadStage: newStage });
-                            }}
-                            size="sm"
-                            showManageOption={false}
-                          />
                         </td>
                         <td className="p-4 align-middle min-w-[200px]">
                           {editingNotes?.contactId === contact.id ? (
@@ -1726,11 +1541,6 @@ export const ContactList: React.FC<ContactListProps> = ({
         isOpen={isBulkUploadOpen}
         onOpenChange={setIsBulkUploadOpen}
         onUploadComplete={handleBulkUploadSuccess}
-      />
-
-      <LeadStageCustomizer
-        open={isLeadStageCustomizerOpen}
-        onOpenChange={setIsLeadStageCustomizerOpen}
       />
 
       {selectedContact && (

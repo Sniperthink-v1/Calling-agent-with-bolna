@@ -356,11 +356,6 @@ export const ContactInteractionTimelinePanel: React.FC<ContactInteractionTimelin
                     <span>Updated: {formatDate(contact.updatedAt)}</span>
                   </div>
                 </div>
-                {contact.leadStage ? (
-                  <div className="mt-2">
-                    <Badge variant="outline">Lead Stage: {contact.leadStage}</Badge>
-                  </div>
-                ) : null}
                 {contact.tags && contact.tags.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {contact.tags.map((tag) => (
