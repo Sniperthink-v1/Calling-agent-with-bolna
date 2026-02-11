@@ -60,8 +60,10 @@ import { useLeadStages } from "@/hooks/useLeadStages";
 import { useAuth } from "@/contexts/AuthContext";
 import { EditLeadModal, LeadIntelligenceData } from "@/components/leads/EditLeadModal";
 import PlivoDialer from "@/pages/PlivoDialer";
+import PipelineView from "@/components/contacts/PipelineView";
 import type { Lead } from "@/pages/Dashboard";
 import type { LeadAnalyticsData } from "@/types/api";
+import type { PipelineContact } from "@/hooks/usePipelineContacts";
 
 // API interfaces
 interface LeadGroup {
@@ -271,6 +273,7 @@ const ExcelColumnFilter = ({ title, options, selectedValues, onSelectionChange, 
 
 const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const [workspaceSection, setWorkspaceSection] = useState<'analytics' | 'today-actions' | 'pending-actions'>('analytics');
+  const [intelligenceView, setIntelligenceView] = useState<'table' | 'pipeline'>('table');
   const isActionsMode = workspaceSection !== 'analytics';
   const actionsSection: 'today-actions' | 'pending-actions' =
     workspaceSection === 'pending-actions' ? 'pending-actions' : 'today-actions';
@@ -694,10 +697,41 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
 
   // Tactical controls are intentionally moved to the dedicated Actions workspace.
   const showAnalyticsTacticalColumns = false;
+  const isPipelineBoardView = !isActionsMode && intelligenceView === "pipeline";
 
   const handleContactClick = async (contact: LeadGroup) => {
     setSelectedContact(contact);
     await fetchLeadTimeline(contact.id);
+  };
+
+  const handlePipelineContactSelect = async (pipelineContact: PipelineContact) => {
+    const matchedByContactId = contacts.find(
+      (contact) => contact.contactId === pipelineContact.id
+    );
+
+    if (matchedByContactId) {
+      await handleContactClick(matchedByContactId);
+      return;
+    }
+
+    if (pipelineContact.phoneNumber) {
+      const matchedByPhone = contacts.find(
+        (contact) => contact.phone === pipelineContact.phoneNumber
+      );
+      if (matchedByPhone) {
+        await handleContactClick(matchedByPhone);
+        return;
+      }
+    }
+
+    // Fallback: open profile when timeline mapping is unavailable.
+    onOpenProfile({
+      id: pipelineContact.id,
+      name: pipelineContact.name,
+      email: pipelineContact.email || "",
+      phone: pipelineContact.phoneNumber || "",
+      company: pipelineContact.company || undefined,
+    });
   };
 
   const handleBackToList = () => {
@@ -1996,10 +2030,31 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
           >
             Pending Actions
           </Button>
+          {workspaceSection === "analytics" && (
+            <div className="ml-2 pl-2 border-l flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={intelligenceView === "table" ? "default" : "outline"}
+                onClick={() => setIntelligenceView("table")}
+                className={intelligenceView === "table" ? "bg-[#1A6262] hover:bg-[#155050] text-white" : ""}
+              >
+                Table View
+              </Button>
+              <Button
+                size="sm"
+                variant={intelligenceView === "pipeline" ? "default" : "outline"}
+                onClick={() => setIntelligenceView("pipeline")}
+                className={intelligenceView === "pipeline" ? "bg-[#1A6262] hover:bg-[#155050] text-white" : ""}
+              >
+                Pipeline Board
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Search bar and controls */}
+      {!isPipelineBoardView && (
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -2076,9 +2131,10 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
           )}
         </div>
       </div>
+      )}
 
       {/* Active filter summary */}
-      {!isActionsMode && hasActiveColumnFilters && (
+      {!isActionsMode && intelligenceView === "table" && hasActiveColumnFilters && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-shrink-0">
           <Filter className="w-4 h-4" />
           <span>Active filters:</span>
@@ -2126,7 +2182,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
         </div>
       )}
 
-      {/* Table */}
+      {/* Main Content */}
       {isActionsMode ? (
         <div className="border rounded-lg overflow-auto invisible-scrollbar flex-1 min-h-0 bg-background">
           <table className="w-full min-w-[980px] caption-bottom text-sm">
@@ -2336,6 +2392,13 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
               No {actionsSectionLabel.toLowerCase()} found for the selected criteria.
             </div>
           )}
+        </div>
+      ) : isPipelineBoardView ? (
+        <div className="border rounded-lg overflow-hidden flex-1 min-h-0 bg-background">
+          <PipelineView
+            className="h-full"
+            onContactSelect={handlePipelineContactSelect}
+          />
         </div>
       ) : (
       <div className="border rounded-lg overflow-auto invisible-scrollbar flex-1 min-h-0 bg-background">
