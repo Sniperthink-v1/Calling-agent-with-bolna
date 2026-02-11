@@ -270,6 +270,10 @@ const ExcelColumnFilter = ({ title, options, selectedValues, onSelectionChange, 
 };
 
 const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
+  const [workspaceSection, setWorkspaceSection] = useState<'analytics' | 'today-actions' | 'pending-actions'>('analytics');
+  const isActionsMode = workspaceSection !== 'analytics';
+  const actionsSection: 'today-actions' | 'pending-actions' =
+    workspaceSection === 'pending-actions' ? 'pending-actions' : 'today-actions';
   const { theme } = useTheme();
   const { targetLeadIdentifier, clearTargetLeadId } = useNavigation();
   const { toast } = useToast();
@@ -656,6 +660,40 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     if (!searchTerm) return true;
     return contact.name.toLowerCase().includes(searchTerm.toLowerCase());
   });
+
+  const toStartOfDay = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+  const isToday = (dateString?: string | null) => {
+    if (!dateString) return false;
+    const parsed = new Date(dateString);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return toStartOfDay(parsed) === toStartOfDay(new Date());
+  };
+
+  const hasOpenFollowUp = (contact: LeadGroup) =>
+    Boolean(contact.followUpScheduled && contact.followUpStatus !== "completed");
+
+  const actionContacts = filteredContacts.filter((contact) => {
+    const hasFollowUpAction = hasOpenFollowUp(contact);
+    const hasDemoAction = Boolean(contact.demoScheduled);
+
+    if (!hasFollowUpAction && !hasDemoAction) {
+      return false;
+    }
+
+    const hasTodayAction =
+      (hasFollowUpAction && isToday(contact.followUpScheduled)) ||
+      (hasDemoAction && isToday(contact.demoScheduled));
+
+    return actionsSection === "today-actions" ? hasTodayAction : !hasTodayAction;
+  });
+
+  const actionsSectionLabel =
+    actionsSection === "pending-actions" ? "Pending Actions" : "Today's Actions";
+
+  // Tactical controls are intentionally moved to the dedicated Actions workspace.
+  const showAnalyticsTacticalColumns = false;
 
   const handleContactClick = async (contact: LeadGroup) => {
     setSelectedContact(contact);
@@ -1927,7 +1965,38 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
     <div className="p-6 space-y-6 h-full flex flex-col">
       {/* Header with title only */}
       <div className="flex items-center justify-between flex-shrink-0">
-        <h1 className="text-2xl font-bold">Lead Intelligence</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Lead Intelligence</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isActionsMode ? actionsSectionLabel : "Intelligence"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={workspaceSection === "analytics" ? "default" : "outline"}
+            onClick={() => setWorkspaceSection("analytics")}
+            className={workspaceSection === "analytics" ? "bg-[#1A6262] hover:bg-[#155050] text-white" : ""}
+          >
+            Intelligence
+          </Button>
+          <Button
+            size="sm"
+            variant={workspaceSection === "today-actions" ? "default" : "outline"}
+            onClick={() => setWorkspaceSection("today-actions")}
+            className={workspaceSection === "today-actions" ? "bg-[#1A6262] hover:bg-[#155050] text-white" : ""}
+          >
+            Today's Actions
+          </Button>
+          <Button
+            size="sm"
+            variant={workspaceSection === "pending-actions" ? "default" : "outline"}
+            onClick={() => setWorkspaceSection("pending-actions")}
+            className={workspaceSection === "pending-actions" ? "bg-[#1A6262] hover:bg-[#155050] text-white" : ""}
+          >
+            Pending Actions
+          </Button>
+        </div>
       </div>
 
       {/* Search bar and controls */}
@@ -1935,13 +2004,20 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
-            placeholder="Search contacts..."
+            placeholder={isActionsMode ? "Search action contacts..." : "Search contacts..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 w-64"
           />
         </div>
         <div className="flex items-center space-x-2">
+          {isActionsMode ? (
+            <>
+              <Badge variant="secondary">{actionsSectionLabel}</Badge>
+              <Badge variant="outline">{actionContacts.length} actionable leads</Badge>
+            </>
+          ) : (
+            <>
           {selectedContacts.length > 0 && (
             <>
               {/* Bulk Lead Stage Change */}
@@ -1996,11 +2072,13 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Active filter summary */}
-      {hasActiveColumnFilters && (
+      {!isActionsMode && hasActiveColumnFilters && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-shrink-0">
           <Filter className="w-4 h-4" />
           <span>Active filters:</span>
@@ -2049,6 +2127,217 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
       )}
 
       {/* Table */}
+      {isActionsMode ? (
+        <div className="border rounded-lg overflow-auto invisible-scrollbar flex-1 min-h-0 bg-background">
+          <table className="w-full min-w-[980px] caption-bottom text-sm">
+            <thead className="sticky top-0 z-20 bg-background [&_tr]:border-b">
+              <tr className="bg-background border-b">
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Contact</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Lead Tag</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Date</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Status</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Demo Scheduled</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="[&_tr:last-child]:border-0">
+              {actionContacts.map((contact) => (
+                <tr
+                  key={contact.id}
+                  className="cursor-pointer hover:bg-muted/50 transition-all border-b"
+                  onClick={() => handleContactClick(contact)}
+                >
+                  <td className="p-4 align-middle">
+                    <div className="py-1">
+                      <div
+                        className="font-medium text-foreground underline cursor-pointer hover:text-primary transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleContactClick(contact);
+                        }}
+                      >
+                        {contact.name}
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {contact.email && (
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Mail className="w-3 h-3" />
+                            {contact.email}
+                          </div>
+                        )}
+                        {contact.phone && (
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground whitespace-nowrap">
+                            <Phone className="w-3 h-3" />
+                            {contact.phone}
+                          </div>
+                        )}
+                        {contact.company && (
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Building2 className="w-3 h-3" />
+                            {contact.company}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4 align-middle">
+                    <Badge variant="outline" className={getTagColor(contact.recentLeadTag)}>
+                      {contact.recentLeadTag}
+                    </Badge>
+                  </td>
+                  <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                    {contact.followUpScheduled ? (
+                      <div className="text-sm space-y-1">
+                        <div className={`font-medium ${contact.followUpStatus === 'completed' ? "text-green-700 dark:text-green-400" : "text-blue-700 dark:text-blue-400"}`}>
+                          {contact.followUpStatus === 'completed' ? "Completed" : "Scheduled"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(contact.followUpScheduled).toLocaleDateString('en-IN', {
+                            timeZone: 'Asia/Kolkata',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                    {contact.followUpScheduled ? (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={contact.followUpStatus === 'completed'}
+                          onCheckedChange={(checked) =>
+                            handleToggleFollowUpStatus(contact, checked)
+                          }
+                          className={cn(
+                            "h-5 w-9 data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-200 dark:data-[state=unchecked]:bg-gray-700",
+                            contact.followUpStatus === 'completed' && "data-[state=checked]:bg-green-600"
+                          )}
+                        />
+                        <span className={cn(
+                          "text-xs font-medium",
+                          contact.followUpStatus === 'completed'
+                            ? 'text-green-700 dark:text-green-400'
+                            : 'text-gray-600 dark:text-gray-400'
+                        )}>
+                          {contact.followUpStatus === 'completed' ? 'Done' : 'Pending'}
+                        </span>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleScheduleFollowUp(contact)}
+                        className="h-8 text-xs"
+                      >
+                        Schedule
+                      </Button>
+                    )}
+                  </td>
+                  <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                    {contact.demoScheduled ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleScheduleMeeting(contact, true)}
+                          className="flex items-center gap-2"
+                        >
+                          <CalendarDays className="w-4 h-4 text-blue-600" />
+                          <div className="text-left">
+                            <div className="text-xs font-medium">
+                              {new Date(contact.demoScheduled).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(contact.demoScheduled).toLocaleTimeString('en-US', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
+                        </Button>
+                        {contact.meetingLink && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => window.open(contact.meetingLink, '_blank')}
+                            className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
+                            title="Join Google Meet"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M15 8v8H5V8h10m0-2H5c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2v-3.5l4 4v-11l-4 4V8c0-1.1-.9-2-2-2z" />
+                            </svg>
+                            Join
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleScheduleMeeting(contact, false)}
+                        className="flex items-center gap-1 text-muted-foreground hover:text-blue-600"
+                      >
+                        <Calendar className="w-4 h-4" />
+                        <span className="text-xs">Schedule</span>
+                      </Button>
+                    )}
+                  </td>
+                  <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      {contact.phone && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenLeadDialer(contact)}
+                          className="h-8 px-2"
+                          title="Call Lead"
+                        >
+                          <Phone className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {canEditLeads() && contact.phone && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingContact(contact);
+                            setShowEditModal(true);
+                          }}
+                          className="h-8 px-2"
+                          title="Add Interaction"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => handleConvertToCustomer(contact)}
+                        className="h-8 px-3 text-xs"
+                      >
+                        <UserPlus className="w-3 h-3 mr-1" />
+                        Convert
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {actionContacts.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No {actionsSectionLabel.toLowerCase()} found for the selected criteria.
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="border rounded-lg overflow-auto invisible-scrollbar flex-1 min-h-0 bg-background">
         <table className="w-full min-w-[1400px] caption-bottom text-sm">
           <thead className="sticky top-0 z-20 bg-background [&_tr]:border-b">
@@ -2157,10 +2446,14 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Interacted Agents</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Assigned To</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Last Interaction</th>
-              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Date</th>
-              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Status</th>
-              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Demo Scheduled</th>
-              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Actions</th>
+              {showAnalyticsTacticalColumns && (
+                <>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Date</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Status</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Demo Scheduled</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Actions</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody className="[&_tr:last-child]:border-0">
@@ -2459,141 +2752,145 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     day: 'numeric'
                   })}
                 </td>
-                <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                  {contact.followUpScheduled ? (
-                    <div className="text-sm space-y-1">
-                      <div className={`font-medium ${contact.followUpStatus === 'completed' ? "text-green-700 dark:text-green-400" : "text-blue-700 dark:text-blue-400"}`}>
-                        {contact.followUpStatus === 'completed' ? "Completed" : "Scheduled"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(contact.followUpScheduled).toLocaleDateString('en-IN', { 
-                          timeZone: 'Asia/Kolkata',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </td>
-                <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                  {contact.followUpScheduled ? (
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={contact.followUpStatus === 'completed'}
-                        onCheckedChange={(checked) =>
-                          handleToggleFollowUpStatus(contact, checked)
-                        }
-                        className={cn(
-                          "h-5 w-9 data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-200 dark:data-[state=unchecked]:bg-gray-700",
-                          contact.followUpStatus === 'completed' && "data-[state=checked]:bg-green-600"
-                        )}
-                      />
-                      <span className={cn(
-                        "text-xs font-medium",
-                        contact.followUpStatus === 'completed' 
-                          ? 'text-green-700 dark:text-green-400' 
-                          : 'text-gray-600 dark:text-gray-400'
-                      )}>
-                        {contact.followUpStatus === 'completed' ? 'Done' : 'Pending'}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </td>
-                <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                  {contact.demoScheduled ? (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleScheduleMeeting(contact, true)}
-                        className="flex items-center gap-2"
-                      >
-                        <CalendarDays className="w-4 h-4 text-blue-600" />
-                        <div className="text-left">
-                          <div className="text-xs font-medium">
-                            {new Date(contact.demoScheduled).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
+                {showAnalyticsTacticalColumns && (
+                  <>
+                    <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                      {contact.followUpScheduled ? (
+                        <div className="text-sm space-y-1">
+                          <div className={`font-medium ${contact.followUpStatus === 'completed' ? "text-green-700 dark:text-green-400" : "text-blue-700 dark:text-blue-400"}`}>
+                            {contact.followUpStatus === 'completed' ? "Completed" : "Scheduled"}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {new Date(contact.demoScheduled).toLocaleTimeString('en-US', {
-                              hour: '2-digit',
-                              minute: '2-digit'
+                            {new Date(contact.followUpScheduled).toLocaleDateString('en-IN', { 
+                              timeZone: 'Asia/Kolkata',
+                              month: 'short',
+                              day: 'numeric'
                             })}
                           </div>
                         </div>
-                      </Button>
-                      {contact.meetingLink && (
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                      {contact.followUpScheduled ? (
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={contact.followUpStatus === 'completed'}
+                            onCheckedChange={(checked) =>
+                              handleToggleFollowUpStatus(contact, checked)
+                            }
+                            className={cn(
+                              "h-5 w-9 data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-200 dark:data-[state=unchecked]:bg-gray-700",
+                              contact.followUpStatus === 'completed' && "data-[state=checked]:bg-green-600"
+                            )}
+                          />
+                          <span className={cn(
+                            "text-xs font-medium",
+                            contact.followUpStatus === 'completed' 
+                              ? 'text-green-700 dark:text-green-400' 
+                              : 'text-gray-600 dark:text-gray-400'
+                          )}>
+                            {contact.followUpStatus === 'completed' ? 'Done' : 'Pending'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                      {contact.demoScheduled ? (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleScheduleMeeting(contact, true)}
+                            className="flex items-center gap-2"
+                          >
+                            <CalendarDays className="w-4 h-4 text-blue-600" />
+                            <div className="text-left">
+                              <div className="text-xs font-medium">
+                                {new Date(contact.demoScheduled).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(contact.demoScheduled).toLocaleTimeString('en-US', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                            </div>
+                          </Button>
+                          {contact.meetingLink && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => window.open(contact.meetingLink, '_blank')}
+                              className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
+                              title="Join Google Meet"
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M15 8v8H5V8h10m0-2H5c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2v-3.5l4 4v-11l-4 4V8c0-1.1-.9-2-2-2z"/>
+                              </svg>
+                              Join
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
                         <Button
-                          variant="default"
+                          variant="ghost"
                           size="sm"
-                          onClick={() => window.open(contact.meetingLink, '_blank')}
-                          className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
-                          title="Join Google Meet"
+                          onClick={() => handleScheduleMeeting(contact, false)}
+                          className="flex items-center gap-1 text-muted-foreground hover:text-blue-600"
                         >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M15 8v8H5V8h10m0-2H5c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2v-3.5l4 4v-11l-4 4V8c0-1.1-.9-2-2-2z"/>
-                          </svg>
-                          Join
+                          <Calendar className="w-4 h-4" />
+                          <span className="text-xs">Schedule</span>
                         </Button>
                       )}
-                    </div>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleScheduleMeeting(contact, false)}
-                      className="flex items-center gap-1 text-muted-foreground hover:text-blue-600"
-                    >
-                      <Calendar className="w-4 h-4" />
-                      <span className="text-xs">Schedule</span>
-                    </Button>
-                  )}
-                </td>
-                <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center gap-2">
-                    {contact.phone && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenLeadDialer(contact)}
-                        className="h-8 px-2"
-                        title="Call Lead"
-                      >
-                        <Phone className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {canEditLeads() && contact.phone && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditingContact(contact);
-                          setShowEditModal(true);
-                        }}
-                        className="h-8 px-2"
-                        title="Add Interaction"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => handleConvertToCustomer(contact)}
-                      className="h-8 px-3 text-xs"
-                    >
-                      <UserPlus className="w-3 h-3 mr-1" />
-                      Convert
-                    </Button>
-                  </div>
-                </td>
+                    </td>
+                    <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2">
+                        {contact.phone && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenLeadDialer(contact)}
+                            className="h-8 px-2"
+                            title="Call Lead"
+                          >
+                            <Phone className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canEditLeads() && contact.phone && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingContact(contact);
+                              setShowEditModal(true);
+                            }}
+                            className="h-8 px-2"
+                            title="Add Interaction"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleConvertToCustomer(contact)}
+                          className="h-8 px-3 text-xs"
+                        >
+                          <UserPlus className="w-3 h-3 mr-1" />
+                          Convert
+                        </Button>
+                      </div>
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
@@ -2604,6 +2901,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
           </div>
         )}
       </div>
+      )}
 
       {/* Lead Dialer Modal */}
       <Dialog
