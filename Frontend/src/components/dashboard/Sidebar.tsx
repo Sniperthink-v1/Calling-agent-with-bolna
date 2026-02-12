@@ -180,7 +180,7 @@ const Sidebar = ({
     },
     {
       id: "lead-intelligence",
-      label: "Lead Intelligence",
+      label: "Lead Management",
       icon: Brain,
     },
     {

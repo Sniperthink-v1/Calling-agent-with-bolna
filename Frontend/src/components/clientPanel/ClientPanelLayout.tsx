@@ -70,7 +70,7 @@ export const ClientPanelLayout: React.FC = () => {
             <TabsTrigger value="agent-analytics" className="data-[state=active]:bg-gray-900 data-[state=active]:text-white">Agent Analytics</TabsTrigger>
             <TabsTrigger value="contacts" className="data-[state=active]:bg-gray-900 data-[state=active]:text-white">Contacts</TabsTrigger>
             <TabsTrigger value="campaigns" className="data-[state=active]:bg-gray-900 data-[state=active]:text-white">Campaigns</TabsTrigger>
-            <TabsTrigger value="lead-intelligence" className="data-[state=active]:bg-gray-900 data-[state=active]:text-white">Lead Intelligence</TabsTrigger>
+            <TabsTrigger value="lead-intelligence" className="data-[state=active]:bg-gray-900 data-[state=active]:text-white">Lead Management</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">

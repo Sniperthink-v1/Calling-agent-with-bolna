@@ -695,7 +695,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
   const actionsSectionLabel =
     actionsSection === "pending-actions" ? "Pending Actions" : "Today's Actions";
 
-  // Tactical controls are intentionally moved to the dedicated Actions workspace.
+  // Keep follow-up/demo tactical controls in actions workspace only.
   const showAnalyticsTacticalColumns = false;
   const isPipelineBoardView = !isActionsMode && intelligenceView === "pipeline";
 
@@ -1978,7 +1978,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
       <div className="flex items-center justify-center h-64">
         <div className="flex items-center gap-2">
           <Loader2 className="w-6 h-6 animate-spin" />
-          <span>Loading lead intelligence...</span>
+          <span>Loading lead management...</span>
         </div>
       </div>
     );
@@ -2000,10 +2000,10 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
       {/* Header with title only */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold">Lead Intelligence</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold">Lead Management</h1>
+          {/* <p className="text-sm text-muted-foreground mt-1">
             {isActionsMode ? actionsSectionLabel : "Intelligence"}
-          </p>
+          </p> */}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -2012,7 +2012,7 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
             onClick={() => setWorkspaceSection("analytics")}
             className={workspaceSection === "analytics" ? "bg-[#1A6262] hover:bg-[#155050] text-white" : ""}
           >
-            Intelligence
+            Management
           </Button>
           <Button
             size="sm"
@@ -2509,12 +2509,12 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Interacted Agents</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Assigned To</th>
               <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Last Interaction</th>
+              <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Actions</th>
               {showAnalyticsTacticalColumns && (
                 <>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Date</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Follow-up Status</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Demo Scheduled</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground bg-background">Actions</th>
                 </>
               )}
             </tr>
@@ -2815,6 +2815,44 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                     day: 'numeric'
                   })}
                 </td>
+                <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2">
+                    {contact.phone && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenLeadDialer(contact)}
+                        className="h-8 px-2"
+                        title="Call Lead"
+                      >
+                        <Phone className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {canEditLeads() && contact.phone && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingContact(contact);
+                          setShowEditModal(true);
+                        }}
+                        className="h-8 px-2"
+                        title="Add Interaction"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => handleConvertToCustomer(contact)}
+                      className="h-8 px-3 text-xs"
+                    >
+                      <UserPlus className="w-3 h-3 mr-1" />
+                      Convert
+                    </Button>
+                  </div>
+                </td>
                 {showAnalyticsTacticalColumns && (
                   <>
                     <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
@@ -2913,44 +2951,6 @@ const LeadIntelligence = ({ onOpenProfile }: LeadIntelligenceProps) => {
                           <span className="text-xs">Schedule</span>
                         </Button>
                       )}
-                    </td>
-                    <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-2">
-                        {contact.phone && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenLeadDialer(contact)}
-                            className="h-8 px-2"
-                            title="Call Lead"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {canEditLeads() && contact.phone && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingContact(contact);
-                              setShowEditModal(true);
-                            }}
-                            className="h-8 px-2"
-                            title="Add Interaction"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => handleConvertToCustomer(contact)}
-                          className="h-8 px-3 text-xs"
-                        >
-                          <UserPlus className="w-3 h-3 mr-1" />
-                          Convert
-                        </Button>
-                      </div>
                     </td>
                   </>
                 )}

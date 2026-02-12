@@ -272,15 +272,13 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
     setCallOutcomeFilter('all');
   }, [campaign.id]);
 
-  // Navigate to call logs with campaign filter
-  const handleViewCallLogs = () => {
-    // Store campaign ID in sessionStorage so UnifiedCallLogs can read it
-    sessionStorage.setItem('filterCampaignId', campaign.id);
-    // Open call logs in grouped-by-lead mode for campaign review
-    sessionStorage.setItem('callLogsGroupByLead', 'true');
+  // Navigate to analytics view with campaign filter applied
+  const handleViewDetailedAnalytics = () => {
+    // Store campaign ID so CallAnalytics pre-selects this campaign filter
+    sessionStorage.setItem('analyticsFilterCampaignId', campaign.id);
     onClose();
-    // Navigate to dashboard with unified logs tab on call channel
-    navigate('/dashboard?tab=logs&subtab=call');
+    // Land directly on Analytics > Call view
+    navigate('/dashboard?tab=analytics&subtab=call');
   };
 
   const calculateProgress = () => {
@@ -857,15 +855,15 @@ const CampaignDetailsDialog: React.FC<CampaignDetailsDialogProps> = ({
             )}
           </div>
 
-          {/* View Call Logs Button */}
+          {/* View Detailed Analytics Button */}
           <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
             <Button
-              onClick={handleViewCallLogs}
+              onClick={handleViewDetailedAnalytics}
               style={{ backgroundColor: '#1A6262' }}
               className="text-white hover:opacity-90"
             >
               <Eye className="w-4 h-4 mr-2" />
-              View Call Logs
+              View Detailed Analytics
             </Button>
           </div>
         </div>
